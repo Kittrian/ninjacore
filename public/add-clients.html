@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add Client + Card - Ninja Dispute Vault</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260520-1">
+  <link rel="shortcut icon" href="/favicon.ico?v=20260520-1">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260520-1">
+  <script
+    src="https://secure.nmi.com/token/Collect.js"
+    data-tokenization-key="WQ2SH2-mr2Ap9-7WxX4J-3gA2D8"
+    data-variant="inline"
+    data-style-sniffer="true"
+    data-country="US"
+    data-currency="USD"
+    data-price="0.00"
+    data-field-apple-pay-selector="#__disableApplePay"
+    data-field-google-pay-selector="#__disableGooglePay"
+  ></script>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.5; }
+    input, button { padding: 12px; margin: 8px 0; width: 100%; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; }
+    .collect-field { padding: 12px; margin: 8px 0; width: 100%; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; background: #fff; }
+    button { background: #2563eb; color: white; font-weight: bold; cursor: pointer; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    .success { color: green; font-weight: bold; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Add New Client + Credit Card</h1>
+  
+  <input type="password" id="jwtToken" placeholder="JWT Token (auto-filled from vault login)" autocomplete="off" style="background:#fff3cd;">
+
+  <form id="clientForm" autocomplete="off">
+    <input type="text" id="firstName" placeholder="First Name" required>
+    <input type="text" id="lastName" placeholder="Last Name" required>
+    <input type="email" id="email" placeholder="Email" required>
+    <input type="tel" id="phone" placeholder="Phone Number">
+    <input type="text" id="company" placeholder="Company (Optional)">
+
+    <h3>Credit Card Details</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div id="ccnumber" class="collect-field" aria-label="Card Number"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div id="ccexp" class="collect-field" aria-label="MMYY"></div>
+      <div id="cvv" class="collect-field" aria-label="CVV"></div>
+    </div>
+
+    <button type="submit" id="payButton">Generate Payment Token</button>
+    <button type="button" id="submitBtn" disabled>Add Client & Vault Card</button>
+  </form>
+
+  <div id="result"></div>
+  <div id="__disableApplePay" style="display:none !important;"></div>
+  <div id="__disableGooglePay" style="display:none !important;"></div>
+
+  <script>
+    let paymentToken = '';
+    let jwtToken = '';
+
+    const resultDiv = document.getElementById('result');
+    const submitBtn = document.getElementById('submitBtn');
+    const jwtInput = document.getElementById('jwtToken');
+
+    const setSubmitEnabled = (enabled) => {
+      submitBtn.disabled = !enabled;
+    };
+
+    const setJwtToken = (token) => {
+      jwtToken = String(token || '').trim();
+      if (jwtInput) {
+        jwtInput.value = jwtToken;
+      }
+      if (jwtToken) {
+        try {
+          sessionStorage.setItem('vaultJwt', jwtToken);
+        } catch {
+          // ignore storage failures
+        }
+      }
+      setSubmitEnabled(Boolean(paymentToken) && Boolean(jwtToken));
+    };
+
+    try {
+      const stored = sessionStorage.getItem('vaultJwt');
+      if (stored) {
+        setJwtToken(stored);
+      }
+    } catch {
+      // ignore
+    }
+
+    window.addEventListener('message', (event) => {
+      if (!event || event.origin !== 'https://vault.ninjadispute.com') {
+        return;
+      }
+      const data = event.data;
+      if (!data || data.type !== 'vaultJwt') {
+        return;
+      }
+      setJwtToken(data.token);
+    });
+
+    try {
+      if (!jwtToken) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const handoff = urlParams.get('handoff');
+        if (handoff) {
+          fetch(`https://vault.ninjadispute.com/api/auth/handoff/${encodeURIComponent(handoff)}`)
+            .then((res) => res.ok ? res.json() : Promise.reject(new Error(`handoff ${res.status}`)))
+            .then((data) => {
+              if (data && data.token) {
+                setJwtToken(data.token);
+                try {
+                  urlParams.delete('handoff');
+                  const next = `${window.location.pathname}${urlParams.toString() ? `?${urlParams.toString()}` : ''}`;
+                  window.history.replaceState({}, document.title, next);
+                } catch {
+                  // ignore
+                }
+              }
+            })
+            .catch(() => {
+              resultDiv.innerHTML = '<span class="error">Handoff token expired. Please login again on vault.</span>';
+            });
+        } else {
+          const jwt = urlParams.get('jwt');
+          if (jwt) setJwtToken(jwt);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    jwtInput?.addEventListener('input', () => {
+      setJwtToken(jwtInput.value);
+    });
+
+    const configureCollectJs = () => {
+      if (typeof window.CollectJS === 'undefined') {
+        resultDiv.innerHTML = '<span class="error">Collect.js failed to load. Check console (F12).</span>';
+        console.error('Collect.js not loaded');
+        return;
+      }
+
+      window.CollectJS.configure({
+        fields: {
+          ccnumber: { selector: '#ccnumber', title: 'Card Number' },
+          ccexp: { selector: '#ccexp', title: 'MMYY' },
+          cvv: { selector: '#cvv', title: 'CVV' },
+        },
+        callback: function (response) {
+          if (response && response.token) {
+            paymentToken = response.token;
+            setSubmitEnabled(Boolean(jwtToken));
+            resultDiv.innerHTML = `<span class="success">✅ Token Generated!<br><small>${paymentToken}</small></span>`;
+            return;
+          }
+
+          setSubmitEnabled(false);
+          resultDiv.innerHTML = '<span class="error">Tokenization failed. Check console (F12).</span>';
+          console.error('CollectJS callback missing token:', response);
+        },
+      });
+    };
+
+    configureCollectJs();
+
+    submitBtn.addEventListener('click', async function() {
+      if (!paymentToken) return alert("Please generate token first");
+      if (!jwtToken) return alert("Please login first (vault auth will auto-fill JWT).");
+
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = 'Sending to server...';
+
+      const payload = {
+        client: {
+          firstName: document.getElementById('firstName').value,
+          lastName: document.getElementById('lastName').value,
+          email: document.getElementById('email').value,
+          phone: document.getElementById('phone').value,
+          company: document.getElementById('company').value || ''
+        },
+        paymentToken: paymentToken
+      };
+
+      try {
+        const res = await fetch('https://vault.ninjadispute.com/api/clients/add-with-payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${jwtToken}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          resultDiv.innerHTML = `<span class="success">🎉 Success! Vault ID: ${data.customerVaultId}</span>`;
+        } else {
+          resultDiv.innerHTML = `<span class="error">Error: ${data.error || data.message}</span>`;
+        }
+      } catch (err) {
+        resultDiv.innerHTML = `<span class="error">Request failed. Check console (F12).</span>`;
+        console.error(err);
+      }
+    });
+
+    setSubmitEnabled(false);
+  </script>
+</body>
+</html>

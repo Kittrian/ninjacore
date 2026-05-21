@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NinjaCore Payments</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260520-1" />
+    <link rel="shortcut icon" href="/favicon.ico?v=20260520-1" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260520-1" />
+    <link rel="stylesheet" href="/payments.css?v=20260513-1" />
+  </head>
+  <body>
+    <main class="payments-shell">
+      <section class="payments-app" id="paymentsApp">
+        <header class="payments-header">
+          <div>
+            <p class="payments-kicker">NinjaCore Payments</p>
+            <h2>Merchant + Gateway Command Center</h2>
+          </div>
+          <div class="payments-header-actions">
+            <span class="payments-signed-in" id="paymentsSignedInAs">Signed in as admin</span>
+            <a class="payments-link-btn" href="/">Back to NinjaCore</a>
+            <a class="payments-link-btn" href="/billing">Failed Payments</a>
+            <button class="payments-link-btn" type="button" id="paymentsLogoutButton">Logout</button>
+          </div>
+        </header>
+
+        <section class="payments-card payments-card-wide">
+          <div class="payments-columns-header">
+            <h3>Failed Payment Queue</h3>
+            <p id="paymentsFailedCount">0 records</p>
+          </div>
+          <div class="payments-table-wrap payments-table-wrap-wide">
+            <table class="payments-table payments-failed-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Date</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Amount</th>
+                  <th>Last 4</th>
+                  <th>Card Type</th>
+                  <th>What Happened?</th>
+                  <th>Move</th>
+                  <th>Email</th>
+                  <th>Txt</th>
+                </tr>
+              </thead>
+              <tbody id="paymentsFailedRows">
+                <tr><td colspan="12">Loading failed-payment rows...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="payments-summary-grid">
+          <article class="payments-summary-card">
+            <strong id="paymentsMerchantCount">0</strong>
+            <span>Merchants</span>
+          </article>
+          <article class="payments-summary-card">
+            <strong id="paymentsProductCount">0</strong>
+            <span>Products</span>
+          </article>
+          <article class="payments-summary-card">
+            <strong id="paymentsActiveAutopayCount">0</strong>
+            <span>Active AutoPay</span>
+          </article>
+          <article class="payments-summary-card">
+            <strong id="paymentsDueCount">0</strong>
+            <span>Due in 7 Days</span>
+          </article>
+        </section>
+
+        <section class="payments-grid">
+          <article class="payments-card">
+            <h3>Add Payment Gateway / Merchant</h3>
+            <form id="merchantForm" class="payments-form">
+              <input type="hidden" id="merchantId" />
+              <label>
+                <span>Merchant Name</span>
+                <input id="merchantName" type="text" placeholder="NMI EMS" required />
+              </label>
+              <label>
+                <span>Payment Gateway</span>
+                <select id="merchantGateway"></select>
+              </label>
+              <label>
+                <span>API ID</span>
+                <input id="merchantApiId" type="text" placeholder="API ID / Public Key" />
+              </label>
+              <label>
+                <span>Transaction Key</span>
+                <input id="merchantTransactionKey" type="text" placeholder="Transaction key / secret" />
+              </label>
+              <label>
+                <span>Status</span>
+                <select id="merchantStatus">
+                  <option value="Active">Active</option>
+                  <option value="Paused">Paused</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </label>
+              <div class="payments-inline-grid">
+                <label>
+                  <span>Allowed Retries</span>
+                  <input id="merchantRetries" type="number" min="0" max="999" value="3" />
+                </label>
+                <label>
+                  <span>Retry Every (Days)</span>
+                  <input id="merchantRetryDays" type="number" min="1" max="365" value="7" />
+                </label>
+              </div>
+              <label class="payments-checkbox">
+                <input id="merchantIsDefault" type="checkbox" />
+                <span>Default Merchant</span>
+              </label>
+              <div class="payments-row-actions">
+                <button type="submit">Save Merchant</button>
+                <button type="button" class="ghost" id="merchantResetButton">Clear</button>
+                <button type="button" class="ghost" id="merchantSquareTestButton">Test Square Pull</button>
+              </div>
+            </form>
+            <p class="payments-message" id="merchantMessage"></p>
+            <div class="merchant-quick-edit-wrap">
+              <p class="merchant-quick-edit-label">Quick edit merchants</p>
+              <div class="merchant-quick-edit-bubbles" id="merchantQuickBubbles"></div>
+            </div>
+          </article>
+
+          <article class="payments-card">
+            <h3>Billing Retry Configuration</h3>
+            <form id="paymentsConfigForm" class="payments-form">
+              <div class="payments-inline-grid">
+                <label>
+                  <span>Default Retries</span>
+                  <input id="configDefaultRetries" type="number" min="0" max="999" value="3" />
+                </label>
+                <label>
+                  <span>Retry Every (Days)</span>
+                  <input id="configRetryDays" type="number" min="1" max="365" value="7" />
+                </label>
+              </div>
+              <div class="payments-inline-grid">
+                <label>
+                  <span>Batch Run Time</span>
+                  <input id="configRunTime" type="time" value="09:00" />
+                </label>
+                <label>
+                  <span>Timezone</span>
+                  <input id="configTimezone" type="text" value="America/Chicago" />
+                </label>
+              </div>
+              <button type="submit">Save Retry Rules</button>
+            </form>
+            <p class="payments-message" id="paymentsConfigMessage"></p>
+          </article>
+
+          <article class="payments-card">
+            <h3>Service / Product Catalog</h3>
+            <form id="productForm" class="payments-form">
+              <input type="hidden" id="productId" />
+              <label>
+                <span>Product / Service Name</span>
+                <input id="productName" type="text" placeholder="Credit Repair Monthly" required />
+              </label>
+              <div class="payments-inline-grid">
+                <label>
+                  <span>Type</span>
+                  <input id="productType" type="text" placeholder="Service, Setup, Add-On..." />
+                </label>
+                <label>
+                  <span>Default Price</span>
+                  <input id="productPrice" type="text" placeholder="$99.00" />
+                </label>
+              </div>
+              <label>
+                <span>Billing Frequency</span>
+                <select id="productFrequency"></select>
+              </label>
+              <label>
+                <span>Status</span>
+                <select id="productStatus">
+                  <option value="Active">Active</option>
+                  <option value="Paused">Paused</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </label>
+              <div class="payments-row-actions">
+                <button type="submit">Save Product</button>
+                <button type="button" class="ghost" id="productResetButton">Clear</button>
+              </div>
+            </form>
+            <p class="payments-message" id="productMessage"></p>
+          </article>
+
+          <article class="payments-card">
+            <h3>Client AutoPay Scheduler</h3>
+            <form id="autopayForm" class="payments-form">
+              <input type="hidden" id="autopayId" />
+              <label>
+                <span>Client</span>
+                <select id="autopayClient"></select>
+              </label>
+              <div class="payments-inline-grid">
+                <label>
+                  <span>Merchant</span>
+                  <select id="autopayMerchant"></select>
+                </label>
+                <label>
+                  <span>Product</span>
+                  <select id="autopayProduct"></select>
+                </label>
+              </div>
+              <div class="payments-inline-grid">
+                <label>
+                  <span>Charge Amount</span>
+                  <input id="autopayAmount" type="text" placeholder="$99.00" />
+                </label>
+                <label>
+                  <span>Status</span>
+                  <select id="autopayStatus">
+                    <option value="Active">Active</option>
+                    <option value="Paused">Paused</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </label>
+              </div>
+              <div class="payments-inline-grid">
+                <label>
+                  <span>Frequency</span>
+                  <select id="autopayFrequency"></select>
+                </label>
+                <label>
+                  <span>Every</span>
+                  <input id="autopayFrequencyInterval" type="number" min="1" max="365" value="1" />
+                </label>
+              </div>
+              <div class="payments-inline-grid">
+                <label>
+                  <span>Next Charge</span>
+                  <input id="autopayNextCharge" type="datetime-local" />
+                </label>
+                <label>
+                  <span>Retry Limit</span>
+                  <input id="autopayRetryLimit" type="number" min="0" max="999" value="3" />
+                </label>
+              </div>
+              <label>
+                <span>Retry Every (Days)</span>
+                <input id="autopayRetryDays" type="number" min="1" max="365" value="7" />
+              </label>
+              <div class="payments-row-actions">
+                <button type="submit">Save AutoPay</button>
+                <button type="button" class="ghost" id="autopayResetButton">Clear</button>
+              </div>
+            </form>
+            <p class="payments-message" id="autopayMessage"></p>
+          </article>
+        </section>
+
+        <section class="payments-card payments-card-wide">
+          <h3>Merchants</h3>
+          <div class="payments-table-wrap">
+            <table class="payments-table">
+              <thead>
+                <tr>
+                  <th>Merchant</th>
+                  <th>Gateway</th>
+                  <th>API ID</th>
+                  <th>Status</th>
+                  <th>Retries</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="merchantRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="payments-card payments-card-wide">
+          <h3>Products</h3>
+          <div class="payments-table-wrap">
+            <table class="payments-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Price</th>
+                  <th>Frequency</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="productRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="payments-card payments-card-wide">
+          <h3>Next Charge Queue</h3>
+          <div class="payments-table-wrap">
+            <table class="payments-table">
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Merchant + Gateway</th>
+                  <th>Product</th>
+                  <th>Amount</th>
+                  <th>Next Charge</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="autopayRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="payments-card payments-card-wide">
+          <h3>Execution Log</h3>
+          <pre id="paymentsLog" class="payments-log">Ready.</pre>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="/payments.js?v=20260513-1"></script>
+  </body>
+</html>

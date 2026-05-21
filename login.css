@@ -1,0 +1,115 @@
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  background: radial-gradient(circle farthest-corner at center, #3c4b57 0%, #1c262b 100%);
+}
+
+.auth-card {
+  width: min(460px, 100%);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 24px 40px rgba(0, 0, 0, 0.35);
+  padding: 1.1rem 1.1rem 1rem;
+}
+
+.auth-card__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+}
+
+.auth-tab {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eaf3ff;
+  border-radius: 999px;
+  height: 2.2rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-tab.is-active {
+  background: rgba(73, 164, 255, 0.35);
+  border-color: rgba(126, 200, 255, 0.55);
+}
+
+.auth-form {
+  display: none;
+  gap: 0.6rem;
+}
+
+.auth-form.is-active {
+  display: grid;
+}
+
+.auth-form h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.auth-form p {
+  margin: 0;
+  color: rgba(224, 236, 255, 0.82);
+  font-size: 0.86rem;
+}
+
+.auth-field {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.auth-field span {
+  color: rgba(221, 234, 255, 0.95);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auth-field input {
+  width: 100%;
+  height: 2.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f6fbff;
+  font-size: 0.95rem;
+  padding: 0 0.8rem;
+  outline: none;
+}
+
+.auth-field input:focus {
+  border-color: rgba(127, 209, 255, 0.65);
+  box-shadow: 0 0 0 2px rgba(93, 193, 255, 0.2);
+}
+
+.auth-submit {
+  margin-top: 0.35rem;
+  border: 0;
+  border-radius: 12px;
+  height: 2.7rem;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #f7fbff;
+  background: linear-gradient(135deg, #2f7ef2, #4eb4ff);
+  cursor: pointer;
+}
+
+.auth-message {
+  margin: 0.75rem 0 0;
+  min-height: 1.2rem;
+  font-size: 0.8rem;
+  color: #dcecff;
+}
+
+.auth-message.is-error {
+  color: #ffc6c6;
+}

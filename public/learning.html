@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Learning | Tools Ninja</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260520-1" />
+    <link rel="shortcut icon" href="/favicon.ico?v=20260520-1" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260520-1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/learning.css?v=20260515-4" />
+    <script src="https://beta.leadconnectorhq.com/loader.js" data-resources-url="https://beta.leadconnectorhq.com/chat-widget/loader.js" data-widget-id="69f65c22bf76618ec24f9e3f"></script>
+  </head>
+  <body>
+    <main class="learning-shell">
+      <header class="learning-header">
+        <div>
+          <p class="learning-kicker">Learning</p>
+          <h1>Account Bureau Comparison</h1>
+          <p class="learning-subtitle">Choose a client, then choose a derogatory account. The left-side table fills from the selected account across TransUnion, Experian, and Equifax.</p>
+        </div>
+        <a class="learning-home-link" href="/">Back to Ninja Tools</a>
+      </header>
+
+      <section class="learning-controls">
+        <label class="learning-field">
+          <span>Client</span>
+          <select id="learningClientSelect">
+            <option value="">Choose client</option>
+          </select>
+        </label>
+        <label class="learning-field">
+          <span>Account</span>
+          <select id="learningAccountSelect" disabled>
+            <option value="">Choose account</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="learning-editor-shell">
+        <button id="learningEditorToggleBtn" type="button" class="learning-toggle-btn">Document Editor</button>
+        <div id="learningEditorPanel" class="learning-editor-panel" hidden>
+          <div id="learningEditorWorkspace" class="learning-editor-workspace is-tag-drawer-open">
+            <aside id="learningTagDrawer" class="learning-tag-drawer" aria-label="Template tags">
+              <div class="learning-tag-drawer-head">
+                <h3>{{tags}}</h3>
+                <p id="learningTagDrawerHint">Click a tag to insert it into the editor.</p>
+              </div>
+              <div id="learningTagDrawerList" class="learning-tag-drawer-list"></div>
+            </aside>
+            <div class="learning-editor-main">
+              <div class="learning-editor-toolbar">
+                <button type="button" data-editor-cmd="bold">Bold</button>
+                <button type="button" data-editor-cmd="italic">Italic</button>
+                <button type="button" data-editor-cmd="underline">Underline</button>
+                <button type="button" data-editor-cmd="justifyLeft">Left</button>
+                <button type="button" data-editor-cmd="justifyCenter">Center</button>
+                <button type="button" data-editor-cmd="justifyRight">Right</button>
+                <button type="button" data-editor-cmd="justifyFull">Justify</button>
+                <button type="button" data-editor-cmd="hiliteColor" data-editor-value="#fff29d">Highlight</button>
+                <input id="learningEditorColor" type="color" value="#1e3a8a" title="Text color" />
+                <button type="button" id="learningEditorTagBtn">Insert {{Tag}}</button>
+                <button type="button" id="learningEditorRenderTagsBtn">Render {{tags}}</button>
+                <button type="button" id="learningEditorTableBtn">Insert Table</button>
+                <button type="button" id="learningEditorImageBtn">Image</button>
+                <button type="button" id="learningEditorYoutubeBtn">YouTube</button>
+                <button type="button" id="learningEditorRawHtmlBtn">Insert Raw HTML + CSS</button>
+                <button type="button" id="learningEditorEditRawHtmlBtn">Edit Raw HTML</button>
+                <button type="button" id="learningEditorSpinnerTagBtn">Insert {{spinner}}</button>
+                <select id="learningEditorAiLevelSelect" title="Grok rewrite level">
+                  <option>Initial Letter</option>
+                  <option>Response Level 1</option>
+                  <option>Response Level 3</option>
+                  <option>Response Level 5</option>
+                  <option>Response Level 7</option>
+                  <option>Most Aggressive</option>
+                </select>
+                <select id="learningEditorAiProviderSelect" title="AI provider">
+                  <option value="grok">Grok (xAI)</option>
+                  <option value="groq">Groq</option>
+                  <option value="claude">Claude</option>
+                </select>
+                <button type="button" id="learningSyncBotContextBtn">Sync Bot Context</button>
+                <button type="button" id="learningEditorSetGrokKeyBtn">Set Grok Key</button>
+                <button type="button" id="learningEditorAiBtn">AI Assist</button>
+                <button type="button" id="learningEditorAiInitialBtn">Initial Re-Write</button>
+                <button type="button" id="learningEditorAiLevel3Btn">Level 3</button>
+                <button type="button" id="learningEditorAiLevel5Btn">Level 5</button>
+                <button type="button" id="learningEditorAiLevel7Btn">Level 7</button>
+                <button type="button" id="learningEditorAiMostAggressiveBtn">Most Aggressive</button>
+                <button type="button" id="learningEditorSaveBtn">Save</button>
+                <button type="button" id="learningEditorLoadBtn">Load</button>
+              </div>
+              <section class="learning-ai-prompt-box floating-label-form-group open" aria-label="AI Prompt Box">
+                <div class="floating-label-form-group__container">
+                  <button type="button" class="form-close-button" aria-label="Collapse prompt box">
+                    <span>×</span>
+                  </button>
+                  <h2 class="floating-label-form-group__heading">
+                    <button type="button">AI Prompt Box</button>
+                  </h2>
+                  <div class="floating-label-form-group__input-wrapper">
+                    <input
+                      id="learningAiPromptInput"
+                      class="floating-label-form-group__input"
+                      type="text"
+                      placeholder=" "
+                      autocomplete="off"
+                    />
+                    <label class="floating-label-form-group__label" for="learningAiPromptInput">
+                      Type your custom prompt to control AI rewrite behavior...
+                    </label>
+                  </div>
+                  <div class="learning-ai-prompt-actions">
+                    <select id="learningAiPromptProviderSelect" aria-label="AI provider for prompt">
+                      <option value="groq">Groq</option>
+                      <option value="claude">Claude</option>
+                    </select>
+                    <select id="learningAiPromptModeSelect" aria-label="Prompt target mode">
+                      <option value="selection">Selection (if highlighted)</option>
+                      <option value="editor">Full editor text</option>
+                    </select>
+                    <button type="button" id="learningAiPromptSendBtn" class="floating-label-form-group__button">Send Prompt to AI</button>
+                  </div>
+                  <p class="floating-label-form-group__error-message">Prompt box drives Groq and Claude from here.</p>
+                </div>
+              </section>
+              <div
+                id="learningEditorArea"
+                class="learning-editor-area"
+                contenteditable="true"
+                role="textbox"
+                aria-multiline="true"
+                data-placeholder="Start writing your document..."
+              ></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="learning-resource-shell">
+        <div class="learning-resource-buttons" role="tablist" aria-label="Learning references">
+          <button id="learningResourceMetro2Btn" type="button" class="learning-toggle-btn" data-resource="metro2">Metro 2 Base Segment</button>
+          <button id="learningResourceFcraBtn" type="button" class="learning-toggle-btn" data-resource="fcra">FCRA</button>
+          <button id="learningResourceFdcpaBtn" type="button" class="learning-toggle-btn" data-resource="fdcpa">FDCPA</button>
+        </div>
+        <div id="learningResourcePanel" class="learning-resource-panel" hidden>
+          <div id="learningMetro2Panel" class="learning-panel-block" hidden>
+            <div id="learningMetro2Guide" class="learning-metro2-content"></div>
+          </div>
+          <div id="learningDocPanel" class="learning-panel-block" hidden>
+            <div class="learning-pdf-toolbar">
+              <button id="learningPdfLoadBtn" type="button" class="learning-pdf-btn">Embed PDF</button>
+              <div class="learning-pdf-search">
+                <input id="learningPdfSearchInput" type="search" placeholder="Search inside embedded PDF..." disabled />
+                <button id="learningPdfSearchBtn" type="button" class="learning-pdf-btn" disabled>Search PDF</button>
+              </div>
+            </div>
+            <div id="learningPdfFrameWrap" class="learning-pdf-frame-wrap" hidden>
+              <iframe id="learningPdfFrame" class="learning-pdf-frame" title="Learning PDF Viewer" loading="lazy"></iframe>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p id="learningStatus" class="learning-status">Loading clients...</p>
+
+      <section class="learning-layout">
+        <article class="learning-card">
+          <div class="learning-card-top">
+            <div class="learning-card-icon" aria-hidden="true">▣</div>
+            <div>
+              <p class="learning-card-title" id="learningCreditorTitle">Choose an account</p>
+              <p class="learning-card-subtitle" id="learningClientSummary">No client selected.</p>
+            </div>
+          </div>
+          <div id="learningComparisonWrap" class="learning-comparison-wrap">
+            <div class="learning-empty-state">No account selected.</div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="/learning.js?v=20260515-4"></script>
+  </body>
+</html>

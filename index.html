@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tools Ninja</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260520-1" />
+    <link rel="shortcut icon" href="/favicon.ico?v=20260520-1" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260520-1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css?v=20260519-01" />
+    <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
+    <link rel="stylesheet" href="/login.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <script src="/login.js" defer></script>
+  </head>
+  <body>
+    <section class="auth-shell" style="display: block;">
+      <div class="auth-card">
+        <div class="auth-card__tabs">
+          <button type="button" class="auth-tab is-active" data-auth-tab="login">Login</button>
+          <button type="button" class="auth-tab" data-auth-tab="signup">Create Account</button>
+        </div>
+
+        <form class="login-form auth-form is-active" data-auth-form="login" novalidate>
+          <h2>Welcome Back</h2>
+          <p>Sign in to Ninja Tools</p>
+          <label class="auth-field">
+            <span>Username</span>
+            <input type="text" id="username" autocomplete="username" required />
+          </label>
+          <label class="auth-field">
+            <span>Password</span>
+            <input type="password" id="password" autocomplete="current-password" required />
+          </label>
+          <button class="auth-submit" type="submit">Log In</button>
+        </form>
+
+        <form class="signup-form auth-form" data-auth-form="signup" novalidate>
+          <h2>Create Account</h2>
+          <p>Start with a fresh workspace</p>
+          <label class="auth-field">
+            <span>Username</span>
+            <input type="text" id="signupUsername" autocomplete="username" required />
+          </label>
+          <label class="auth-field">
+            <span>Password</span>
+            <input type="password" id="signupPassword" autocomplete="new-password" minlength="8" required />
+          </label>
+          <label class="auth-field">
+            <span>Confirm Password</span>
+            <input type="password" id="signupConfirmPassword" autocomplete="new-password" minlength="8" required />
+          </label>
+          <button class="auth-submit" type="submit">Create Account</button>
+        </form>
+        <p class="auth-message" id="authMessage" aria-live="polite"></p>
+      </div>
+    </section>
+    <div class="page-shell" style="display: none;">
+      <div id="appBootLoader" class="app-boot-loader" hidden>
+        <div class="app-boot-loader-inner" aria-live="polite" aria-busy="true">
+          <div class="loader" aria-hidden="true">
+            <div class="inner one"></div>
+            <div class="inner two"></div>
+            <div class="inner three"></div>
+          </div>
+          <p id="appBootLoaderText" class="app-boot-loader-text" hidden>Loading Ninja Tools...</p>
+        </div>
+      </div>
+      <header class="hero">
+        <div class="hero-copy-block">
+          <div class="hero-ninja-wrap">
+            <iframe
+              class="hero-widget-frame"
+              src="/tools-ninja-widget.html?v=20260512-5"
+              title="Get New Report Ninja Widget"
+            ></iframe>
+          </div>
+        </div>
+        <div class="hero-panel">
+          <div class="top-actions">
+            <button class="top-logout-btn" type="button" id="logoutButton">Logout</button>
+          </div>
+          <div class="integration-stack">
+            <details class="integration-card" id="smartCreditIntegrationCard">
+              <summary>
+                <span class="integration-summary-brand integration-summary-brand-smartcredit">
+                  <img class="integration-brand-image integration-brand-image-smartcredit" src="/assets/smartcredit-logo.png" alt="SmartCredit" />
+                </span>
+                <span class="integration-summary-label">SmartCredit API</span>
+              </summary>
+              <form id="smartCreditIntegrationForm" class="integration-form">
+                <label class="field">
+                  <span>Token ID</span>
+                  <input name="tokenId" type="text" placeholder="Token ID" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>API Secret</span>
+                  <input name="apiSecret" type="text" placeholder="API Secret" />
+                </label>
+                <button type="submit">Save SmartCredit</button>
+              </form>
+            </details>
+            <details class="integration-card" id="myFreeScoreIntegrationCard">
+              <summary>
+                <span class="integration-summary-brand integration-summary-brand-mfsn">
+                  <img class="integration-brand-image integration-brand-image-mfsn" src="/assets/myfreescorenow-logo.png" alt="MyFreeScoreNow" />
+                </span>
+                <span class="integration-summary-label">API Login</span>
+              </summary>
+              <form id="myFreeScoreIntegrationForm" class="integration-form">
+                <label class="field">
+                  <span>API Email</span>
+                  <input name="tokenId" type="text" placeholder="apiuser@test.com" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>API Password</span>
+                  <input name="apiSecret" type="text" placeholder="API Password" />
+                </label>
+                <button type="submit">Save MyFreeScoreNow</button>
+              </form>
+            </details>
+            <p id="integrationMessage" class="form-message muted"></p>
+          </div>
+          <button class="affiliate-links-launch" type="button" id="affiliateLinksLaunch">Affiliate Links</button>
+          <div class="hero-quick-actions" aria-label="Quick actions">
+            <button class="hero-canvas-action" type="button" id="billingQuickAction">
+              <div class="hero-glow-btn">
+                <canvas class="hero-glow-canvas"></canvas>
+                <p class="hero-glow-text">Billing</p>
+              </div>
+              <span class="hero-action-icon-wrap" aria-hidden="true">
+                <img src="/assets/icons/billing-icon.png" alt="" />
+              </span>
+            </button>
+            <button class="hero-canvas-action" type="button" id="disputeQuickAction">
+              <div class="hero-glow-btn">
+                <canvas class="hero-glow-canvas"></canvas>
+                <p class="hero-glow-text">Dispute Center</p>
+              </div>
+              <span class="hero-action-icon-wrap" aria-hidden="true">
+                <img src="/assets/icons/dispute-sword-icon.png" alt="" />
+              </span>
+            </button>
+            <button class="sap-ai-action" type="button" id="setupAiPromptsAction" aria-label="Setup AI Prompts">
+              <span class="sap-ai-aura" aria-hidden="true"></span>
+              <span class="sap-ai-border" aria-hidden="true"></span>
+              <span class="sap-ai-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sap-ai-sparkle" aria-hidden="true">
+                  <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+                  <path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>
+                </svg>
+                <span class="sap-ai-text">Setup AI Prompts</span>
+                <span class="sap-ai-arrow-wrap" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                  </svg>
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main class="crm-layout" id="crmLayout">
+        <section class="panel client-hub-pane client-hub-pane-home" id="clientHubHomePane" hidden>
+          <form id="homeSettingsForm" class="home-settings-shell">
+            <div class="home-settings-intro">
+              <p class="home-settings-kicker">Person Settings</p>
+              <h2>Business Settings</h2>
+              <p>Company profile, dispute timing, email settings, and important links for Ninja Tools.</p>
+              <p id="homeSettingsMessage" class="form-message muted">Business settings save locally and sync with the Ninja widget.</p>
+            </div>
+            <section class="home-settings-card home-settings-card-profile">
+              <div class="home-settings-head">
+                <div>
+                  <p class="eyebrow">Company Profile</p>
+                  <h3>Best Texas Credit Pros Setup</h3>
+                </div>
+              </div>
+
+              <div class="home-brand-row">
+                <div class="home-logo-editor">
+                  <div class="home-logo-preview-shell">
+                    <img id="homeLogoPreview" class="home-logo-preview" alt="Company logo preview" hidden />
+                    <p id="homeLogoPlaceholder" class="home-logo-placeholder">Upload the company logo used across Ninja Tools.</p>
+                  </div>
+                  <label class="home-logo-upload" for="homeLogoInput">
+                    <span>Upload Image</span>
+                    <input id="homeLogoInput" name="logo" type="file" accept="image/*" />
+                  </label>
+                </div>
+
+                <div class="home-color-editor">
+                  <span class="home-color-label">Company Color</span>
+                  <div class="home-color-swatches" id="homeColorSwatches" role="group" aria-label="Company accent color">
+                    <button type="button" class="home-color-swatch" data-home-color="#58a55c" aria-label="Green"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#4da95f" aria-label="Leaf green"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#1d9ca1" aria-label="Teal"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#ffad28" aria-label="Amber"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#ee3b6c" aria-label="Pink"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#0000ff" aria-label="Blue"></button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="home-settings-grid">
+                <label class="field">
+                  <span>Company Name</span>
+                  <input id="homeCompanyName" name="companyName" type="text" />
+                </label>
+                <label class="field">
+                  <span>Company Address</span>
+                  <input id="homeCompanyAddress" name="companyAddress" type="text" />
+                </label>
+                <label class="field">
+                  <span>Company City</span>
+                  <input id="homeCompanyCity" name="companyCity" type="text" />
+                </label>
+                <label class="field">
+                  <span>Company State</span>
+                  <select id="homeCompanyState" name="companyState" class="home-settings-select">
+                    <option>Texas</option>
+                    <option>Oklahoma</option>
+                    <option>Louisiana</option>
+                    <option>Arkansas</option>
+                    <option>New Mexico</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Company Zipcode</span>
+                  <input id="homeCompanyZipcode" name="companyZipcode" type="text" />
+                </label>
+                <label class="field">
+                  <span>Company Email</span>
+                  <input id="homeCompanyEmail" name="companyEmail" type="email" />
+                </label>
+                <label class="field">
+                  <span>Company Phone</span>
+                  <input id="homeCompanyPhone" name="companyPhone" type="text" />
+                </label>
+                <label class="field">
+                  <span>Consultation Fee</span>
+                  <input id="homeConsultationFee" name="consultationFee" type="text" />
+                </label>
+                <label class="field">
+                  <span>Service Fee</span>
+                  <input id="homeServiceFee" name="serviceFee" type="text" />
+                </label>
+              </div>
+
+              <div class="home-links-grid">
+                <label class="field">
+                  <span>Client Portal URL</span>
+                  <input id="homeClientPortalUrl" name="clientPortalUrl" type="url" />
+                </label>
+                <label class="field">
+                  <span>Self Signup Link</span>
+                  <input id="homeSelfSignupLink" name="selfSignupLink" type="url" />
+                </label>
+              </div>
+            </section>
+
+            <div class="home-settings-subgrid">
+              <section class="home-settings-card">
+                <div class="home-settings-head home-settings-head-compact">
+                  <div>
+                    <p class="eyebrow">Dispute Settings</p>
+                    <h3>Round Timing</h3>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>Dispute Due Date</span>
+                  <select id="homeDisputeDueDate" name="disputeDueDate" class="home-settings-select">
+                    <option value="30-Days">30-Days</option>
+                    <option value="35-Days">35-Days</option>
+                    <option value="45-Days">45-Days</option>
+                    <option value="60-Days">60-Days</option>
+                  </select>
+                </label>
+                <button type="submit" class="home-settings-save">Save Business Settings</button>
+              </section>
+
+              <section class="home-settings-card">
+                <div class="home-settings-head home-settings-head-compact">
+                  <div>
+                    <p class="eyebrow">Email Settings</p>
+                    <h3>Sender Identity</h3>
+                  </div>
+                </div>
+                <div class="home-settings-grid home-settings-grid-tight">
+                  <label class="field">
+                    <span>Sender Name</span>
+                    <input id="homeSenderName" name="senderName" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Email Domain</span>
+                    <input id="homeEmailDomain" name="emailDomain" type="text" />
+                  </label>
+                </div>
+                <label class="field">
+                  <span>From Name Preview</span>
+                  <input id="homeFromNamePreview" name="fromNamePreview" type="text" readonly />
+                </label>
+              </section>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel client-hub-pane client-hub-pane-add" id="clientHubAddPane" hidden>
+          <div class="add-client-panel-body">
+            <div class="section-heading compact-heading">
+              <h2 id="clientFormTitle">Add Client</h2>
+              <p id="clientFormSubtitle">Client identity, monitoring credentials, and portal access for Ninja Tools.</p>
+            </div>
+
+            <form id="clientForm" class="form-grid compact-form-grid add-client-rich-form neu-forms-skin">
+              <section class="add-client-form-section field-full client-form-segment-section">
+                <div class="client-form-segment-nav" role="tablist" aria-label="Client Form Sections">
+                  <button class="client-form-segment-tab is-active" type="button" role="tab" aria-selected="true" data-form-segment-tab="client">Client</button>
+                  <button class="client-form-segment-tab" type="button" role="tab" aria-selected="false" data-form-segment-tab="ninja">Ninja Team</button>
+                  <button class="client-form-segment-tab" type="button" role="tab" aria-selected="false" data-form-segment-tab="affiliate">Affiliate</button>
+                </div>
+                <div class="client-form-segment-panels">
+                  <div class="client-form-segment-panel is-active" role="tabpanel" data-form-segment-panel="client">
+                    <div class="add-client-grid client-form-segment-grid">
+                      <p class="muted">Client fields are managed in the sections below.</p>
+                    </div>
+                  </div>
+                  <div class="client-form-segment-panel" role="tabpanel" data-form-segment-panel="ninja" hidden>
+                    <div class="add-client-grid client-form-segment-grid">
+                      <label class="field">
+                        <span>Ninja Team Queue</span>
+                        <input name="ninjaQueue" type="text" placeholder="Assigned processing lane" />
+                      </label>
+                      <label class="field">
+                        <span>Ninja Team Priority</span>
+                        <input name="ninjaPriority" type="text" placeholder="Low / Medium / High" />
+                      </label>
+                      <label class="field field-full">
+                        <span>Ninja Team Notes</span>
+                        <textarea name="ninjaTeamNotes" rows="2" placeholder="Internal team notes..."></textarea>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="client-form-segment-panel" role="tabpanel" data-form-segment-panel="affiliate" hidden>
+                    <div class="add-client-grid client-form-segment-grid">
+                      <label class="field">
+                        <span>Affiliate Name</span>
+                        <input name="affiliateName" type="text" placeholder="Affiliate or partner name" />
+                      </label>
+                      <label class="field">
+                        <span>Affiliate Campaign</span>
+                        <input name="affiliateCampaign" type="text" placeholder="Campaign or source details" />
+                      </label>
+                      <label class="field field-full">
+                        <span>Affiliate Notes</span>
+                        <textarea name="affiliateNotes" rows="2" placeholder="Affiliate tracking notes..."></textarea>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="add-client-form-section field-full client-only-section">
+                <div class="add-client-form-heading">
+                  <h3>Client Identity</h3>
+                  <p>Name, contact info, CRM matching, and household pairing.</p>
+                </div>
+                <div class="add-client-grid">
+                  <label class="field field-name">
+                    <span>First Name</span>
+                    <input name="firstName" placeholder="Jane" required />
+                  </label>
+
+                  <label class="field field-name">
+                    <span>Last Name</span>
+                    <input name="lastName" placeholder="Doe" required />
+                  </label>
+
+                  <label class="field field-email">
+                    <span>Email</span>
+                    <input name="email" type="email" placeholder="jane@example.com" />
+                  </label>
+
+                  <div class="add-client-inline-fields add-client-inline-fields-identity">
+                    <label class="field field-compact field-dob">
+                      <span>DOB</span>
+                      <input name="dob" type="text" inputmode="numeric" placeholder="MM/DD/YYYY" maxlength="10" autocomplete="bday" />
+                    </label>
+
+                    <label class="field field-compact field-ssn">
+                      <span>SSN</span>
+                      <input name="ssn" type="text" inputmode="numeric" placeholder="123-45-2352" maxlength="11" />
+                    </label>
+
+                    <label class="field field-compact field-phone">
+                      <span>Phone</span>
+                      <input name="phone" type="tel" placeholder="(713) 212-9977" />
+                    </label>
+                  </div>
+
+                  <label class="field field-full">
+                    <span>Street Address</span>
+                    <input id="clientAddressInput" name="address" type="text" list="clientAddressMatches" placeholder="Start typing an address..." autocomplete="off" />
+                    <small class="field-note" id="clientAddressHint">Address suggestions will appear as you type.</small>
+                    <datalist id="clientAddressMatches"></datalist>
+                  </label>
+
+                  <div class="add-client-inline-fields add-client-inline-fields-address">
+                    <label class="field field-compact field-city">
+                      <span>City</span>
+                      <input name="addressCity" type="text" placeholder="Fort Worth" />
+                    </label>
+
+                    <label class="field field-compact field-state">
+                      <span>State</span>
+                      <input name="addressState" type="text" placeholder="TX" maxlength="2" />
+                    </label>
+
+                    <label class="field field-compact field-zip">
+                      <span>Zip</span>
+                      <input name="addressZip" type="text" inputmode="numeric" placeholder="76102" maxlength="10" />
+                    </label>
+                  </div>
+
+                  <label class="field field-full">
+                    <span>Join Client (Spouse)</span>
+                    <input id="spouseClientSearch" name="spouseClientSearch" type="text" list="spouseClientMatches" placeholder="Search existing CRM clients..." autocomplete="off" />
+                    <input id="spouseClientId" name="spouseClientId" type="hidden" />
+                    <datalist id="spouseClientMatches"></datalist>
+                  </label>
+
+                  <div class="add-client-inline-fields add-client-inline-fields-status">
+                    <label class="field field-compact">
+                      <span>Status</span>
+                      <select id="clientAddStatus" name="status" class="add-client-select"></select>
+                    </label>
+                    <label class="field field-compact">
+                      <span>Phase</span>
+                      <select id="clientAddPhase" name="phase" class="add-client-select"></select>
+                    </label>
+                  </div>
+                </div>
+              </section>
+
+              <section class="add-client-form-section field-full client-only-section">
+                <div class="add-client-form-heading">
+                  <h3>Credit Monitoring Credentials</h3>
+                  <p>Used by refresh and Get Report to choose the right method automatically.</p>
+                </div>
+                <div class="add-client-grid">
+                  <label class="field">
+                    <span>Credit Monitoring</span>
+                    <select name="monitoringAgency" class="add-client-select">
+                      <option value="">Select monitoring</option>
+                      <option value="IdentityIQ">IdentityIQ</option>
+                      <option value="SmartCredit">SmartCredit</option>
+                      <option value="MyFreeScoreNow">MyFreeScoreNow</option>
+                      <option value="MyScoreIQ">MyScoreIQ</option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>Username</span>
+                    <input name="monitoringUsername" type="text" placeholder="Monitoring username or email" />
+                  </label>
+
+                  <label class="field add-client-credential-field">
+                    <span>Password</span>
+                    <div class="password-field-wrap">
+                      <input name="monitoringPassword" class="monitoring-password-input" type="password" placeholder="Monitoring password" />
+                      <button class="password-toggle-button" type="button" data-password-toggle="monitoringPassword" aria-label="Show password" aria-pressed="false">◐</button>
+                    </div>
+                  </label>
+
+                  <label class="field add-client-credential-field" data-secret-key-field>
+                    <span>Secret Key</span>
+                    <div class="password-field-wrap security-code-field-wrap">
+                      <input id="clientSecretKeyInput" name="secretKey" class="security-code-input" type="password" placeholder="Defaults to last 4 of SSN" />
+                      <button class="security-code-toggle-button" type="button" data-password-toggle="secretKey" aria-label="Show secret key" aria-pressed="false">◐</button>
+                    </div>
+                  </label>
+
+                  <label class="field add-client-credential-field" data-monitoring-token-field>
+                    <span>TOKEN</span>
+                    <input name="monitoringToken" type="text" placeholder="Customer token if provided" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" />
+                  </label>
+                </div>
+              </section>
+
+              <section class="add-client-form-section field-full client-only-section">
+                <div class="add-client-form-heading">
+                  <h3>Portal Access</h3>
+                  <p>Default portal password is last name + first initial + 123.</p>
+                </div>
+                <div class="add-client-portal-split">
+                  <div class="add-client-portal-left">
+                    <label class="field field-portal-password">
+                      <span>Password</span>
+                      <div class="password-field-wrap">
+                        <input id="clientPortalPasswordInput" name="portalPassword" class="monitoring-password-input" type="password" />
+                        <button class="password-toggle-button" type="button" data-password-toggle="portalPassword" aria-label="Show portal password" aria-pressed="false">◐</button>
+                      </div>
+                    </label>
+
+                    <fieldset class="field portal-toggle-field client-portal-toggle-fieldset">
+                      <span>Ninja Portal</span>
+                      <div class="portal-toggle-group portal-toggle-group-neu">
+                        <label class="portal-toggle-switch-line" for="clientPortalEnabledToggle">
+                          <input id="clientPortalEnabledToggle" class="toggle-input" type="checkbox" checked />
+                          <span class="toggle-switch" aria-hidden="true"></span>
+                          <span class="portal-toggle-switch-copy">On / Off</span>
+                        </label>
+                        <input id="clientPortalEnabledValue" type="hidden" name="portalEnabled" value="on" />
+                      </div>
+                    </fieldset>
+
+                    <label class="field field-portal-language">
+                      <span>Language</span>
+                      <select name="language" class="add-client-select add-client-select-compact">
+                        <option value="English">English</option>
+                        <option value="Spanish">Spanish</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div class="add-client-portal-right">
+                    <label class="field">
+                      <span>Ninja Assigned</span>
+                      <select id="clientNinjaAssigned" name="ninjaAssigned" class="add-client-select"></select>
+                    </label>
+                    <label class="field">
+                      <span>Affiliate Assigned</span>
+                      <select id="clientAffiliateAssigned" name="affiliateAssigned" class="add-client-select">
+                        <option value="None">None</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </section>
+
+              <section class="add-client-form-section field-full client-only-section">
+                <div class="add-client-form-heading">
+                  <h3>Documents</h3>
+                  <p>Upload key files and choose print side preferences.</p>
+                </div>
+                <div id="clientDocumentsList" class="client-documents-list"></div>
+                <div class="client-documents-actions">
+                  <button id="addCustomDocumentButton" class="client-doc-add" type="button">+ Add new document</button>
+                </div>
+              </section>
+
+              <div class="field-full">
+                <button id="clientFormSubmitButton" type="submit">Save Client</button>
+                <div id="clientSaveProgressBox" class="client-save-progress" hidden>
+                  <div class="client-save-progress-head">
+                    <strong>Saving Client</strong>
+                    <span id="clientSaveProgressPercent">0%</span>
+                  </div>
+                  <div class="client-save-progress-track" role="progressbar" aria-label="Saving Client" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div id="clientSaveProgressBar" class="client-save-progress-bar"></div>
+                  </div>
+                </div>
+              </div>
+            </form>
+
+            <p id="formMessage" class="form-message muted"></p>
+          </div>
+        </section>
+
+        <div class="client-hub-pane client-section-grid" id="clientHubClientsPane">
+          <section class="panel client-hub-clients-panel nt-clients-glass-scope">
+            <div class="section-heading clients-heading-row">
+              <div></div>
+              <div class="csv-import-block clients-csv-import">
+                <form id="csvImportForm" class="csv-import-form inline-csv-import-form nt-clients-import-form">
+                  <input id="clientsCsv" name="clientsCsv" type="file" accept=".csv,text/csv" required />
+                  <button type="submit">Import</button>
+                </form>
+                <p id="csvImportMessage" class="form-message muted"></p>
+              </div>
+            </div>
+
+            <div class="clients-toolbar nt-clients-toolbar-legacy" hidden>
+              <input id="searchInput" class="search-input" type="search" placeholder="Search by name, phone, email, SSN, or monitoring username" />
+              <select id="statusFilter" class="status-filter-select">
+                <option value="__all__">All Clients</option>
+              </select>
+            </div>
+            <div id="clientsList" class="clients-table-wrap"></div>
+          </section>
+
+          <section class="panel detail-panel">
+            <div id="clientDetail" class="detail-shell">
+              <p class="muted">Choose a client to load the credit scores.</p>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel dashboard-panel">
+          <div class="dashboard-shell" id="dashboardShell">
+            <p class="muted">Loading Ninja Tools dashboard...</p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="clientDetailTemplate">
+      <div>
+        <div class="detail-header">
+        <div class="detail-name-column">
+          <p class="eyebrow">Client Detail</p>
+          <div class="detail-nameplate nameplate-logo">
+            <h3 class="detail-name" data-text="&#xf504; Client Detail">&#xf504; Client Detail</h3>
+          </div>
+          <div class="detail-name-loader-row">
+            <div class="detail-refresh-loader-anchor" aria-live="polite"></div>
+          </div>
+        </div>
+          <div class="detail-credentials">
+            <div class="monitoring-agency-switch" role="group" aria-label="Credit monitoring service">
+              <span class="agency-switch-glider" aria-hidden="true"></span>
+              <button class="agency-toggle agency-toggle-identityiq" type="button" data-agency="IdentityIQ">IdentityIQ</button>
+              <button class="agency-toggle agency-toggle-myfreescorenow" type="button" data-agency="MyFreeScoreNow">MyFreeScoreNow</button>
+              <button class="agency-toggle agency-toggle-smartcredit" type="button" data-agency="SmartCredit">SmartCredit</button>
+              <button class="agency-toggle agency-toggle-myscoreiq" type="button" data-agency="MyScoreIQ">MyScoreIQ</button>
+            </div>
+            <div class="monitoring-link-indicator" hidden>
+              <span class="monitoring-link-icon is-unlinked" aria-hidden="true"></span>
+              <span class="monitoring-link-text">Unlinked</span>
+            </div>
+            <label class="field credential-field">
+              <span>Username</span>
+              <input class="monitoring-username-input" type="text" placeholder="Username" />
+            </label>
+            <label class="field credential-field">
+              <span>Password</span>
+              <div class="password-field-wrap">
+                <input class="monitoring-password-input" type="password" placeholder="Password" />
+                <button class="password-toggle-button" type="button" aria-label="Show password" aria-pressed="false">◐</button>
+              </div>
+            </label>
+            <label class="field credential-field">
+              <span class="security-field-label">Secret Key</span>
+              <div class="password-field-wrap security-code-field-wrap">
+                <input class="security-code-input" type="password" placeholder="Secret Key" />
+                <button class="security-code-toggle-button" type="button" aria-label="Show token" aria-pressed="false">◐</button>
+              </div>
+            </label>
+            <div class="client-goal-row detail-goal-row">
+              <div class="detail-refresh-action">
+                <div class="detail-refresh-button-wrap">
+                  <button class="detail-refresh-button" type="button">
+                    <span>Refresh Report</span>
+                  </button>
+                  <div class="detail-refresh-button-shadow"></div>
+                </div>
+              </div>
+              <a class="report-link detail-report-link detail-report-inline" target="_blank" rel="noreferrer">Last Report -- --</a>
+              <label class="field client-goal-field">
+                <select class="client-goal-select">
+                  <option value="">Select Goal</option>
+                  <option value="Mortgage">Mortgage</option>
+                  <option value="Credit Card">Credit Card</option>
+                  <option value="Re-Finance">Re-Finance</option>
+                  <option value="Auto">Auto</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+        <p class="muted detail-email"></p>
+        <div class="detail-lower-split">
+          <section class="text-client-panel">
+            <div class="text-client-header">
+              <div class="text-client-copy">
+                <small>BlueBubbles</small>
+                <span class="text-client-destination"></span>
+              </div>
+              <button class="text-client-send-button" type="button">Send Text</button>
+            </div>
+            <div class="text-attachment-area">
+              <span class="text-attachment-label">Attachment</span>
+              <div class="text-attachment-dropzone" role="button" tabindex="0" aria-label="Add attachment">
+                <input class="text-attachment-input" type="file" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.zip,.heic,.heif,.webp" hidden />
+                <p class="text-attachment-hint">Drop image/PDF/file, click to choose, or paste screenshot (Ctrl/Cmd+V)</p>
+                <p class="text-attachment-meta muted"></p>
+              </div>
+            </div>
+            <label class="field text-client-field">
+              <span>Message</span>
+              <textarea class="text-client-input" rows="3" placeholder="Type a text message to send through BlueBubbles..."></textarea>
+            </label>
+            <p class="text-client-status muted"></p>
+          </section>
+          <div class="client-notes-panel">
+            <label class="field client-notes-field">
+              <span>Client Notes</span>
+              <textarea class="client-notes-input" rows="4" placeholder="Add notes about this client..."></textarea>
+            </label>
+          </div>
+        </div>
+        <div class="detail-section-divider" aria-hidden="true">
+          <img src="/assets/ninjatools-divider.jpg" alt="" />
+        </div>
+        <div class="score-grid">
+          <article class="score-card transunion">
+            <div class="score-card-top">
+              <span>TransUnion</span>
+              <span class="projected-fico-chip">Projected FICO 8 <strong class="projected-fico-value" data-projected-fico="transunion">--</strong></span>
+            </div>
+            <div class="score-card-bottom">
+              <strong class="score-value" data-score="transunion">--</strong>
+            </div>
+            <div class="score-scroll">
+              <div class="score-scroll-row">
+                <div class="score-utilization">
+                  <small>Utilization</small>
+                  <strong class="utilization-value" data-utilization="transunion">--</strong>
+                </div>
+                <div class="score-age">
+                  <small>Age of Credit</small>
+                  <strong class="age-value" data-age="transunion">--</strong>
+                </div>
+              </div>
+              <div class="score-scroll-row score-scroll-row-secondary">
+                <div class="score-on-time">
+                  <small>On Time Payments</small>
+                  <strong class="on-time-value" data-on-time="transunion">--</strong>
+                </div>
+                <div class="score-total-debt">
+                  <small>Total Debt</small>
+                  <strong class="total-debt-value" data-total-debt="transunion">--</strong>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="score-card experian">
+            <div class="score-card-top">
+              <span>Experian</span>
+              <span class="projected-fico-chip">Projected FICO 8 <strong class="projected-fico-value" data-projected-fico="experian">--</strong></span>
+            </div>
+            <div class="score-card-bottom">
+              <strong class="score-value" data-score="experian">--</strong>
+            </div>
+            <div class="score-scroll">
+              <div class="score-scroll-row">
+                <div class="score-utilization">
+                  <small>Utilization</small>
+                  <strong class="utilization-value" data-utilization="experian">--</strong>
+                </div>
+                <div class="score-age">
+                  <small>Age of Credit</small>
+                  <strong class="age-value" data-age="experian">--</strong>
+                </div>
+              </div>
+              <div class="score-scroll-row score-scroll-row-secondary">
+                <div class="score-on-time">
+                  <small>On Time Payments</small>
+                  <strong class="on-time-value" data-on-time="experian">--</strong>
+                </div>
+                <div class="score-total-debt">
+                  <small>Total Debt</small>
+                  <strong class="total-debt-value" data-total-debt="experian">--</strong>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="score-card equifax">
+            <div class="score-card-top">
+              <span>Equifax</span>
+              <span class="projected-fico-chip">Projected FICO 8 <strong class="projected-fico-value" data-projected-fico="equifax">--</strong></span>
+            </div>
+            <div class="score-card-bottom">
+              <strong class="score-value" data-score="equifax">--</strong>
+            </div>
+            <div class="score-scroll">
+              <div class="score-scroll-row">
+                <div class="score-utilization">
+                  <small>Utilization</small>
+                  <strong class="utilization-value" data-utilization="equifax">--</strong>
+                </div>
+                <div class="score-age">
+                  <small>Age of Credit</small>
+                  <strong class="age-value" data-age="equifax">--</strong>
+                </div>
+              </div>
+              <div class="score-scroll-row score-scroll-row-secondary">
+                <div class="score-on-time">
+                  <small>On Time Payments</small>
+                  <strong class="on-time-value" data-on-time="equifax">--</strong>
+                </div>
+                <div class="score-total-debt">
+                  <small>Total Debt</small>
+                  <strong class="total-debt-value" data-total-debt="equifax">--</strong>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="income-dti-panel">
+          <div class="dti-summary-grid dti-summary-grid-inline">
+            <div class="dti-summary-card dti-summary-card-combo">
+              <div class="dti-mini-stat">
+                <small>Total Debt</small>
+                <strong class="dti-total-debt">--</strong>
+                <div class="dti-debt-breakdown dti-debt-breakdown-list"></div>
+                <div class="dti-inline-inputs">
+                  <label class="field income-field dti-income-card dti-inline-input-card">
+                    <span>Yearly Income</span>
+                    <input class="yearly-income-input" type="number" min="0" step="1000" placeholder="75000" />
+                  </label>
+                  <label class="field income-field dti-income-card dti-inline-input-card">
+                    <span>Housing Payment</span>
+                    <input class="housing-payment-input" type="number" min="0" step="50" placeholder="1800" />
+                  </label>
+                  <label class="field income-field dti-income-card dti-inline-input-card">
+                    <span>Debt Monthly Payments</span>
+                    <input class="debt-monthly-payment-input" type="number" min="0" step="25" placeholder="450" />
+                  </label>
+                </div>
+              </div>
+              <div class="dti-mini-stat">
+                <small>Front-End DTI</small>
+                <strong class="dti-front-end">--</strong>
+              </div>
+              <div class="dti-mini-stat">
+                <small>Back-End DTI</small>
+                <strong class="dti-back-end">--</strong>
+              </div>
+              <div class="dti-scale-wrap">
+                <div class="dti-scale-bar">
+                  <span class="dti-scale-segment good"></span>
+                  <span class="dti-scale-segment fair"></span>
+                  <span class="dti-scale-segment risky"></span>
+                  <span class="dti-scale-segment danger"></span>
+                </div>
+                <span class="dti-scale-marker front-end-marker">Front</span>
+                <span class="dti-scale-marker back-end-marker">Back</span>
+                <div class="dti-scale-labels">
+                  <span>Good<br />36% or less</span>
+                  <span>Fair<br />37-43%</span>
+                  <span>Risky<br />44-50%</span>
+                  <span>Danger<br />51%+</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="whatif-simulator-panel">
+            <div class="whatif-simulator-head">
+              <h5>What If Simulator</h5>
+              <p>Current and projected 3-bureau score scenarios</p>
+            </div>
+            <div class="whatif-simulator-controls">
+              <label class="field whatif-field">
+                <span>Scenario</span>
+                <select class="whatif-scenario-select">
+                  <option value="pay_down_revolving" selected>Pay Down Revolving</option>
+                  <option value="baseline">Baseline</option>
+                  <option value="increase_credit_limits">Increase Credit Limits</option>
+                  <option value="time_travel">Age Accounts (Time Travel)</option>
+                </select>
+              </label>
+              <label class="field whatif-field whatif-slider-field">
+                <span class="whatif-value-label">Credit Card Utilization Pay Down</span>
+                <input class="whatif-scenario-slider" type="range" min="0" max="100" step="10" value="0" />
+                <div class="whatif-slider-meta">
+                  <strong class="whatif-slider-value">0%</strong>
+                  <small class="whatif-slider-helper">No utilization reduction</small>
+                </div>
+                <div class="whatif-slider-total-wrap">
+                  <small>Total Credit Card Balance</small>
+                  <strong class="whatif-slider-total">$0.00</strong>
+                </div>
+              </label>
+            </div>
+            <div class="whatif-simulator-results">
+              <div class="whatif-score-columns">
+                <div class="whatif-score-column">
+                  <h6>Vantage 3.0</h6>
+                  <div class="whatif-result-card">
+                    <small>Current</small>
+                    <strong class="whatif-current-vantage">---</strong>
+                  </div>
+                  <div class="whatif-result-card">
+                    <small>Projected</small>
+                    <strong class="whatif-vantage-score">---</strong>
+                  </div>
+                </div>
+                <div class="whatif-score-column">
+                  <h6>FICO 8</h6>
+                  <div class="whatif-result-card">
+                    <small>Current</small>
+                    <strong class="whatif-current-fico">---</strong>
+                  </div>
+                  <div class="whatif-result-card">
+                    <small>Projected</small>
+                    <strong class="whatif-projected-fico-bureau">---</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="whatif-delta-grid">
+                <div class="whatif-result-card">
+                  <small>Delta (Vantage 3.0)</small>
+                  <strong class="whatif-vantage-delta-score"><span class="whatif-delta-arrow">-</span><span class="whatif-delta-value">---</span></strong>
+                </div>
+                <div class="whatif-result-card">
+                  <small>Delta (FICO 8)</small>
+                  <strong class="whatif-fico-delta-score"><span class="whatif-delta-arrow">-</span><span class="whatif-delta-value">---</span></strong>
+                </div>
+              </div>
+            </div>
+            <p class="whatif-status muted">Ready.</p>
+          </div>
+        </div>
+        <div class="accounts-section">
+          <div class="accounts-heading">
+            <div class="accounts-heading-main">
+              <h4>Open Accounts</h4>
+              <span id="openAccountCount">0</span>
+              <div class="accounts-inquiries">
+                <small>Hard Inquiries</small>
+                <div class="accounts-inquiries-list">
+                  <span class="accounts-inquiry-badge transunion">
+                    <b class="hard-inquiry-count-transunion">0</b>
+                    <em>TU</em>
+                  </span>
+                  <span class="accounts-inquiry-badge experian">
+                    <b class="hard-inquiry-count-experian">0</b>
+                    <em>EX</em>
+                  </span>
+                  <span class="accounts-inquiry-badge equifax">
+                    <b class="hard-inquiry-count-equifax">0</b>
+                    <em>EQ</em>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="accounts-filter-wrap">
+              <button class="accounts-filter-button" type="button" aria-expanded="false">Filter Accounts</button>
+              <div class="accounts-filter-menu" hidden></div>
+            </div>
+          </div>
+          <div class="account-category-list"></div>
+          <div class="accounts-list"></div>
+        </div>
+        <p class="muted detail-note"></p>
+      </div>
+    </template>
+
+    <dialog id="clientEditDialog" class="client-edit-dialog">
+      <form id="clientEditForm" class="client-edit-form" method="dialog">
+        <div class="client-edit-header">
+          <div>
+            <p class="eyebrow">Update Client</p>
+            <h3 id="clientEditTitle">Edit Client</h3>
+          </div>
+          <button class="client-edit-close" type="button" id="clientEditClose" aria-label="Close edit dialog">X</button>
+        </div>
+        <div class="client-edit-grid">
+          <label class="field">
+            <span>First Name</span>
+            <input name="firstName" required />
+          </label>
+          <label class="field">
+            <span>Last Name</span>
+            <input name="lastName" required />
+          </label>
+          <label class="field">
+            <span>Status</span>
+            <select name="status" id="clientEditStatus"></select>
+          </label>
+          <label class="field">
+            <span>Phone</span>
+            <input name="phone" />
+          </label>
+          <label class="field field-full">
+            <span>Email</span>
+            <input name="email" type="email" />
+          </label>
+          <label class="field">
+            <span>Next Import</span>
+            <input name="nextImportInt" type="number" step="1" />
+          </label>
+          <label class="field">
+            <span>Credit Monitoring</span>
+            <select name="monitoringAgency">
+              <option value="">Not Set</option>
+              <option value="IdentityIQ">IdentityIQ</option>
+              <option value="SmartCredit">SmartCredit</option>
+              <option value="MyFreeScoreNow">MyFreeScoreNow</option>
+              <option value="MyScoreIQ">MyScoreIQ</option>
+            </select>
+          </label>
+        </div>
+        <div class="client-edit-actions">
+          <button class="client-edit-cancel" type="button" id="clientEditCancel">Cancel</button>
+          <button type="submit">Save Changes</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="imageCropDialog" class="image-crop-dialog">
+      <div id="imageCropVueApp" class="image-crop-shell">
+        <div class="image-crop-head">
+          <h3>Crop Image</h3>
+          <p>{{ imageSrc ? 'Rotate, move, and crop. Save Crop resizes to 900 x 500.' : 'Upload an image to begin cropping.' }}</p>
+        </div>
+        <div class="image-crop-canvas-wrap" :class="{ 'is-empty': !imageSrc }">
+          <img v-if="imageSrc" ref="cropImage" :src="imageSrc" alt="Crop target preview" />
+          <div v-else class="image-crop-empty">Load an image to crop</div>
+        </div>
+        <div class="image-crop-actions">
+          <div class="image-crop-rotate-controls">
+            <button type="button" class="image-crop-rotate" @click="rotate(-90)">Rotate Left</button>
+            <button type="button" class="image-crop-rotate" @click="rotate(90)">Rotate Right</button>
+            <button type="button" class="image-crop-rotate" @click="resetCrop">Reset</button>
+          </div>
+          <div class="image-crop-nudge-controls">
+            <button type="button" class="image-crop-nudge" @click="moveBy(0, -25)">Up</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(-25, 0)">Left</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(25, 0)">Right</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(0, 25)">Down</button>
+          </div>
+          <div class="image-crop-primary-controls">
+            <button type="button" class="client-edit-cancel" @click="emitCancel">Cancel</button>
+            <button type="button" @click="emitSave">Save Crop</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="affiliateLinksDialog" class="client-edit-dialog affiliate-links-dialog">
+      <div class="client-edit-form affiliate-links-panel">
+        <div class="client-edit-header affiliate-links-header">
+          <div>
+            <p class="eyebrow">Saved Clients</p>
+            <h3>Affiliate Links</h3>
+          </div>
+          <button class="client-edit-close" type="button" id="affiliateLinksClose" aria-label="Close affiliate links dialog">X</button>
+        </div>
+
+        <div class="affiliate-tabs">
+          <button class="affiliate-tab-button is-active" type="button" data-affiliate-tab-target="creditBuilder">Credit Builder</button>
+          <button class="affiliate-tab-button" type="button" data-affiliate-tab-target="creditMonitoring">Credit Monitoring</button>
+        </div>
+
+        <section id="affiliateBuilderPanel" class="affiliate-panel-section">
+          <div id="affiliateBuilderRows" class="affiliate-rows"></div>
+          <div class="affiliate-footer-actions">
+            <button class="affiliate-add-button" type="button" id="affiliateAddBuilderRow">Add Affiliate Link</button>
+          </div>
+        </section>
+
+        <section id="affiliateMonitoringPanel" class="affiliate-panel-section" hidden>
+          <div id="affiliateMonitoringRows" class="affiliate-rows"></div>
+        </section>
+      </div>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+    <script type="module" src="/app.js?v=20260519-01"></script>
+    <script src="https://widgets.leadconnectorhq.com/loader.js" data-resources-url="https://widgets.leadconnectorhq.com/chat-widget/loader.js" data-widget-id="6a0f17b6f4e3450dc8e40923" data-source="WEB_USER"></script>
+  </body>
+</html>

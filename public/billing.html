@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BTCP | Failed Payment</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260520-1" />
+    <link rel="shortcut icon" href="/favicon.ico?v=20260520-1" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260520-1" />
+    <link rel="stylesheet" href="/billing.css?v=20260513-4" />
+  </head>
+  <body>
+    <main class="billing-shell">
+      <section class="billing-login-card" id="billingLoginCard">
+        <p class="billing-kicker">BTCP | Failed Payment</p>
+        <h1>Billing Center Login</h1>
+        <p class="billing-copy">Sign in to run the failed-payments sync and push records to GoHighLevel workflow webhooks.</p>
+        <form id="billingLoginForm" class="billing-form">
+          <label>
+            <span>Username</span>
+            <input id="billingLoginUsername" type="text" autocomplete="username" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="billingLoginPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <button type="submit">Login</button>
+        </form>
+        <p class="billing-message" id="billingLoginMessage"></p>
+      </section>
+
+      <section class="billing-app" id="billingApp" hidden>
+        <header class="billing-header">
+          <div>
+            <p class="billing-kicker">BTCP | Failed Payment</p>
+            <h2>Billing Workflow Console</h2>
+          </div>
+          <div class="billing-header-actions">
+            <span class="billing-signed-in" id="billingSignedInAs">Signed in as admin</span>
+            <a class="billing-link-btn" href="/">Back to NinjaCore</a>
+            <button class="billing-link-btn" type="button" id="billingLogoutButton">Logout</button>
+          </div>
+        </header>
+
+        <section class="billing-grid">
+          <article class="billing-card">
+            <h3>GoHighLevel Webhook Settings</h3>
+            <form id="billingConfigForm" class="billing-form">
+              <label>
+                <span>Failed Payments Webhook URL</span>
+                <input id="billingWebhookUrl" type="url" placeholder="https://services.leadconnectorhq.com/hooks/..." />
+              </label>
+              <label>
+                <span>Webhook Header Name</span>
+                <input id="billingHeaderName" type="text" placeholder="X-GHL-Key" />
+              </label>
+              <label>
+                <span>Webhook Header Value</span>
+                <input id="billingHeaderValue" type="text" placeholder="header token value" />
+              </label>
+              <label>
+                <span>Script Trigger Secret</span>
+                <input id="billingTriggerSecret" type="text" placeholder="trigger secret value" />
+              </label>
+              <button type="submit">Save Settings</button>
+            </form>
+            <p class="billing-message" id="billingConfigMessage"></p>
+          </article>
+
+          <article class="billing-card">
+            <h3>SafeQueryAllFailedTrans</h3>
+            <div class="billing-stats" id="billingStats">
+              <div><strong id="billingMatchedCount">0</strong><span>Matched</span></div>
+              <div><strong id="billingSuccessCount">0</strong><span>Sent</span></div>
+              <div><strong id="billingFailedCount">0</strong><span>Failed</span></div>
+            </div>
+            <div class="billing-run-actions">
+              <button type="button" id="billingRefreshListButton">Refresh Failed List</button>
+              <button type="button" id="billingDryRunButton">Dry Run</button>
+              <button type="button" id="billingRunButton">Run SafeQuery</button>
+            </div>
+            <label class="billing-search">
+              <span>Search</span>
+              <input id="billingSearchInput" type="search" placeholder="name, email, phone, notes..." />
+            </label>
+            <p class="billing-message" id="billingRunMessage"></p>
+          </article>
+        </section>
+
+        <section class="billing-card billing-card-wide">
+          <h3>Failed Payment Transactions</h3>
+          <div class="billing-table-wrap">
+            <table class="billing-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Trans ID</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Amount</th>
+                  <th>Last 4</th>
+                  <th>Method</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th>Processor</th>
+                </tr>
+              </thead>
+              <tbody id="billingEventRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="billing-card billing-card-wide">
+          <h3>Execution Log</h3>
+          <pre id="billingLog" class="billing-log">Ready.</pre>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/billing.js?v=20260513-4"></script>
+  </body>
+</html>
