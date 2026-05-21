@@ -3,7 +3,12 @@
 import mysql from 'mysql2/promise';
 import 'dotenv/config';
 
+const VERIFY_VERSION = 'v2.0.0';
 const OWNER_KEY = (process.env.NINJA_SYNC_OWNER_KEY || 'admin').trim() || 'admin';
+const VERIFY_TARGETS = String(process.env.VERIFY_TARGETS || 'Will Medsger,Andrew Johnson')
+  .split(',')
+  .map((name) => name.trim())
+  .filter(Boolean);
 
 const toolsCfg = {
   host: (process.env.TOOLSNINJA_DB_HOST || '127.0.0.1').trim(),
@@ -26,7 +31,7 @@ if (!toolsCfg.password || !apiCfg.password) {
   process.exit(1);
 }
 
-const FIXED_DOC_TYPES = [
+const DOC_FIELDS = [
   ['ID Document', 'dl_id'],
   ['SSN Document', 'ssn_id'],
   ['POA Document', 'poa_id'],
@@ -35,49 +40,88 @@ const FIXED_DOC_TYPES = [
   ['Limited Power of Attorney', 'cover_sheet'],
 ];
 
-const text = (v) => String(v ?? '').trim();
-const digits = (v) => String(v || '').replace(/\D/g, '');
-const normalizeLine = (value) => text(value).replace(/\s+/g, ' ').trim();
-const splitApiAddressLines = (value) => String(value || '')
-  .replace(/\r/g, '\n')
-  .replace(/\t/g, ' ')
-  .split('\n')
-  .map((line) => normalizeLine(line))
-  .filter(Boolean);
-const splitToolsAddressParts = (value) => {
-  const raw = text(value);
-  if (!raw) return [];
-  if (raw.includes('|')) {
-    return raw.split('|').map((part) => normalizeLine(part)).filter(Boolean);
+const text = (value) => String(value ?? '').trim();
+const lower = (value) => text(value).toLowerCase();
+const digits = (value) => String(value || '').replace(/\D/g, '');
+const nameKey = (first, last) => `${lower(first)}|${lower(last)}`;
+const fullName = (first, last) => `${text(first)} ${text(last)}`.replace(/\s+/g, ' ').trim();
+const isNumericId = (value) => /^\d+$/.test(text(value));
+const isNonEmpty = (value) => text(value).length > 0;
+
+const normalizeTwoLineAddress = (rawValue) => {
+  const raw = String(rawValue || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\|/g, '\n')
+    .replace(/\t/g, ' ')
+    .trim();
+  if (!raw) return '';
+
+  const lines = raw
+    .split('\n')
+    .map((line) => text(line).replace(/\s+/g, ' '))
+    .filter(Boolean);
+
+  if (lines.length >= 2) {
+    const line1 = lines[0].replace(/,$/, '');
+    const line2 = lines.slice(1).join(' ').replace(/\s+/g, ' ').trim();
+    return `${line1}\n${line2}`.trim();
   }
-  return splitApiAddressLines(raw);
+
+  const one = lines[0] || '';
+  const commaMatch = one.match(/^(.*?),\s*([^,]+),\s*([A-Za-z]{2}|[A-Za-z][A-Za-z .'-]+)\s+(\d{5}(?:-\d{4})?)$/);
+  if (commaMatch) {
+    const line1 = text(commaMatch[1]).replace(/,$/, '');
+    const line2 = `${text(commaMatch[2]).replace(/,$/, '')}, ${text(commaMatch[3])} ${text(commaMatch[4])}`.replace(/\s+/g, ' ').trim();
+    return `${line1}\n${line2}`.trim();
+  }
+
+  return one;
 };
-const toToolsAddress = (line1, line2 = '') => {
-  const first = normalizeLine(line1);
-  const second = normalizeLine(line2);
-  if (first && second) return `${first} | ${second}`;
-  return first || second || '';
-};
-const apiAddressPairToTools = (currentAddress, address, addresses) => {
-  const currentLines = splitApiAddressLines(currentAddress);
-  if (currentLines.length >= 2) return toToolsAddress(currentLines[0], currentLines[1]);
-  if (currentLines.length === 1) return toToolsAddress(currentLines[0], '');
 
-  const addressLines = splitApiAddressLines(address);
-  if (addressLines.length >= 2) return toToolsAddress(addressLines[0], addressLines[1]);
-  if (addressLines.length === 1) return toToolsAddress(addressLines[0], '');
-
-  const groupedLines = splitApiAddressLines(addresses);
-  if (groupedLines.length >= 2) return toToolsAddress(groupedLines[0], groupedLines[1]);
-  if (groupedLines.length === 1) return toToolsAddress(groupedLines[0], '');
-
+const apiAddressToTwoLine = (apiRow) => {
+  const values = [apiRow.currentAddress, apiRow.address, apiRow.addresses];
+  for (const value of values) {
+    const normalized = normalizeTwoLineAddress(value);
+    if (normalized) return normalized;
+  }
   return '';
 };
 
-const extractDocValue = (documents, type) => {
+const normalizeDocValue = (value) => text(value);
+
+const extractDocFromTools = (documents, type) => {
   if (!Array.isArray(documents)) return '';
-  const found = documents.find((doc) => text(doc?.type) === type);
-  return text(found?.storageKey || found?.fileDataUrl || found?.fileName || '');
+  const doc = documents.find((entry) => text(entry?.type) === type);
+  return normalizeDocValue(doc?.storageKey || doc?.fileDataUrl || doc?.fileName || '');
+};
+
+const parseToolsDocuments = (jsonValue) => {
+  try {
+    const parsed = JSON.parse(String(jsonValue || '[]'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const pushSample = (bucket, payload, max = 10) => {
+  if (bucket.length < max) bucket.push(payload);
+};
+
+const inc = (obj, key) => {
+  obj[key] = Number(obj[key] || 0) + 1;
+};
+
+const mapMulti = (rows, keyFn) => {
+  const map = new Map();
+  for (const row of rows) {
+    const key = keyFn(row);
+    if (!key) continue;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(row);
+  }
+  return map;
 };
 
 const main = async () => {
@@ -85,37 +129,60 @@ const main = async () => {
   const api = await mysql.createConnection(apiCfg);
 
   try {
-    const [toolRows] = await tools.query(
-      `SELECT client_id, external_client_id, first_name, last_name, email, phone, ssn, address,
-              monitoring_username, monitoring_password, secret_key, documents_json
-         FROM client_profiles
-        WHERE owner_key = ?
-          AND TRIM(COALESCE(external_client_id, '')) REGEXP '^[0-9]+$'`,
-      [OWNER_KEY],
-    );
-    const [apiRows] = await api.query(
-      `SELECT c.id, c.first_name, c.last_name, c.email, c.phone, c.ssn, c.currentAddress, c.address, c.addresses,
-              c.secret_question_name, c.dl_id, c.ssn_id, c.poa_id, c.poa2_id, c.poa3_id, c.cover_sheet,
-              r.username AS report_username, r.password AS report_password
-         FROM Clients c
-         LEFT JOIN (
-           SELECT r1.*
-             FROM Reports r1
-             INNER JOIN (
-               SELECT ClientId, MAX(updatedAt) AS max_updated
-                 FROM Reports
-                GROUP BY ClientId
-             ) latest
-               ON latest.ClientId = r1.ClientId
-              AND latest.max_updated = r1.updatedAt
-         ) r
-           ON r.ClientId = c.id`,
-    );
+    const [toolsRows] = await tools.query(`
+      SELECT
+        client_id, first_name, last_name, email, phone, ssn, address,
+        monitoring_username, monitoring_password, secret_key, documents_json
+      FROM client_profiles
+      WHERE owner_key = ?
+    `, [OWNER_KEY]);
+
+    const [apiRows] = await api.query(`
+      SELECT
+        c.id, c.first_name, c.last_name, c.email, c.phone, c.ssn,
+        c.currentAddress, c.address, c.addresses,
+        c.secret_question_name,
+        c.dl_id, c.ssn_id, c.poa_id, c.poa2_id, c.poa3_id, c.cover_sheet,
+        r.username AS report_username, r.password AS report_password
+      FROM Clients c
+      LEFT JOIN (
+        SELECT r1.*
+        FROM Reports r1
+        INNER JOIN (
+          SELECT ClientId, MAX(updatedAt) AS max_updated
+          FROM Reports
+          GROUP BY ClientId
+        ) latest
+          ON latest.ClientId = r1.ClientId
+         AND latest.max_updated = r1.updatedAt
+      ) r ON r.ClientId = c.id
+    `);
 
     const apiById = new Map(apiRows.map((row) => [text(row.id), row]));
+    const apiBySsn = mapMulti(apiRows, (row) => digits(row.ssn).slice(0, 9));
+    const toolsBySsn = mapMulti(toolsRows, (row) => digits(row.ssn).slice(0, 9));
+    const apiByEmail = mapMulti(apiRows, (row) => lower(row.email));
+    const toolsByEmail = mapMulti(toolsRows, (row) => lower(row.email));
+    const apiByName = mapMulti(apiRows, (row) => nameKey(row.first_name, row.last_name));
+    const toolsByName = mapMulti(toolsRows, (row) => nameKey(row.first_name, row.last_name));
+
     const results = {
-      linked_rows_checked: 0,
-      missing_api_match: 0,
+      verifier_version: VERIFY_VERSION,
+      owner_key: OWNER_KEY,
+      totals: {
+        tools_rows: toolsRows.length,
+        api_rows: apiRows.length,
+        matched_tools_rows: 0,
+        unmatched_tools_rows: 0,
+        unmatched_api_rows: 0,
+      },
+      match_reasons: {
+        by_numeric_client_id: 0,
+        by_unique_ssn: 0,
+        by_unique_email: 0,
+        by_unique_name: 0,
+        unmatched: 0,
+      },
       profile: {
         first_name_mismatch: 0,
         last_name_mismatch: 0,
@@ -123,175 +190,255 @@ const main = async () => {
         phone_mismatch: 0,
         phone_format_only_mismatch: 0,
         ssn_mismatch: 0,
-        ssn_blank_tools_api_present: 0,
         ssn_format_only_mismatch: 0,
       },
       credentials: {
         username_mismatch: 0,
         password_mismatch: 0,
         secret_mismatch: 0,
-        username_tools_blank_api_present: 0,
-        password_tools_blank_api_present: 0,
-        secret_tools_blank_api_present: 0,
+        username_blank_in_tools_but_present_in_api: 0,
+        password_blank_in_tools_but_present_in_api: 0,
+        secret_blank_in_tools_but_present_in_api: 0,
       },
       address: {
-        exact_normalized_match: 0,
+        exact_match: 0,
         mismatch: 0,
-        tools_blank_api_present: 0,
-        api_blank_tools_present: 0,
+        blank_in_tools_but_present_in_api: 0,
+        blank_in_api_but_present_in_tools: 0,
       },
       documents: {
-        rows_with_doc_mismatch: 0,
-        mismatches_by_type: Object.fromEntries(FIXED_DOC_TYPES.map(([label]) => [label, 0])),
-        tools_blank_api_present_by_type: Object.fromEntries(FIXED_DOC_TYPES.map(([label]) => [label, 0])),
+        rows_with_any_doc_mismatch: 0,
+        mismatches_by_type: Object.fromEntries(DOC_FIELDS.map(([label]) => [label, 0])),
+        blank_in_tools_but_present_in_api_by_type: Object.fromEntries(DOC_FIELDS.map(([label]) => [label, 0])),
       },
       samples: {
+        unmatched_tools: [],
+        unmatched_api: [],
         profile: [],
-        credential: [],
+        credentials: [],
         address: [],
-        document: [],
+        documents: [],
       },
+      targeted_checks: [],
     };
 
-    for (const toolRow of toolRows) {
-      results.linked_rows_checked += 1;
-      const apiRow = apiById.get(text(toolRow.external_client_id));
+    const matchedApiIds = new Set();
+    const toolMatches = new Map();
+
+    for (const toolRow of toolsRows) {
+      const clientId = text(toolRow.client_id);
+      const ssn9 = digits(toolRow.ssn).slice(0, 9);
+      const email = lower(toolRow.email);
+      const nKey = nameKey(toolRow.first_name, toolRow.last_name);
+
+      let apiRow = null;
+      let reason = 'unmatched';
+
+      if (isNumericId(clientId) && apiById.has(clientId)) {
+        apiRow = apiById.get(clientId);
+        reason = 'by_numeric_client_id';
+      } else if (ssn9 && (apiBySsn.get(ssn9)?.length || 0) === 1 && (toolsBySsn.get(ssn9)?.length || 0) === 1) {
+        apiRow = apiBySsn.get(ssn9)[0];
+        reason = 'by_unique_ssn';
+      } else if (email && (apiByEmail.get(email)?.length || 0) === 1 && (toolsByEmail.get(email)?.length || 0) === 1) {
+        apiRow = apiByEmail.get(email)[0];
+        reason = 'by_unique_email';
+      } else if (nKey && (apiByName.get(nKey)?.length || 0) === 1 && (toolsByName.get(nKey)?.length || 0) === 1) {
+        apiRow = apiByName.get(nKey)[0];
+        reason = 'by_unique_name';
+      }
+
       if (!apiRow) {
-        results.missing_api_match += 1;
+        results.totals.unmatched_tools_rows += 1;
+        inc(results.match_reasons, 'unmatched');
+        pushSample(results.samples.unmatched_tools, {
+          client_id: clientId,
+          name: fullName(toolRow.first_name, toolRow.last_name),
+          email: text(toolRow.email),
+          phone: text(toolRow.phone),
+          ssn: text(toolRow.ssn),
+        });
         continue;
       }
 
-      const apiUsername = text(apiRow.report_username);
-      const apiPassword = text(apiRow.report_password);
-      const apiSecret = text(apiRow.secret_question_name);
-      const apiFirstName = text(apiRow.first_name);
-      const apiLastName = text(apiRow.last_name);
-      const apiEmail = text(apiRow.email);
-      const apiPhone = text(apiRow.phone);
-      const apiSsn = text(apiRow.ssn);
-      const toolFirstName = text(toolRow.first_name);
-      const toolLastName = text(toolRow.last_name);
+      results.totals.matched_tools_rows += 1;
+      inc(results.match_reasons, reason);
+      matchedApiIds.add(text(apiRow.id));
+      toolMatches.set(clientId, { api_id: text(apiRow.id), reason });
+
+      const toolFirst = text(toolRow.first_name);
+      const toolLast = text(toolRow.last_name);
       const toolEmail = text(toolRow.email);
       const toolPhone = text(toolRow.phone);
       const toolSsn = text(toolRow.ssn);
-      const toolUsername = text(toolRow.monitoring_username);
-      const toolPassword = text(toolRow.monitoring_password);
+      const toolUser = text(toolRow.monitoring_username);
+      const toolPass = text(toolRow.monitoring_password);
       const toolSecret = text(toolRow.secret_key);
 
-      if (toolFirstName !== apiFirstName) results.profile.first_name_mismatch += 1;
-      if (toolLastName !== apiLastName) results.profile.last_name_mismatch += 1;
-      if (toolEmail !== apiEmail) results.profile.email_mismatch += 1;
-      if (toolPhone !== apiPhone) results.profile.phone_mismatch += 1;
-      if (toolSsn !== apiSsn) results.profile.ssn_mismatch += 1;
-      if (toolPhone !== apiPhone && digits(toolPhone) && digits(toolPhone) === digits(apiPhone)) {
-        results.profile.phone_format_only_mismatch += 1;
+      const apiFirst = text(apiRow.first_name);
+      const apiLast = text(apiRow.last_name);
+      const apiEmailValue = text(apiRow.email);
+      const apiPhone = text(apiRow.phone);
+      const apiSsn = text(apiRow.ssn);
+      const apiUser = text(apiRow.report_username);
+      const apiPass = text(apiRow.report_password);
+      const apiSecret = text(apiRow.secret_question_name);
+
+      if (toolFirst !== apiFirst) inc(results.profile, 'first_name_mismatch');
+      if (toolLast !== apiLast) inc(results.profile, 'last_name_mismatch');
+      if (toolEmail !== apiEmailValue) inc(results.profile, 'email_mismatch');
+      if (toolPhone !== apiPhone) {
+        inc(results.profile, 'phone_mismatch');
+        if (digits(toolPhone) && digits(toolPhone) === digits(apiPhone)) inc(results.profile, 'phone_format_only_mismatch');
       }
-      if (!toolSsn && apiSsn) results.profile.ssn_blank_tools_api_present += 1;
-      if (toolSsn !== apiSsn && digits(toolSsn) && digits(toolSsn) === digits(apiSsn)) {
-        results.profile.ssn_format_only_mismatch += 1;
+      if (toolSsn !== apiSsn) {
+        inc(results.profile, 'ssn_mismatch');
+        if (digits(toolSsn) && digits(toolSsn) === digits(apiSsn)) inc(results.profile, 'ssn_format_only_mismatch');
       }
 
       if (
-        results.samples.profile.length < 5
-        && (
-          toolFirstName !== apiFirstName
-          || toolLastName !== apiLastName
-          || toolEmail !== apiEmail
-          || toolPhone !== apiPhone
-          || toolSsn !== apiSsn
-        )
+        toolFirst !== apiFirst
+        || toolLast !== apiLast
+        || toolEmail !== apiEmailValue
+        || toolPhone !== apiPhone
+        || toolSsn !== apiSsn
       ) {
-        results.samples.profile.push({
-          client_id: toolRow.client_id,
-          external_client_id: toolRow.external_client_id,
-          name: `${toolFirstName} ${toolLastName}`.trim(),
-          tools: {
-            first_name: toolFirstName,
-            last_name: toolLastName,
-            email: toolEmail,
-            phone: toolPhone,
-            ssn: toolSsn,
-          },
-          api: {
-            first_name: apiFirstName,
-            last_name: apiLastName,
-            email: apiEmail,
-            phone: apiPhone,
-            ssn: apiSsn,
-          },
+        pushSample(results.samples.profile, {
+          client_id: clientId,
+          api_id: text(apiRow.id),
+          reason,
+          name: fullName(toolRow.first_name, toolRow.last_name),
+          tools: { first_name: toolFirst, last_name: toolLast, email: toolEmail, phone: toolPhone, ssn: toolSsn },
+          api: { first_name: apiFirst, last_name: apiLast, email: apiEmailValue, phone: apiPhone, ssn: apiSsn },
         });
       }
 
-      if (apiUsername && !toolUsername) results.credentials.username_tools_blank_api_present += 1;
-      if (apiPassword && !toolPassword) results.credentials.password_tools_blank_api_present += 1;
-      if (apiSecret && !toolSecret) results.credentials.secret_tools_blank_api_present += 1;
-      if (toolUsername !== apiUsername) results.credentials.username_mismatch += 1;
-      if (toolPassword !== apiPassword) results.credentials.password_mismatch += 1;
-      if (toolSecret !== apiSecret) results.credentials.secret_mismatch += 1;
+      if (isNonEmpty(apiUser) && !isNonEmpty(toolUser)) inc(results.credentials, 'username_blank_in_tools_but_present_in_api');
+      if (isNonEmpty(apiPass) && !isNonEmpty(toolPass)) inc(results.credentials, 'password_blank_in_tools_but_present_in_api');
+      if (isNonEmpty(apiSecret) && !isNonEmpty(toolSecret)) inc(results.credentials, 'secret_blank_in_tools_but_present_in_api');
+      if (toolUser !== apiUser) inc(results.credentials, 'username_mismatch');
+      if (toolPass !== apiPass) inc(results.credentials, 'password_mismatch');
+      if (toolSecret !== apiSecret) inc(results.credentials, 'secret_mismatch');
 
-      if (
-        results.samples.credential.length < 5
-        && (toolUsername !== apiUsername || toolPassword !== apiPassword || toolSecret !== apiSecret)
-      ) {
-        results.samples.credential.push({
-          client_id: toolRow.client_id,
-          external_client_id: toolRow.external_client_id,
-          name: `${text(toolRow.first_name)} ${text(toolRow.last_name)}`.trim(),
-          tools: { username: toolUsername, password: toolPassword, secret: toolSecret },
-          api: { username: apiUsername, password: apiPassword, secret: apiSecret },
+      if (toolUser !== apiUser || toolPass !== apiPass || toolSecret !== apiSecret) {
+        pushSample(results.samples.credentials, {
+          client_id: clientId,
+          api_id: text(apiRow.id),
+          reason,
+          name: fullName(toolRow.first_name, toolRow.last_name),
+          tools: { username: toolUser, password: toolPass, secret: toolSecret },
+          api: { username: apiUser, password: apiPass, secret: apiSecret },
         });
       }
 
-      const desiredToolsAddress = apiAddressPairToTools(apiRow.currentAddress, apiRow.address, apiRow.addresses);
-      const currentToolsAddress = toToolsAddress(...splitToolsAddressParts(toolRow.address));
-      if (desiredToolsAddress && !currentToolsAddress) results.address.tools_blank_api_present += 1;
-      if (!desiredToolsAddress && currentToolsAddress) results.address.api_blank_tools_present += 1;
-      if (desiredToolsAddress === currentToolsAddress) {
-        results.address.exact_normalized_match += 1;
+      const toolsAddress = normalizeTwoLineAddress(toolRow.address);
+      const apiAddress = apiAddressToTwoLine(apiRow);
+      if (apiAddress && !toolsAddress) inc(results.address, 'blank_in_tools_but_present_in_api');
+      if (!apiAddress && toolsAddress) inc(results.address, 'blank_in_api_but_present_in_tools');
+      if (toolsAddress === apiAddress) {
+        inc(results.address, 'exact_match');
       } else {
-        results.address.mismatch += 1;
-        if (results.samples.address.length < 5) {
-          results.samples.address.push({
-            client_id: toolRow.client_id,
-            external_client_id: toolRow.external_client_id,
-            name: `${text(toolRow.first_name)} ${text(toolRow.last_name)}`.trim(),
-            tools_address: currentToolsAddress,
-            api_normalized_address: desiredToolsAddress,
-            api_currentAddress: text(apiRow.currentAddress),
-            api_address: text(apiRow.address),
-            api_addresses: text(apiRow.addresses),
+        inc(results.address, 'mismatch');
+        pushSample(results.samples.address, {
+          client_id: clientId,
+          api_id: text(apiRow.id),
+          reason,
+          name: fullName(toolRow.first_name, toolRow.last_name),
+          tools_address: toolsAddress,
+          api_address: apiAddress,
+        });
+      }
+
+      const docs = parseToolsDocuments(toolRow.documents_json);
+      let rowHasDocMismatch = false;
+      for (const [docType, apiField] of DOC_FIELDS) {
+        const toolsDoc = extractDocFromTools(docs, docType);
+        const apiDoc = normalizeDocValue(apiRow[apiField]);
+        if (apiDoc && !toolsDoc) inc(results.documents.blank_in_tools_but_present_in_api_by_type, docType);
+        if (toolsDoc !== apiDoc) {
+          inc(results.documents.mismatches_by_type, docType);
+          rowHasDocMismatch = true;
+          pushSample(results.samples.documents, {
+            client_id: clientId,
+            api_id: text(apiRow.id),
+            reason,
+            name: fullName(toolRow.first_name, toolRow.last_name),
+            type: docType,
+            tools_document: toolsDoc,
+            api_document: apiDoc,
           });
         }
       }
+      if (rowHasDocMismatch) inc(results.documents, 'rows_with_any_doc_mismatch');
+    }
 
-      let documents = [];
-      try {
-        documents = JSON.parse(String(toolRow.documents_json || '[]'));
-      } catch {
-        documents = [];
+    for (const apiRow of apiRows) {
+      if (!matchedApiIds.has(text(apiRow.id))) {
+        results.totals.unmatched_api_rows += 1;
+        pushSample(results.samples.unmatched_api, {
+          api_id: text(apiRow.id),
+          name: fullName(apiRow.first_name, apiRow.last_name),
+          email: text(apiRow.email),
+          phone: text(apiRow.phone),
+          ssn: text(apiRow.ssn),
+        });
+      }
+    }
+
+    for (const target of VERIFY_TARGETS) {
+      const targetKey = lower(target).replace(/\s+/g, ' ');
+      const toolsCandidates = toolsRows.filter((row) => lower(fullName(row.first_name, row.last_name)) === targetKey);
+      const apiCandidates = apiRows.filter((row) => lower(fullName(row.first_name, row.last_name)) === targetKey);
+
+      const entry = {
+        target,
+        tools_count: toolsCandidates.length,
+        api_count: apiCandidates.length,
+        status: 'PASS',
+        details: [],
+      };
+
+      if (toolsCandidates.length === 0) {
+        entry.status = 'FAIL';
+        entry.details.push('missing_in_tools');
+      }
+      if (apiCandidates.length === 0) {
+        entry.status = 'FAIL';
+        entry.details.push('missing_in_api');
+      }
+      if (toolsCandidates.length > 1) {
+        entry.status = 'FAIL';
+        entry.details.push('multiple_rows_in_tools');
+      }
+      if (apiCandidates.length > 1) {
+        entry.status = 'FAIL';
+        entry.details.push('multiple_rows_in_api');
       }
 
-      let rowHasDocMismatch = false;
-      for (const [label, apiField] of FIXED_DOC_TYPES) {
-        const toolDoc = extractDocValue(documents, label);
-        const apiDoc = text(apiRow[apiField]);
-        if (apiDoc && !toolDoc) results.documents.tools_blank_api_present_by_type[label] += 1;
-        if (toolDoc !== apiDoc) {
-          results.documents.mismatches_by_type[label] += 1;
-          rowHasDocMismatch = true;
-          if (results.samples.document.length < 5) {
-            results.samples.document.push({
-              client_id: toolRow.client_id,
-              external_client_id: toolRow.external_client_id,
-              name: `${text(toolRow.first_name)} ${text(toolRow.last_name)}`.trim(),
-              type: label,
-              tools_document: toolDoc,
-              api_document: apiDoc,
-            });
-          }
+      if (toolsCandidates.length === 1 && apiCandidates.length === 1) {
+        const toolRow = toolsCandidates[0];
+        const apiRow = apiCandidates[0];
+        const matchInfo = toolMatches.get(text(toolRow.client_id));
+        if (!matchInfo || text(matchInfo.api_id) !== text(apiRow.id)) {
+          entry.status = 'FAIL';
+          entry.details.push('not_matched_to_same_record');
+        } else {
+          entry.details.push(`matched_by_${matchInfo.reason}`);
+        }
+
+        const addressMatch = normalizeTwoLineAddress(toolRow.address) === apiAddressToTwoLine(apiRow);
+        const ssnMatch = digits(toolRow.ssn) === digits(apiRow.ssn);
+        if (!addressMatch) {
+          entry.status = 'FAIL';
+          entry.details.push('address_mismatch');
+        }
+        if (!ssnMatch) {
+          entry.status = 'FAIL';
+          entry.details.push('ssn_mismatch');
         }
       }
-      if (rowHasDocMismatch) results.documents.rows_with_doc_mismatch += 1;
+
+      results.targeted_checks.push(entry);
     }
 
     console.log(JSON.stringify(results, null, 2));
@@ -305,3 +452,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
