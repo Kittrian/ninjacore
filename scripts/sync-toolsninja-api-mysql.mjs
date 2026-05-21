@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import mysql from 'mysql2/promise';
 import 'dotenv/config';
 
+const BRIDGE_VERSION = 'v2.0.0';
 const OWNER_KEY = (process.env.NINJA_SYNC_OWNER_KEY || 'admin').trim() || 'admin';
 const API_DEFAULT_USER_ID = Number.parseInt(process.env.API_DEFAULT_USER_ID || '1', 10) || 1;
 const SYNC_INTERVAL_MS = Math.max(5000, Number.parseInt(process.env.NINJA_SYNC_INTERVAL_MS || '5000', 10) || 5000);
@@ -36,204 +37,272 @@ if (!toolsCfg.password || !apiCfg.password) {
   process.exit(1);
 }
 
-const FIXED_DOC_TYPES = [
-  'ID Document',
-  'SSN Document',
-  'POA Document',
-  'POA2 Document',
-  'POA3 Document',
-  'Limited Power of Attorney',
+const DOC_FIELD_PAIRS = [
+  ['ID Document', 'dl_id'],
+  ['SSN Document', 'ssn_id'],
+  ['POA Document', 'poa_id'],
+  ['POA2 Document', 'poa2_id'],
+  ['POA3 Document', 'poa3_id'],
+  ['Limited Power of Attorney', 'cover_sheet'],
 ];
 
-const normalizeDigits = (value) => String(value || '').replace(/\D/g, '');
-const normalizeSsn = (value) => {
-  const digits = normalizeDigits(value);
-  if (digits.length < 9) return String(value || '').trim();
-  const nine = digits.slice(0, 9);
-  return `${nine.slice(0, 3)}-${nine.slice(3, 5)}-${nine.slice(5)}`;
+const text = (value) => String(value ?? '').trim();
+const fit = (value, max) => {
+  const normalized = text(value);
+  if (!max || normalized.length <= max) return normalized;
+  return normalized.slice(0, max);
 };
-const ssnLast4 = (value) => {
-  const digits = normalizeDigits(value);
-  return digits.length >= 4 ? digits.slice(-4) : '';
-};
-const dobMySqlToUi = (value) => {
-  const raw = String(value || '').trim();
-  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!match) return raw;
-  return `${match[2]}-${match[3]}-${match[1]}`;
-};
-const dobUiToMySql = (value) => {
-  const raw = String(value || '').trim();
-  if (!raw) return null;
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const ui = raw.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
-  if (ui) return `${ui[3]}-${ui[1]}-${ui[2]}`;
-  return raw;
-};
+const digits = (value) => String(value || '').replace(/\D/g, '');
+const isNumericId = (value) => /^\d+$/.test(text(value));
+const same = (a, b) => text(a) === text(b);
+const nameKey = (first, last) => `${text(first).toLowerCase()}|${text(last).toLowerCase()}`;
 const parseMs = (value) => {
   if (!value) return 0;
   const ms = Date.parse(String(value));
   return Number.isFinite(ms) ? ms : 0;
 };
-const msToMysqlDateTime = (ms) => {
-  const d = new Date(ms || Date.now());
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
-};
-const msToIso = (ms) => new Date(ms || Date.now()).toISOString();
-const safeText = (v) => String(v ?? '').trim();
-const fit = (v, max) => {
-  const s = safeText(v);
-  if (!max || s.length <= max) return s;
-  return s.slice(0, max);
-};
-const safeNameKey = (first, last) => `${safeText(first).toLowerCase()}|${safeText(last).toLowerCase()}`;
-const same = (a, b) => safeText(a) === safeText(b);
-const selectBestValue = (...values) => {
-  for (const value of values) {
-    const text = safeText(value);
-    if (text) return text;
-  }
-  return '';
-};
-const normalizeAddressLine = (value) => safeText(value).replace(/\s+/g, ' ').trim();
-const splitApiAddressLines = (value) => String(value || '')
-  .replace(/\r/g, '\n')
-  .replace(/\t/g, ' ')
-  .split('\n')
-  .map((line) => normalizeAddressLine(line))
-  .filter(Boolean);
-const splitToolsAddressParts = (value) => {
-  const raw = safeText(value);
-  if (!raw) return [];
-  if (raw.includes('|')) {
-    return raw.split('|').map((part) => normalizeAddressLine(part)).filter(Boolean);
-  }
-  const lines = splitApiAddressLines(raw);
-  if (lines.length > 0) return lines.slice(0, 2);
-  return [normalizeAddressLine(raw)].filter(Boolean);
-};
-const toToolsAddress = (line1, line2 = '') => {
-  const first = normalizeAddressLine(line1);
-  const second = normalizeAddressLine(line2);
-  if (first && second) return `${first} | ${second}`;
-  return first || second || '';
-};
-const apiAddressPairToTools = (currentAddress, address, addresses) => {
-  const currentLines = splitApiAddressLines(currentAddress);
-  if (currentLines.length >= 2) return toToolsAddress(currentLines[0], currentLines[1]);
-  if (currentLines.length === 1) return toToolsAddress(currentLines[0], '');
-
-  const addressLines = splitApiAddressLines(address);
-  if (addressLines.length >= 2) return toToolsAddress(addressLines[0], addressLines[1]);
-  if (addressLines.length === 1) return toToolsAddress(addressLines[0], '');
-
-  const groupedLines = splitApiAddressLines(addresses);
-  if (groupedLines.length >= 2) return toToolsAddress(groupedLines[0], groupedLines[1]);
-  if (groupedLines.length === 1) return toToolsAddress(groupedLines[0], '');
-
-  return '';
-};
-const toolsAddressToApiMultiLine = (toolsAddress) => {
-  const parts = splitToolsAddressParts(toolsAddress);
-  if (parts.length >= 2) return `${parts[0]}\n${parts[1]}`;
-  if (parts.length === 1) return parts[0];
-  return '';
-};
-const normalizeAddressCompare = (value) => {
-  const normalized = apiAddressPairToTools(value, value, value);
-  return safeText(normalized).toLowerCase();
+const toIso = (ms = Date.now()) => new Date(ms).toISOString();
+const toApiDateTime = (ms = Date.now()) => {
+  const date = new Date(ms);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
 };
 
-const reportTypeFromAgency = (agency) => {
-  const v = String(agency || '').trim().toLowerCase();
-  if (v.includes('identity')) return 'identity';
-  if (v.includes('myfree') || v.includes('freescorenow')) return 'myfreescorenow';
-  if (v.includes('smart')) return 'smartcreadit';
-  return 'identity';
-};
-const agencyFromReportType = (reportType) => {
-  const v = String(reportType || '').trim().toLowerCase();
-  if (v === 'identity') return 'IdentityIQ';
-  if (v === 'myfreescorenow') return 'MyFreeScoreNow';
-  if (v === 'smartcreadit') return 'SmartCredit';
-  return '';
+const normalizeSsn = (value) => {
+  const onlyDigits = digits(value);
+  if (onlyDigits.length < 9) return text(value);
+  const ssn = onlyDigits.slice(0, 9);
+  return `${ssn.slice(0, 3)}-${ssn.slice(3, 5)}-${ssn.slice(5)}`;
 };
 
-const extractDocByType = (documents, type) => {
-  if (!Array.isArray(documents)) return '';
-  const found = documents.find((doc) => String(doc?.type || '').trim() === type);
-  if (!found) return '';
-  return safeText(found.storageKey || found.fileDataUrl || found.fileName || '');
+const normalizeDobForApi = (value, fallback = '1900-01-01') => {
+  const raw = text(value);
+  if (!raw) return fallback;
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+  const mdy = raw.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
+  if (mdy) return `${mdy[3]}-${mdy[1]}-${mdy[2]}`;
+  const parsedMs = Date.parse(raw);
+  if (!Number.isFinite(parsedMs)) return fallback;
+  const d = new Date(parsedMs);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 };
 
-const buildDocsFromApi = (apiClientRow, existingDocs) => {
-  const keep = Array.isArray(existingDocs)
-    ? existingDocs.filter((doc) => !FIXED_DOC_TYPES.includes(String(doc?.type || '').trim()))
-    : [];
-  const fixed = [
-    { type: 'ID Document', value: apiClientRow.dl_id },
-    { type: 'SSN Document', value: apiClientRow.ssn_id },
-    { type: 'POA Document', value: apiClientRow.poa_id },
-    { type: 'POA2 Document', value: apiClientRow.poa2_id },
-    { type: 'POA3 Document', value: apiClientRow.poa3_id },
-    { type: 'Limited Power of Attorney', value: apiClientRow.cover_sheet },
-  ].map((entry) => {
-    const payload = safeText(entry.value);
-    const parts = payload.split('/');
+const ssnLast4 = (value) => {
+  const onlyDigits = digits(value);
+  return onlyDigits.length >= 4 ? onlyDigits.slice(-4) : '';
+};
+
+const normalizeAddressLine = (value) => text(value).replace(/\s+/g, ' ').trim();
+
+const parseLocality = (line) => {
+  const normalized = normalizeAddressLine(line).replace(/,\s*(United States(?: of America)?|USA)\s*$/i, '');
+  if (!normalized) return { city: '', state: '', zip: '' };
+  const withZip = normalized.match(/^(.*?)[,\s]+([A-Za-z]{2}|[A-Za-z][A-Za-z .'-]+)\s+(\d{5}(?:-\d{4})?)$/);
+  if (withZip) {
     return {
-      id: `sync-${entry.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-      type: entry.type,
-      includeInPrintLetters: entry.type === 'Limited Power of Attorney',
+      city: text(withZip[1]).replace(/,$/, ''),
+      state: text(withZip[2]),
+      zip: text(withZip[3]),
+    };
+  }
+  const stateOnly = normalized.match(/^(.*?)[,\s]+([A-Za-z]{2}|[A-Za-z][A-Za-z .'-]+)$/);
+  if (stateOnly) {
+    return {
+      city: text(stateOnly[1]).replace(/,$/, ''),
+      state: text(stateOnly[2]),
+      zip: '',
+    };
+  }
+  return { city: normalized.replace(/,$/, ''), state: '', zip: '' };
+};
+
+const normalizeTwoLineAddress = (rawValue) => {
+  const raw = String(rawValue || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\|/g, '\n')
+    .replace(/\t/g, ' ')
+    .trim();
+  if (!raw) return '';
+
+  const lines = raw
+    .split('\n')
+    .map((line) => normalizeAddressLine(line))
+    .filter(Boolean);
+
+  if (lines.length >= 2) {
+    const street = lines[0].replace(/,$/, '');
+    const locality = parseLocality(lines.slice(1).join(' '));
+    const second = [locality.city && locality.state ? `${locality.city}, ${locality.state}` : (locality.city || locality.state), locality.zip]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return second ? `${street}\n${second}` : street;
+  }
+
+  const one = lines[0] || normalizeAddressLine(raw);
+  const commaMatch = one.match(/^(.*?),\s*([^,]+),\s*([A-Za-z]{2}|[A-Za-z][A-Za-z .'-]+)\s+(\d{5}(?:-\d{4})?)$/);
+  if (commaMatch) {
+    const street = text(commaMatch[1]).replace(/,$/, '');
+    const city = text(commaMatch[2]).replace(/,$/, '');
+    const state = text(commaMatch[3]);
+    const zip = text(commaMatch[4]);
+    return `${street}\n${city}, ${state} ${zip}`.trim();
+  }
+
+  return one;
+};
+
+const apiAddressToTwoLine = (apiRow) => {
+  const candidates = [apiRow.currentAddress, apiRow.address, apiRow.addresses];
+  for (const value of candidates) {
+    const normalized = normalizeTwoLineAddress(value);
+    if (normalized) return normalized;
+  }
+  return '';
+};
+
+const extractDocValue = (documents, type) => {
+  if (!Array.isArray(documents)) return '';
+  const found = documents.find((doc) => text(doc?.type) === type);
+  return text(found?.storageKey || found?.fileDataUrl || found?.fileName || '');
+};
+
+const mergeDocsFromApi = (apiRow, existingDocs) => {
+  const keep = Array.isArray(existingDocs)
+    ? existingDocs.filter((doc) => !DOC_FIELD_PAIRS.some(([docType]) => docType === text(doc?.type)))
+    : [];
+  const fixed = DOC_FIELD_PAIRS.map(([docType, apiField]) => {
+    const storageValue = text(apiRow[apiField]);
+    return {
+      id: `sync-${docType.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      type: docType,
+      includeInPrintLetters: docType === 'Limited Power of Attorney',
       printSide: 'front',
-      fileName: payload ? parts[parts.length - 1] : '',
-      fileDataUrl: payload,
-      storageKey: payload,
+      fileName: storageValue ? storageValue.split('/').pop() : '',
+      fileDataUrl: storageValue,
+      storageKey: storageValue,
     };
   });
-
   return [...fixed, ...keep];
 };
 
-const assertLegacyBridgeSchema = async (toolsPool) => {
-  const [columns] = await toolsPool.query(`
-    SELECT COLUMN_NAME
-    FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = ?
-      AND TABLE_NAME = 'client_profiles'
-  `, [toolsCfg.database]);
-  const columnSet = new Set((columns || []).map((row) => safeText(row.COLUMN_NAME)));
-  if (!columnSet.has('external_client_id')) {
-    throw new Error(
-      'Legacy tools-api-bridge is incompatible with the current TOOLSNINJA schema: client_profiles.external_client_id is missing. Rewrite the bridge for the OLD-grandfather merge model before restarting it.',
+const toReportType = (agency) => {
+  const normalized = text(agency).toLowerCase();
+  if (normalized.includes('identity')) return 'identity';
+  if (normalized.includes('myfree') || normalized.includes('freescorenow')) return 'myfreescorenow';
+  if (normalized.includes('smart')) return 'smartcreadit';
+  return 'identity';
+};
+
+const toAgency = (reportType) => {
+  const normalized = text(reportType).toLowerCase();
+  if (normalized === 'identity') return 'IdentityIQ';
+  if (normalized === 'myfreescorenow') return 'MyFreeScoreNow';
+  if (normalized === 'smartcreadit') return 'SmartCredit';
+  return '';
+};
+
+const parseDocsJson = (rawJson) => {
+  try {
+    const parsed = JSON.parse(String(rawJson || '[]'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const countBy = (rows, keyFn) => {
+  const counts = new Map();
+  for (const row of rows) {
+    const key = keyFn(row);
+    if (!key) continue;
+    counts.set(key, Number(counts.get(key) || 0) + 1);
+  }
+  return counts;
+};
+
+const upsertLatestReport = async (apiPool, clientId, payload, stampSql) => {
+  const [latest] = await apiPool.query(
+    'SELECT id FROM Reports WHERE ClientId = ? ORDER BY updatedAt DESC, id DESC LIMIT 1',
+    [clientId],
+  );
+  if (Array.isArray(latest) && latest.length > 0) {
+    await apiPool.query(
+      `UPDATE Reports
+       SET username = ?, password = ?, reportType = ?, updatedAt = ?
+       WHERE id = ?`,
+      [payload.username, payload.password, payload.reportType, stampSql, latest[0].id],
     );
+    return;
+  }
+
+  await apiPool.query(
+    `INSERT INTO Reports
+      (ClientId, username, password, reportType, deletetionsLists, compare, progress, accounts, alternateLetters, newVersion, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 1, ?, ?)`,
+    [clientId, payload.username, payload.password, payload.reportType, stampSql, stampSql],
+  );
+};
+
+const rekeyToolsClientId = async (toolsPool, oldClientId, newClientId) => {
+  if (!oldClientId || !newClientId || oldClientId === newClientId) return false;
+  await toolsPool.query('START TRANSACTION');
+  try {
+    await toolsPool.query(
+      'UPDATE client_profiles SET spouse_client_id = ? WHERE owner_key = ? AND spouse_client_id = ?',
+      [newClientId, OWNER_KEY, oldClientId],
+    );
+    await toolsPool.query(
+      'UPDATE payment_autopay SET client_id = ? WHERE owner_key = ? AND client_id = ?',
+      [newClientId, OWNER_KEY, oldClientId],
+    );
+    await toolsPool.query(
+      'UPDATE report_history SET client_id = ? WHERE client_id = ?',
+      [newClientId, oldClientId],
+    );
+    await toolsPool.query(
+      'UPDATE client_profiles SET client_id = ? WHERE owner_key = ? AND client_id = ?',
+      [newClientId, OWNER_KEY, oldClientId],
+    );
+    await toolsPool.query('COMMIT');
+    return true;
+  } catch (error) {
+    await toolsPool.query('ROLLBACK');
+    throw error;
   }
 };
 
 const run = async () => {
   const toolsPool = mysql.createPool(toolsCfg);
   const apiPool = mysql.createPool(apiCfg);
-  await assertLegacyBridgeSchema(toolsPool);
-  console.log(`[bridge] started owner=${OWNER_KEY} tools=${toolsCfg.host}:${toolsCfg.port}/${toolsCfg.database} api=${apiCfg.host}:${apiCfg.port}/${apiCfg.database} intervalMs=${SYNC_INTERVAL_MS}`);
 
   let running = false;
+  console.log(`[bridge ${BRIDGE_VERSION}] started owner=${OWNER_KEY} tools=${toolsCfg.host}:${toolsCfg.port}/${toolsCfg.database} api=${apiCfg.host}:${apiCfg.port}/${apiCfg.database} intervalMs=${SYNC_INTERVAL_MS}`);
+
   const runPass = async () => {
     if (running) return;
     running = true;
     const started = Date.now();
-    let apiToToolsInsert = 0;
-    let apiToToolsUpdate = 0;
-    let apiToToolsBackfill = 0;
-    let toolsToApiInsert = 0;
-    let toolsToApiUpdate = 0;
-    let toolsToApiBackfill = 0;
+    const counters = {
+      apiToToolsInsert: 0,
+      apiToToolsUpdate: 0,
+      apiToToolsBackfill: 0,
+      toolsToApiInsert: 0,
+      toolsToApiUpdate: 0,
+      toolsToApiBackfill: 0,
+      rekeyed: 0,
+    };
 
     try {
       const [apiRows] = await apiPool.query(`
         SELECT
-          c.id, c.UserId, c.first_name, c.last_name, c.phone, c.email, c.currentAddress, c.address, c.addresses,
-          c.ssn, c.dob, c.secret_question_name, c.employers, c.dl_id, c.ssn_id, c.poa_id, c.poa2_id, c.poa3_id, c.cover_sheet,
+          c.id, c.UserId, c.first_name, c.last_name, c.phone, c.email,
+          c.currentAddress, c.address, c.addresses, c.ssn, c.dob,
+          c.secret_question_name, c.dl_id, c.ssn_id, c.poa_id, c.poa2_id, c.poa3_id, c.cover_sheet,
           c.createdAt, c.updatedAt,
           r.username AS report_username, r.password AS report_password, r.reportType, r.updatedAt AS reportUpdatedAt,
           UNIX_TIMESTAMP(GREATEST(c.updatedAt, IFNULL(r.updatedAt, c.updatedAt))) * 1000 AS sync_ts_ms
@@ -248,184 +317,140 @@ const run = async () => {
           ) latest
             ON latest.ClientId = r1.ClientId
            AND latest.max_updated = r1.updatedAt
-        ) r ON r.ClientId = c.id
+        ) r
+          ON r.ClientId = c.id
         ORDER BY c.id DESC
       `);
 
       const [toolsRows] = await toolsPool.query(`
         SELECT
-          owner_key, client_id, external_client_id, first_name, last_name, email, phone, address, dob, ssn,
-          monitoring_agency, monitoring_username, monitoring_password, secret_key, documents_json, updated_at
+          owner_key, client_id, first_name, last_name, email, phone, address, dob, ssn,
+          status, monitoring_agency, monitoring_username, monitoring_password, secret_key,
+          documents_json, report_date, updated_at
         FROM client_profiles
         WHERE owner_key = ?
         ORDER BY updated_at DESC
       `, [OWNER_KEY]);
 
-      // API is master for canonical numeric IDs on TOOLSNINJA side.
-      // If a profile is linked to an API id via external_client_id, normalize client_id to that value.
-      // Keep this collision-safe and update dependent tables that reference client_id.
+      const toolsById = new Map();
       for (const row of toolsRows) {
-        const currentClientId = safeText(row.client_id);
-        const externalId = safeText(row.external_client_id);
-        if (!externalId || currentClientId === externalId) continue;
-        if (!/^\d+$/.test(externalId)) continue;
-
-        const [targetExists] = await toolsPool.query(
-          'SELECT client_id FROM client_profiles WHERE owner_key = ? AND client_id = ? LIMIT 1',
-          [OWNER_KEY, externalId],
-        );
-        if (Array.isArray(targetExists) && targetExists.length > 0) {
-          // Collision; keep existing row untouched to avoid accidental overwrite.
-          continue;
-        }
-
-        await toolsPool.query('START TRANSACTION');
-        try {
-          await toolsPool.query(
-            'UPDATE client_profiles SET spouse_client_id = ? WHERE owner_key = ? AND spouse_client_id = ?',
-            [externalId, OWNER_KEY, currentClientId],
-          );
-          await toolsPool.query(
-            'UPDATE payment_autopay SET client_id = ? WHERE owner_key = ? AND client_id = ?',
-            [externalId, OWNER_KEY, currentClientId],
-          );
-          await toolsPool.query(
-            'UPDATE report_history SET client_id = ? WHERE client_id = ?',
-            [externalId, currentClientId],
-          );
-          await toolsPool.query(
-            'UPDATE client_profiles SET client_id = ? WHERE owner_key = ? AND client_id = ?',
-            [externalId, OWNER_KEY, currentClientId],
-          );
-          await toolsPool.query('COMMIT');
-          row.client_id = externalId;
-        } catch (txError) {
-          await toolsPool.query('ROLLBACK');
-          throw txError;
-        }
+        if (isNumericId(row.client_id)) toolsById.set(text(row.client_id), row);
       }
+      const apiById = new Map(apiRows.map((row) => [text(row.id), row]));
 
-      const toolsByExternal = new Map();
       const toolsBySsn = new Map();
-      const toolsByName = new Map();
-      const toolsByEmail = new Map();
-      const toolsNameCounts = new Map();
-      const toolsEmailCounts = new Map();
       for (const row of toolsRows) {
-        const ext = safeText(row.external_client_id);
-        if (ext) toolsByExternal.set(ext, row);
-        const ssnDigits = normalizeDigits(row.ssn);
-        if (ssnDigits.length >= 9) toolsBySsn.set(ssnDigits.slice(0, 9), row);
-        const key = safeNameKey(row.first_name, row.last_name);
-        toolsByName.set(key, row);
-        toolsNameCounts.set(key, Number(toolsNameCounts.get(key) || 0) + 1);
-        const emailKey = safeText(row.email).toLowerCase();
-        if (emailKey) {
-          toolsByEmail.set(emailKey, row);
-          toolsEmailCounts.set(emailKey, Number(toolsEmailCounts.get(emailKey) || 0) + 1);
-        }
+        const ssn = digits(row.ssn).slice(0, 9);
+        if (ssn) toolsBySsn.set(ssn, row);
       }
-      const apiNameCounts = new Map();
-      const apiEmailCounts = new Map();
+      const apiBySsn = new Map();
       for (const row of apiRows) {
-        const key = safeNameKey(row.first_name, row.last_name);
-        apiNameCounts.set(key, Number(apiNameCounts.get(key) || 0) + 1);
-        const emailKey = safeText(row.email).toLowerCase();
-        if (emailKey) {
-          apiEmailCounts.set(emailKey, Number(apiEmailCounts.get(emailKey) || 0) + 1);
-        }
+        const ssn = digits(row.ssn).slice(0, 9);
+        if (ssn) apiBySsn.set(ssn, row);
       }
 
+      const toolsByName = new Map(toolsRows.map((row) => [nameKey(row.first_name, row.last_name), row]));
+      const apiByName = new Map(apiRows.map((row) => [nameKey(row.first_name, row.last_name), row]));
+      const toolsByEmail = new Map(toolsRows.map((row) => [text(row.email).toLowerCase(), row]));
+      const apiByEmail = new Map(apiRows.map((row) => [text(row.email).toLowerCase(), row]));
+      const toolsNameCounts = countBy(toolsRows, (row) => nameKey(row.first_name, row.last_name));
+      const apiNameCounts = countBy(apiRows, (row) => nameKey(row.first_name, row.last_name));
+      const toolsEmailCounts = countBy(toolsRows, (row) => text(row.email).toLowerCase());
+      const apiEmailCounts = countBy(apiRows, (row) => text(row.email).toLowerCase());
+
+      // OLD (api) -> NEW (tools): keep grandfather fields canonical unless tools has newer data.
       for (const apiRow of apiRows) {
-        const apiId = String(apiRow.id);
-        const apiSsn9 = normalizeDigits(apiRow.ssn).slice(0, 9);
-        const directExternalMatch = toolsByExternal.get(apiId) || null;
+        const apiId = text(apiRow.id);
+        const apiSsn9 = digits(apiRow.ssn).slice(0, 9);
+        const apiName = nameKey(apiRow.first_name, apiRow.last_name);
+        const apiEmail = text(apiRow.email).toLowerCase();
+
+        const directIdMatch = toolsById.get(apiId) || null;
         const ssnMatch = (apiSsn9 ? toolsBySsn.get(apiSsn9) : null) || null;
-        const nameKey = safeNameKey(apiRow.first_name, apiRow.last_name);
-        const nameMatch = toolsByName.get(nameKey) || null;
-        const emailKey = safeText(apiRow.email).toLowerCase();
-        const emailMatch = (emailKey ? toolsByEmail.get(emailKey) : null) || null;
-        const uniqueEmailFallback =
-          !directExternalMatch
+        const uniqueEmailMatch = (
+          !directIdMatch
           && !ssnMatch
-          && emailKey
-          && Number(toolsEmailCounts.get(emailKey) || 0) === 1
-          && Number(apiEmailCounts.get(emailKey) || 0) === 1;
-        const uniqueNameFallback =
-          !directExternalMatch
+          && apiEmail
+          && Number(toolsEmailCounts.get(apiEmail) || 0) === 1
+          && Number(apiEmailCounts.get(apiEmail) || 0) === 1
+        ) ? (toolsByEmail.get(apiEmail) || null) : null;
+        const uniqueNameMatch = (
+          !directIdMatch
           && !ssnMatch
-          && !uniqueEmailFallback
-          && Number(toolsNameCounts.get(nameKey) || 0) === 1
-          && Number(apiNameCounts.get(nameKey) || 0) === 1;
-        const toolsMatch = directExternalMatch
-          || ssnMatch
-          || (uniqueEmailFallback ? emailMatch : null)
-          || (uniqueNameFallback ? nameMatch : null);
+          && !uniqueEmailMatch
+          && Number(toolsNameCounts.get(apiName) || 0) === 1
+          && Number(apiNameCounts.get(apiName) || 0) === 1
+        ) ? (toolsByName.get(apiName) || null) : null;
+
+        let toolsMatch = directIdMatch || ssnMatch || uniqueEmailMatch || uniqueNameMatch;
         const apiUpdatedMs = Number(apiRow.sync_ts_ms || 0);
 
         if (!toolsMatch) {
-          const newClientId = `client-${randomUUID().slice(0, 8)}`;
-          const reportType = safeText(apiRow.reportType || 'identity');
+          const clientId = apiId;
+          const mergedDocs = mergeDocsFromApi(apiRow, []);
           await toolsPool.query(`
             INSERT INTO client_profiles (
-              owner_key, client_id, external_client_id, first_name, last_name, email, phone, address, dob, ssn, status, phase,
-              monitoring_agency, monitoring_username, monitoring_password, secret_key, monitoring_token, goal, notes,
-              portal_password, portal_enabled, language, next_import_mode, manual_next_import_start_days, manual_next_import_set_date,
-              refresh_next_import_start_date, documents_json, yearly_income, housing_payment, debt_monthly_payments, spouse_client_id,
-              spouse_client_label, assigned_to, ninja_assigned, affiliate_assigned, report_date, next_import_int, next_import_label, pid, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Client', 'None', ?, ?, ?, ?, '', '', '', '', 1, 'English', 'manual', '', '', '', ?, '', '', '', '', '', '', '', 'None', '', '', '', '35540', ?)
+              owner_key, client_id, first_name, last_name, email, phone, address, dob, ssn, status, phase,
+              monitoring_agency, monitoring_username, monitoring_password, secret_key, monitoring_token,
+              goal, notes, portal_password, portal_enabled, language,
+              next_import_mode, manual_next_import_start_days, manual_next_import_set_date, refresh_next_import_start_date,
+              documents_json, yearly_income, housing_payment, debt_monthly_payments,
+              spouse_client_id, spouse_client_label, assigned_to, ninja_assigned, affiliate_assigned,
+              report_date, next_import_int, next_import_label, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Client', 'None', ?, ?, ?, ?, '', '', '', '', 1, 'English', 'manual', '', '', '', ?, '', '', '', '', '', '', '', 'None', '', '', '', ?)
           `, [
             OWNER_KEY,
-            newClientId,
-            apiId,
+            clientId,
             fit(apiRow.first_name, 255),
-              fit(apiRow.last_name, 255),
-              fit(apiRow.email, 191),
-              fit(apiRow.phone, 64),
-              apiAddressPairToTools(apiRow.currentAddress, apiRow.address, apiRow.addresses),
-              dobMySqlToUi(apiRow.dob),
-              normalizeSsn(apiRow.ssn),
-              fit(agencyFromReportType(reportType), 128),
+            fit(apiRow.last_name, 255),
+            fit(apiRow.email, 320),
+            fit(apiRow.phone, 64),
+            apiAddressToTwoLine(apiRow),
+            text(apiRow.dob),
+            normalizeSsn(apiRow.ssn),
+            fit(toAgency(apiRow.reportType), 128),
             fit(apiRow.report_username, 320),
-            safeText(apiRow.report_password),
-            safeText(apiRow.secret_question_name) || ssnLast4(apiRow.ssn),
-            JSON.stringify(buildDocsFromApi(apiRow, [])),
-            msToIso(apiUpdatedMs || Date.now()),
+            text(apiRow.report_password),
+            text(apiRow.secret_question_name) || ssnLast4(apiRow.ssn),
+            JSON.stringify(mergedDocs),
+            toIso(apiUpdatedMs || Date.now()),
           ]);
-          apiToToolsInsert += 1;
+          counters.apiToToolsInsert += 1;
           continue;
         }
 
+        const toolsClientId = text(toolsMatch.client_id);
+        if (apiId !== toolsClientId && isNumericId(apiId)) {
+          const [taken] = await toolsPool.query(
+            'SELECT client_id FROM client_profiles WHERE owner_key = ? AND client_id = ? LIMIT 1',
+            [OWNER_KEY, apiId],
+          );
+          if (!Array.isArray(taken) || taken.length === 0) {
+            const rekeyed = await rekeyToolsClientId(toolsPool, toolsClientId, apiId);
+            if (rekeyed) {
+              counters.rekeyed += 1;
+              toolsMatch.client_id = apiId;
+            }
+          }
+        }
+
         const toolsUpdatedMs = parseMs(toolsMatch.updated_at);
+        const toolsAddress = normalizeTwoLineAddress(toolsMatch.address);
+        const apiAddress = apiAddressToTwoLine(apiRow);
+        const fillMissing = {
+          status: !text(toolsMatch.status),
+          address: !toolsAddress && !!apiAddress,
+          agency: !text(toolsMatch.monitoring_agency) && !!text(apiRow.reportType),
+          username: !text(toolsMatch.monitoring_username) && !!text(apiRow.report_username),
+          password: !text(toolsMatch.monitoring_password) && !!text(apiRow.report_password),
+          secret: !text(toolsMatch.secret_key) && !!(text(apiRow.secret_question_name) || ssnLast4(apiRow.ssn)),
+        };
 
-        const currentToolsExternalId = safeText(toolsMatch.external_client_id);
-        const currentToolsAgency = safeText(toolsMatch.monitoring_agency);
-        const currentToolsUsername = fit(toolsMatch.monitoring_username, 320);
-        const currentToolsPassword = safeText(toolsMatch.monitoring_password);
-        const currentToolsSecret = safeText(toolsMatch.secret_key);
-
-        const apiAgency = fit(agencyFromReportType(apiRow.reportType || 'identity'), 128);
-        const apiUsername = fit(apiRow.report_username, 320);
-        const apiPassword = safeText(apiRow.report_password);
-        const apiSecret = safeText(apiRow.secret_question_name) || ssnLast4(apiRow.ssn);
-
-        const staleExternalId = Boolean(currentToolsExternalId && currentToolsExternalId !== apiId && !directExternalMatch);
-        const fillExternalIdFromApi = (!currentToolsExternalId || staleExternalId) && Boolean(apiId);
-        const fillAgencyFromApi = !currentToolsAgency && Boolean(apiAgency);
-        const fillUsernameFromApi = !currentToolsUsername && Boolean(apiUsername);
-        const fillPasswordFromApi = !currentToolsPassword && Boolean(apiPassword);
-        const fillSecretFromApi = !currentToolsSecret && Boolean(apiSecret);
-
-        // Address rescue: if Tools address is blank but API has address data, fill regardless of timestamp drift.
-        const toolsAddressCurrent = toToolsAddress(...splitToolsAddressParts(toolsMatch.address));
-        const apiAddressCandidate = apiAddressPairToTools(apiRow.currentAddress, apiRow.address, apiRow.addresses);
-        const fillAddressFromApi = !toolsAddressCurrent && Boolean(apiAddressCandidate);
-
-        if (fillExternalIdFromApi || fillAgencyFromApi || fillUsernameFromApi || fillPasswordFromApi || fillSecretFromApi || fillAddressFromApi) {
+        if (fillMissing.status || fillMissing.address || fillMissing.agency || fillMissing.username || fillMissing.password || fillMissing.secret) {
           await toolsPool.query(`
             UPDATE client_profiles
             SET
-              external_client_id = ?,
+              status = ?,
               address = ?,
               monitoring_agency = ?,
               monitoring_username = ?,
@@ -434,292 +459,198 @@ const run = async () => {
               updated_at = ?
             WHERE owner_key = ? AND client_id = ?
           `, [
-            fillExternalIdFromApi ? apiId : currentToolsExternalId,
-            fillAddressFromApi ? apiAddressCandidate : toolsMatch.address,
-            fillAgencyFromApi ? apiAgency : currentToolsAgency,
-            fillUsernameFromApi ? apiUsername : currentToolsUsername,
-            fillPasswordFromApi ? apiPassword : currentToolsPassword,
-            fillSecretFromApi ? apiSecret : currentToolsSecret,
-            msToIso(Math.max(apiUpdatedMs, toolsUpdatedMs, Date.now())),
+            fillMissing.status ? 'Client' : toolsMatch.status,
+            fillMissing.address ? apiAddress : toolsMatch.address,
+            fillMissing.agency ? fit(toAgency(apiRow.reportType), 128) : toolsMatch.monitoring_agency,
+            fillMissing.username ? fit(apiRow.report_username, 320) : toolsMatch.monitoring_username,
+            fillMissing.password ? text(apiRow.report_password) : toolsMatch.monitoring_password,
+            fillMissing.secret ? (text(apiRow.secret_question_name) || ssnLast4(apiRow.ssn)) : toolsMatch.secret_key,
+            toIso(Math.max(apiUpdatedMs, toolsUpdatedMs, Date.now())),
             OWNER_KEY,
-            toolsMatch.client_id,
+            text(toolsMatch.client_id),
           ]);
-
-          if (fillExternalIdFromApi) toolsMatch.external_client_id = apiId;
-          if (fillAgencyFromApi) toolsMatch.monitoring_agency = apiAgency;
-          if (fillUsernameFromApi) toolsMatch.monitoring_username = apiUsername;
-          if (fillPasswordFromApi) toolsMatch.monitoring_password = apiPassword;
-          if (fillSecretFromApi) toolsMatch.secret_key = apiSecret;
-          if (fillAddressFromApi) toolsMatch.address = apiAddressCandidate;
-          apiToToolsBackfill += 1;
+          counters.apiToToolsBackfill += 1;
         }
 
         if (apiUpdatedMs > toolsUpdatedMs + DRIFT_MS) {
-          let existingDocs = [];
-          try {
-            existingDocs = JSON.parse(String(toolsMatch.documents_json || '[]'));
-          } catch {
-            existingDocs = [];
-          }
+          const currentDocs = parseDocsJson(toolsMatch.documents_json);
+          const mergedDocs = mergeDocsFromApi(apiRow, currentDocs);
           await toolsPool.query(`
             UPDATE client_profiles
             SET
-              external_client_id = ?,
-              first_name = ?,
-              last_name = ?,
-              email = ?,
-              phone = ?,
-              address = ?,
-              dob = ?,
-              ssn = ?,
-              monitoring_agency = ?,
-              monitoring_username = ?,
-              monitoring_password = ?,
-              secret_key = ?,
-              documents_json = ?,
-              updated_at = ?
+              first_name = ?, last_name = ?, email = ?, phone = ?, address = ?, dob = ?, ssn = ?,
+              status = ?, monitoring_agency = ?, monitoring_username = ?, monitoring_password = ?, secret_key = ?,
+              documents_json = ?, updated_at = ?
             WHERE owner_key = ? AND client_id = ?
           `, [
-            apiId,
             fit(apiRow.first_name, 255),
-              fit(apiRow.last_name, 255),
-              fit(apiRow.email, 191),
-              fit(apiRow.phone, 64),
-              apiAddressPairToTools(apiRow.currentAddress, apiRow.address, apiRow.addresses),
-              dobMySqlToUi(apiRow.dob),
-              normalizeSsn(apiRow.ssn),
-              fit(agencyFromReportType(apiRow.reportType), 128),
+            fit(apiRow.last_name, 255),
+            fit(apiRow.email, 320),
+            fit(apiRow.phone, 64),
+            apiAddress,
+            text(apiRow.dob),
+            normalizeSsn(apiRow.ssn),
+            text(toolsMatch.status) || 'Client',
+            fit(toAgency(apiRow.reportType), 128),
             fit(apiRow.report_username, 320),
-            safeText(apiRow.report_password),
-            safeText(apiRow.secret_question_name) || ssnLast4(apiRow.ssn),
-            JSON.stringify(buildDocsFromApi(apiRow, existingDocs)),
-            msToIso(apiUpdatedMs),
+            text(apiRow.report_password),
+            text(apiRow.secret_question_name) || ssnLast4(apiRow.ssn),
+            JSON.stringify(mergedDocs),
+            toIso(apiUpdatedMs),
             OWNER_KEY,
-            toolsMatch.client_id,
+            text(toolsMatch.client_id),
           ]);
-          apiToToolsUpdate += 1;
+          counters.apiToToolsUpdate += 1;
         }
       }
 
-      const apiById = new Map(apiRows.map((row) => [String(row.id), row]));
-      const apiBySsn = new Map(apiRows
-        .map((row) => [normalizeDigits(row.ssn).slice(0, 9), row])
-        .filter(([ssn]) => ssn));
-      const apiByName = new Map(apiRows.map((row) => [safeNameKey(row.first_name, row.last_name), row]));
-
+      // NEW (tools) -> OLD (api): create missing records and push newer edits.
       for (const toolsRow of toolsRows) {
-        const ext = safeText(toolsRow.external_client_id);
-        const ssn9 = normalizeDigits(toolsRow.ssn).slice(0, 9);
-        const nameKey = safeNameKey(toolsRow.first_name, toolsRow.last_name);
-        const uniqueApiNameFallback =
-          !ext
-          && !ssn9
-          && Number(toolsNameCounts.get(nameKey) || 0) === 1
-          && Number(apiNameCounts.get(nameKey) || 0) === 1;
-        const apiMatch = (ext && apiById.get(ext))
-          || (ssn9 && apiBySsn.get(ssn9))
-          || (uniqueApiNameFallback ? apiByName.get(nameKey) : null);
-        const toolsUpdatedMs = parseMs(toolsRow.updated_at);
+        const toolsClientId = text(toolsRow.client_id);
+        const toolsSsn9 = digits(toolsRow.ssn).slice(0, 9);
+        const toolsName = nameKey(toolsRow.first_name, toolsRow.last_name);
+        const toolsEmail = text(toolsRow.email).toLowerCase();
 
-        let docArray = [];
-        try {
-          docArray = JSON.parse(String(toolsRow.documents_json || '[]'));
-        } catch {
-          docArray = [];
-        }
+        const directIdMatch = (isNumericId(toolsClientId) ? apiById.get(toolsClientId) : null) || null;
+        const ssnMatch = (toolsSsn9 ? apiBySsn.get(toolsSsn9) : null) || null;
+        const uniqueEmailMatch = (
+          !directIdMatch
+          && !ssnMatch
+          && toolsEmail
+          && Number(toolsEmailCounts.get(toolsEmail) || 0) === 1
+          && Number(apiEmailCounts.get(toolsEmail) || 0) === 1
+        ) ? (apiByEmail.get(toolsEmail) || null) : null;
+        const uniqueNameMatch = (
+          !directIdMatch
+          && !ssnMatch
+          && !uniqueEmailMatch
+          && Number(toolsNameCounts.get(toolsName) || 0) === 1
+          && Number(apiNameCounts.get(toolsName) || 0) === 1
+        ) ? (apiByName.get(toolsName) || null) : null;
+        let apiMatch = directIdMatch || ssnMatch || uniqueEmailMatch || uniqueNameMatch;
+
+        const toolsUpdatedMs = parseMs(toolsRow.updated_at);
+        const stampSql = toApiDateTime(toolsUpdatedMs || Date.now());
+        const docs = parseDocsJson(toolsRow.documents_json);
 
         if (!apiMatch) {
-          const first = safeText(toolsRow.first_name);
-          const last = safeText(toolsRow.last_name);
-          const ssnNorm = normalizeSsn(toolsRow.ssn);
-          const dobSql = dobUiToMySql(toolsRow.dob);
-          if (!first || !last) continue;
+          const firstName = fit(toolsRow.first_name, 255);
+          const lastName = fit(toolsRow.last_name, 255);
+          if (!firstName || !lastName) continue;
 
-          const updatedAtSql = msToMysqlDateTime(toolsUpdatedMs || Date.now());
           let newApiId = 0;
           try {
             const [insertResult] = await apiPool.query(`
               INSERT INTO Clients (
-                UserId, first_name, last_name, phone, email, currentAddress, address, addresses, names, ssn, dob,
-                secret_question_name, employers, dl_id, ssn_id, poa_id, poa2_id, poa3_id, cover_sheet, nextReminder,
-                hasFile, createPdf, createdAt, updatedAt
+                UserId, first_name, last_name, phone, email, currentAddress, address, addresses, names,
+                ssn, dob, secret_question_name, employers,
+                dl_id, ssn_id, poa_id, poa2_id, poa3_id, cover_sheet,
+                nextReminder, hasFile, createPdf, createdAt, updatedAt
               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?)
             `, [
               API_DEFAULT_USER_ID,
-              fit(first, 255),
-              fit(last, 255),
+              firstName,
+              lastName,
               fit(toolsRow.phone, 20),
               fit(toolsRow.email, 50),
-              toolsAddressToApiMultiLine(toolsRow.address),
-              toolsAddressToApiMultiLine(toolsRow.address),
+              normalizeTwoLineAddress(toolsRow.address),
+              normalizeTwoLineAddress(toolsRow.address),
               '[]',
               '[]',
-              ssnNorm || '000-00-0000',
-              dobSql || '1900-01-01',
-              safeText(toolsRow.secret_key) || ssnLast4(ssnNorm),
+              normalizeSsn(toolsRow.ssn) || '000-00-0000',
+              normalizeDobForApi(toolsRow.dob),
+              text(toolsRow.secret_key) || ssnLast4(toolsRow.ssn),
               '[]',
-              extractDocByType(docArray, 'ID Document'),
-              extractDocByType(docArray, 'SSN Document'),
-              extractDocByType(docArray, 'POA Document'),
-              extractDocByType(docArray, 'POA2 Document'),
-              extractDocByType(docArray, 'POA3 Document'),
-              extractDocByType(docArray, 'Limited Power of Attorney'),
-              updatedAtSql,
-              updatedAtSql,
+              extractDocValue(docs, 'ID Document'),
+              extractDocValue(docs, 'SSN Document'),
+              extractDocValue(docs, 'POA Document'),
+              extractDocValue(docs, 'POA2 Document'),
+              extractDocValue(docs, 'POA3 Document'),
+              extractDocValue(docs, 'Limited Power of Attorney'),
+              stampSql,
+              stampSql,
             ]);
             newApiId = Number(insertResult.insertId || 0);
           } catch (error) {
-            if (!String(error?.message || '').includes('Duplicate entry')) throw error;
-            const [existing] = ssnNorm
-              ? await apiPool.query('SELECT id FROM Clients WHERE ssn = ? LIMIT 1', [ssnNorm])
+            const message = String(error?.message || '');
+            if (!message.includes('Duplicate entry')) throw error;
+            const nextSsn = normalizeSsn(toolsRow.ssn);
+            const [existing] = nextSsn
+              ? await apiPool.query('SELECT id FROM Clients WHERE ssn = ? LIMIT 1', [nextSsn])
               : await apiPool.query(
                 'SELECT id FROM Clients WHERE first_name = ? AND last_name = ? AND IFNULL(email,\"\") = IFNULL(?,\"\") LIMIT 1',
-                [fit(first, 255), fit(last, 255), fit(toolsRow.email, 50)],
+                [firstName, lastName, fit(toolsRow.email, 50)],
               );
-            if (existing.length) newApiId = Number(existing[0].id || 0);
+            if (Array.isArray(existing) && existing.length > 0) {
+              newApiId = Number(existing[0].id || 0);
+            }
           }
           if (!newApiId) continue;
-
-          await apiPool.query(`
-            INSERT INTO Reports (ClientId, username, password, reportType, deletetionsLists, compare, progress, accounts, alternateLetters, newVersion, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 1, ?, ?)
-            ON DUPLICATE KEY UPDATE
-              username = VALUES(username),
-              password = VALUES(password),
-              reportType = VALUES(reportType),
-              updatedAt = VALUES(updatedAt)
-          `, [
-            newApiId,
-            fit(toolsRow.monitoring_username, 320),
-            safeText(toolsRow.monitoring_password),
-            reportTypeFromAgency(toolsRow.monitoring_agency),
-            updatedAtSql,
-            updatedAtSql,
-          ]);
+          await upsertLatestReport(apiPool, newApiId, {
+            username: fit(toolsRow.monitoring_username, 320),
+            password: text(toolsRow.monitoring_password),
+            reportType: toReportType(toolsRow.monitoring_agency),
+          }, stampSql);
 
           const newApiIdText = String(newApiId);
-          const [newIdTaken] = await toolsPool.query(
-            'SELECT client_id FROM client_profiles WHERE owner_key = ? AND client_id = ? LIMIT 1',
-            [OWNER_KEY, newApiIdText],
-          );
-          if (Array.isArray(newIdTaken) && newIdTaken.length > 0) {
-            // Canonical API id row already exists in TOOLSNINJA.
-            // Merge references and remove duplicate source row.
-            await toolsPool.query(
-              'UPDATE client_profiles SET spouse_client_id = ? WHERE owner_key = ? AND spouse_client_id = ?',
-              [newApiIdText, OWNER_KEY, toolsRow.client_id],
+          if (toolsClientId !== newApiIdText) {
+            const [taken] = await toolsPool.query(
+              'SELECT client_id FROM client_profiles WHERE owner_key = ? AND client_id = ? LIMIT 1',
+              [OWNER_KEY, newApiIdText],
             );
-            await toolsPool.query(
-              'UPDATE payment_autopay SET client_id = ? WHERE owner_key = ? AND client_id = ?',
-              [newApiIdText, OWNER_KEY, toolsRow.client_id],
-            );
-            await toolsPool.query(`
-              DELETE h_old
-              FROM report_history h_old
-              JOIN report_history h_new
-                ON h_new.client_id = ?
-               AND h_new.snapshot_checksum = h_old.snapshot_checksum
-              WHERE h_old.client_id = ?
-            `, [newApiIdText, toolsRow.client_id]);
-            await toolsPool.query(
-              'UPDATE report_history SET client_id = ? WHERE client_id = ?',
-              [newApiIdText, toolsRow.client_id],
-            );
-            await toolsPool.query('DELETE FROM client_profiles WHERE owner_key = ? AND client_id = ?', [
-              OWNER_KEY,
-              toolsRow.client_id,
-            ]);
-          } else {
-            await toolsPool.query(`
-              UPDATE client_profiles
-              SET client_id = ?, external_client_id = ?, updated_at = ?
-              WHERE owner_key = ? AND client_id = ?
-            `, [
-              newApiIdText,
-              newApiIdText,
-              msToIso(toolsUpdatedMs || Date.now()),
-              OWNER_KEY,
-              toolsRow.client_id,
-            ]);
+            if (!Array.isArray(taken) || taken.length === 0) {
+              const rekeyed = await rekeyToolsClientId(toolsPool, toolsClientId, newApiIdText);
+              if (rekeyed) counters.rekeyed += 1;
+            }
           }
-
-          toolsToApiInsert += 1;
+          counters.toolsToApiInsert += 1;
           continue;
         }
 
         const apiUpdatedMs = Number(apiMatch.sync_ts_ms || 0);
+        const apiAddress = apiAddressToTwoLine(apiMatch);
+        const toolsAddress = normalizeTwoLineAddress(toolsRow.address);
 
-        const apiSecretCurrent = safeText(apiMatch.secret_question_name);
-        const toolsSecretCandidate = selectBestValue(toolsRow.secret_key, ssnLast4(selectBestValue(toolsRow.ssn, apiMatch.ssn)));
-        const fillApiSecretFromTools = !apiSecretCurrent && Boolean(toolsSecretCandidate);
+        const fillSecret = !text(apiMatch.secret_question_name) && !!text(toolsRow.secret_key);
+        const fillAddress = !apiAddress && !!toolsAddress;
+        const fillStatus = !text(toolsRow.status);
+        const fillReportType = !text(apiMatch.reportType) && !!text(toolsRow.monitoring_agency);
+        const fillReportUsername = !text(apiMatch.report_username) && !!text(toolsRow.monitoring_username);
+        const fillReportPassword = !text(apiMatch.report_password) && !!text(toolsRow.monitoring_password);
 
-        const apiReportTypeCurrent = safeText(apiMatch.reportType);
-        const apiReportUsernameCurrent = fit(apiMatch.report_username, 320);
-        const apiReportPasswordCurrent = safeText(apiMatch.report_password);
-        const toolsReportTypeCandidate = reportTypeFromAgency(toolsRow.monitoring_agency);
-        const toolsReportUsernameCandidate = fit(toolsRow.monitoring_username, 320);
-        const toolsReportPasswordCandidate = safeText(toolsRow.monitoring_password);
-
-        const fillApiReportTypeFromTools = !apiReportTypeCurrent && Boolean(toolsReportTypeCandidate);
-        const fillApiReportUsernameFromTools = !apiReportUsernameCurrent && Boolean(toolsReportUsernameCandidate);
-        const fillApiReportPasswordFromTools = !apiReportPasswordCurrent && Boolean(toolsReportPasswordCandidate);
-        const toolsAddressCandidate = toToolsAddress(...splitToolsAddressParts(toolsRow.address));
-        const apiAddressCurrentToolsFormat = toToolsAddress(
-          ...splitToolsAddressParts(apiAddressPairToTools(apiMatch.currentAddress, apiMatch.address, apiMatch.addresses)),
-        );
-        const fillApiAddressFromTools = !apiAddressCurrentToolsFormat && Boolean(toolsAddressCandidate);
-
-        if (fillApiSecretFromTools) {
-          const stamp = msToMysqlDateTime(Math.max(toolsUpdatedMs, apiUpdatedMs, Date.now()));
+        if (fillSecret || fillAddress) {
           await apiPool.query(`
             UPDATE Clients
-            SET secret_question_name = ?, updatedAt = ?
-            WHERE id = ?
-          `, [toolsSecretCandidate, stamp, apiMatch.id]);
-          apiMatch.secret_question_name = toolsSecretCandidate;
-          toolsToApiBackfill += 1;
-        }
-
-        if (fillApiReportTypeFromTools || fillApiReportUsernameFromTools || fillApiReportPasswordFromTools) {
-          const stamp = msToMysqlDateTime(Math.max(toolsUpdatedMs, apiUpdatedMs, Date.now()));
-          await apiPool.query(`
-            INSERT INTO Reports (ClientId, username, password, reportType, deletetionsLists, compare, progress, accounts, alternateLetters, newVersion, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 1, ?, ?)
-            ON DUPLICATE KEY UPDATE
-              username = VALUES(username),
-              password = VALUES(password),
-              reportType = VALUES(reportType),
-              updatedAt = VALUES(updatedAt)
-          `, [
-            apiMatch.id,
-            selectBestValue(apiReportUsernameCurrent, toolsReportUsernameCandidate),
-            selectBestValue(apiReportPasswordCurrent, toolsReportPasswordCandidate),
-            selectBestValue(apiReportTypeCurrent, toolsReportTypeCandidate, 'identity'),
-            stamp,
-            stamp,
-          ]);
-          apiMatch.report_username = selectBestValue(apiReportUsernameCurrent, toolsReportUsernameCandidate);
-          apiMatch.report_password = selectBestValue(apiReportPasswordCurrent, toolsReportPasswordCandidate);
-          apiMatch.reportType = selectBestValue(apiReportTypeCurrent, toolsReportTypeCandidate, 'identity');
-          toolsToApiBackfill += 1;
-        }
-
-        if (fillApiAddressFromTools) {
-          const stamp = msToMysqlDateTime(Math.max(toolsUpdatedMs, apiUpdatedMs, Date.now()));
-          const toolsAddressMultiline = toolsAddressToApiMultiLine(toolsRow.address);
-          await apiPool.query(`
-            UPDATE Clients
-            SET currentAddress = ?, address = ?, updatedAt = ?
+            SET
+              currentAddress = ?,
+              address = ?,
+              secret_question_name = ?,
+              updatedAt = ?
             WHERE id = ?
           `, [
-            toolsAddressMultiline,
-            toolsAddressMultiline,
-            stamp,
+            fillAddress ? toolsAddress : text(apiMatch.currentAddress),
+            fillAddress ? toolsAddress : text(apiMatch.address),
+            fillSecret ? text(toolsRow.secret_key) : text(apiMatch.secret_question_name),
+            toApiDateTime(Math.max(apiUpdatedMs, toolsUpdatedMs, Date.now())),
             apiMatch.id,
           ]);
-          apiMatch.currentAddress = toolsAddressMultiline;
-          apiMatch.address = toolsAddressMultiline;
-          toolsToApiBackfill += 1;
+          counters.toolsToApiBackfill += 1;
+        }
+
+        if (fillStatus) {
+          await toolsPool.query(
+            'UPDATE client_profiles SET status = ?, updated_at = ? WHERE owner_key = ? AND client_id = ?',
+            ['Client', toIso(Date.now()), OWNER_KEY, toolsClientId],
+          );
+        }
+
+        if (fillReportType || fillReportUsername || fillReportPassword) {
+          await upsertLatestReport(apiPool, apiMatch.id, {
+            username: fillReportUsername ? fit(toolsRow.monitoring_username, 320) : fit(apiMatch.report_username, 320),
+            password: fillReportPassword ? text(toolsRow.monitoring_password) : text(apiMatch.report_password),
+            reportType: fillReportType ? toReportType(toolsRow.monitoring_agency) : toReportType(apiMatch.reportType || 'identity'),
+          }, toApiDateTime(Math.max(apiUpdatedMs, toolsUpdatedMs, Date.now())));
+          counters.toolsToApiBackfill += 1;
         }
 
         if (toolsUpdatedMs > apiUpdatedMs + DRIFT_MS) {
@@ -727,119 +658,64 @@ const run = async () => {
           const desiredLast = fit(toolsRow.last_name, 255) || fit(apiMatch.last_name, 255);
           const desiredPhone = fit(toolsRow.phone, 20);
           const desiredEmail = fit(toolsRow.email, 50);
-          const desiredAddressTools = toToolsAddress(...splitToolsAddressParts(toolsRow.address));
-          const desiredAddressApi = toolsAddressToApiMultiLine(toolsRow.address);
-          const apiAddressCurrent = toolsAddressToApiMultiLine(
-            apiAddressPairToTools(apiMatch.currentAddress, apiMatch.address, apiMatch.addresses),
-          );
-          // Address precedence rule:
-          // - API keeps its current address if populated (prevents stale TOOLSNINJA overwrite).
-          // - TOOLSNINJA may only fill API address when API is blank.
-          const safeApiAddressToWrite = apiAddressCurrent || desiredAddressApi;
-          const expectedApiAddressTools = toToolsAddress(...splitToolsAddressParts(safeApiAddressToWrite));
-          const desiredSsn = normalizeSsn(toolsRow.ssn) || normalizeSsn(apiMatch.ssn);
-          const desiredDob = dobUiToMySql(toolsRow.dob) || dobUiToMySql(apiMatch.dob);
-          const desiredSecret = safeText(toolsRow.secret_key) || ssnLast4(toolsRow.ssn);
-          const desiredIdDoc = extractDocByType(docArray, 'ID Document');
-          const desiredSsnDoc = extractDocByType(docArray, 'SSN Document');
-          const desiredPoaDoc = extractDocByType(docArray, 'POA Document');
-          const desiredPoa2Doc = extractDocByType(docArray, 'POA2 Document');
-          const desiredPoa3Doc = extractDocByType(docArray, 'POA3 Document');
-          const desiredLpoa = extractDocByType(docArray, 'Limited Power of Attorney');
-          const desiredReportUsername = fit(toolsRow.monitoring_username, 320);
-          const desiredReportPassword = safeText(toolsRow.monitoring_password);
-          const desiredReportType = reportTypeFromAgency(toolsRow.monitoring_agency);
+          const desiredAddress = apiAddress || toolsAddress;
+          const desiredDob = normalizeDobForApi(text(apiMatch.dob) || text(toolsRow.dob));
+          const desiredSecret = text(apiMatch.secret_question_name) || text(toolsRow.secret_key) || ssnLast4(toolsRow.ssn);
 
-          const clientAlreadySynced =
+          const alreadySynced =
             same(desiredFirst, apiMatch.first_name)
             && same(desiredLast, apiMatch.last_name)
             && same(desiredPhone, apiMatch.phone)
             && same(desiredEmail, apiMatch.email)
-            && same(
-              expectedApiAddressTools.toLowerCase(),
-              apiAddressPairToTools(apiMatch.currentAddress, apiMatch.address, apiMatch.addresses).toLowerCase(),
-            )
-            && same(desiredSsn, apiMatch.ssn)
-            && same(desiredDob, String(apiMatch.dob || '').slice(0, 10))
-            && same(desiredSecret, apiMatch.secret_question_name)
-            && same(desiredIdDoc, apiMatch.dl_id)
-            && same(desiredSsnDoc, apiMatch.ssn_id)
-            && same(desiredPoaDoc, apiMatch.poa_id)
-            && same(desiredPoa2Doc, apiMatch.poa2_id)
-            && same(desiredPoa3Doc, apiMatch.poa3_id)
-            && same(desiredLpoa, apiMatch.cover_sheet)
-            && same(desiredReportUsername, apiMatch.report_username)
-            && same(desiredReportPassword, apiMatch.report_password)
-            && same(desiredReportType, apiMatch.reportType);
+            && same(desiredAddress, apiAddressToTwoLine(apiMatch))
+            && same(desiredSecret, apiMatch.secret_question_name);
 
-          if (clientAlreadySynced) {
-            continue;
-          }
-
-          const updatedAtSql = msToMysqlDateTime(toolsUpdatedMs || Date.now());
-          let nextSsn = normalizeSsn(toolsRow.ssn) || normalizeSsn(apiMatch.ssn);
-          if (nextSsn) {
-            const [ssnOwner] = await apiPool.query('SELECT id FROM Clients WHERE ssn = ? LIMIT 1', [nextSsn]);
-            if (ssnOwner.length && Number(ssnOwner[0].id) !== Number(apiMatch.id)) {
-              nextSsn = normalizeSsn(apiMatch.ssn);
-            }
-          }
-          try {
+          if (!alreadySynced) {
             await apiPool.query(`
               UPDATE Clients
               SET
-                first_name = ?, last_name = ?, phone = ?, email = ?, currentAddress = ?, address = ?,
-                ssn = ?, dob = ?, secret_question_name = ?, dl_id = ?, ssn_id = ?, poa_id = ?, poa2_id = ?, poa3_id = ?, cover_sheet = ?,
+                first_name = ?, last_name = ?, phone = ?, email = ?,
+                currentAddress = ?, address = ?,
+                ssn = ?, dob = ?, secret_question_name = ?,
+                dl_id = ?, ssn_id = ?, poa_id = ?, poa2_id = ?, poa3_id = ?, cover_sheet = ?,
                 updatedAt = ?
               WHERE id = ?
             `, [
-              fit(toolsRow.first_name, 255) || fit(apiMatch.first_name, 255),
-              fit(toolsRow.last_name, 255) || fit(apiMatch.last_name, 255),
-              fit(toolsRow.phone, 20),
-              fit(toolsRow.email, 50),
-              safeApiAddressToWrite,
-              safeApiAddressToWrite,
-              nextSsn,
-              dobUiToMySql(toolsRow.dob) || dobUiToMySql(apiMatch.dob),
-              safeText(toolsRow.secret_key) || ssnLast4(toolsRow.ssn),
-              extractDocByType(docArray, 'ID Document'),
-              extractDocByType(docArray, 'SSN Document'),
-              extractDocByType(docArray, 'POA Document'),
-              extractDocByType(docArray, 'POA2 Document'),
-              extractDocByType(docArray, 'POA3 Document'),
-              extractDocByType(docArray, 'Limited Power of Attorney'),
-              updatedAtSql,
+              desiredFirst,
+              desiredLast,
+              desiredPhone,
+              desiredEmail,
+              desiredAddress,
+              desiredAddress,
+              text(apiMatch.ssn),
+              desiredDob,
+              desiredSecret,
+              extractDocValue(docs, 'ID Document'),
+              extractDocValue(docs, 'SSN Document'),
+              extractDocValue(docs, 'POA Document'),
+              extractDocValue(docs, 'POA2 Document'),
+              extractDocValue(docs, 'POA3 Document'),
+              extractDocValue(docs, 'Limited Power of Attorney'),
+              stampSql,
               apiMatch.id,
             ]);
-          } catch (error) {
-            if (String(error?.message || '').includes('Duplicate entry') && String(error?.message || '').includes('clients_ssn')) {
-              continue;
-            }
-            throw error;
+
+            await upsertLatestReport(apiPool, apiMatch.id, {
+              username: fit(toolsRow.monitoring_username, 320),
+              password: text(toolsRow.monitoring_password),
+              reportType: toReportType(toolsRow.monitoring_agency),
+            }, stampSql);
+            counters.toolsToApiUpdate += 1;
           }
-          await apiPool.query(`
-            INSERT INTO Reports (ClientId, username, password, reportType, deletetionsLists, compare, progress, accounts, alternateLetters, newVersion, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 1, ?, ?)
-            ON DUPLICATE KEY UPDATE
-              username = VALUES(username),
-              password = VALUES(password),
-              reportType = VALUES(reportType),
-              updatedAt = VALUES(updatedAt)
-          `, [
-            apiMatch.id,
-            fit(toolsRow.monitoring_username, 320),
-            safeText(toolsRow.monitoring_password),
-            reportTypeFromAgency(toolsRow.monitoring_agency),
-            updatedAtSql,
-            updatedAtSql,
-          ]);
-          toolsToApiUpdate += 1;
         }
       }
 
-      console.log(`[bridge] pass done in ${Date.now() - started}ms | api->tools +${apiToToolsInsert} ~${apiToToolsUpdate} fill=${apiToToolsBackfill} | tools->api +${toolsToApiInsert} ~${toolsToApiUpdate} fill=${toolsToApiBackfill}`);
+      const elapsed = Date.now() - started;
+      console.log(
+        `[bridge ${BRIDGE_VERSION}] pass ${elapsed}ms | api->tools +${counters.apiToToolsInsert} ~${counters.apiToToolsUpdate} fill=${counters.apiToToolsBackfill} | tools->api +${counters.toolsToApiInsert} ~${counters.toolsToApiUpdate} fill=${counters.toolsToApiBackfill} | rekey=${counters.rekeyed}`,
+      );
     } catch (error) {
-      console.error('[bridge] pass failed:', error?.message || error);
+      console.error(`[bridge ${BRIDGE_VERSION}] pass failed:`, error?.stack || error?.message || error);
     } finally {
       running = false;
     }
@@ -855,6 +731,6 @@ const run = async () => {
 };
 
 run().catch((error) => {
-  console.error('[bridge] fatal:', error?.message || error);
+  console.error(`[bridge ${BRIDGE_VERSION}] fatal:`, error?.message || error);
   process.exit(1);
 });
