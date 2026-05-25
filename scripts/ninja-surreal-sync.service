@@ -1,0 +1,17 @@
+[Unit]
+Description=NinjaDispute SurrealDB Sync Daemon
+After=network.target surrealdb.service mysql.service
+Requires=surrealdb.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ninjatools
+ExecStart=/usr/bin/node /opt/ninjatools/scripts/sync-to-surreal.mjs --daemon
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=NINJA_SURREAL_KEY=NinjaDisputeSurrealKey2026!Secure
+
+[Install]
+WantedBy=multi-user.target

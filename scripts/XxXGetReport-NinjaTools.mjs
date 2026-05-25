@@ -134,6 +134,17 @@ const extractFirstJsonObject = (value) => {
 
 const normalizeAgency = (value) => String(value || '').trim().toLowerCase();
 const escapeRegExp = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const defaultApiBaseNewServer = String(process.env.TOOLS_NINJA_API_BASE_DEFAULT || 'http://5.78.214.176:3017').trim();
+const defaultApiBaseWhitelistedServer = String(process.env.TOOLS_NINJA_API_BASE_WHITELISTED || 'http://147.93.190.166:3017').trim();
+
+const resolveToolsNinjaApiBaseForAgency = (agencyLower = '') => {
+  const explicitBase = String(process.env.TOOLS_NINJA_API_BASE || '').trim();
+  if (explicitBase) return explicitBase;
+  if (agencyLower.includes('smart') || agencyLower.includes('myfree') || agencyLower.includes('freescorenow')) {
+    return defaultApiBaseWhitelistedServer;
+  }
+  return defaultApiBaseNewServer;
+};
 
 const summarizeUrl = (value) => {
   const raw = String(value || '').trim();
@@ -1085,8 +1096,8 @@ const main = async () => {
   const monitoringAgency = String(client.monitoringAgency || '').trim();
   const username = String(client.monitoringUsername || '').trim();
   const password = String(client.monitoringPassword || '').trim();
-  const apiBase = process.env.TOOLS_NINJA_API_BASE || 'http://127.0.0.1:3017';
   const agencyLower = normalizeAgency(monitoringAgency);
+  const apiBase = resolveToolsNinjaApiBaseForAgency(agencyLower);
 
   if (!client.firstName || !client.lastName) {
     throw new Error('Selected client is missing first or last name.');
@@ -1100,6 +1111,7 @@ const main = async () => {
 
   console.log(`Selected client: ${client.firstName} ${client.lastName}`);
   console.log(`Monitoring Agency: ${monitoringAgency}`);
+  console.log(`Tools Ninja API Base: ${apiBase}`);
   console.log(`Username: ${username}`);
   console.log(`Password: ${password ? '********' : '[empty]'}`);
   console.log(`Secret Key: ${getSecretKey(client) || '[empty]'}`);

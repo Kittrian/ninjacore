@@ -125,6 +125,31 @@
     window.location.href = '/';
   });
 
+  const getNinjaCookie = () => {
+    const m = ('; ' + document.cookie).split('; ninja_token=');
+    return m.length === 2 ? m.pop().split(';')[0] : null;
+  };
+
+  const trySSOLogin = async () => {
+    if (!getNinjaCookie()) return false;
+    try {
+      const res = await fetch('/api/auth/sso-login', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.authenticated) return true;
+      }
+    } catch {
+      // SSO unavailable, fall through to normal login
+    }
+    return false;
+  };
+
   showLogin();
-  void checkSession();
+  (async () => {
+    if (await trySSOLogin()) {
+      showApp();
+    } else {
+      void checkSession();
+    }
+  })();
 })();

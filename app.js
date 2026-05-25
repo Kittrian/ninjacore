@@ -5,6 +5,7 @@ const state = {
   currentUser: 'admin',
   query: '',
   selectedClientId: '',
+  pinnedClientId: '',
   accountCategoryFilter: 'all',
   editingClientId: '',
   addFormEditingClientId: '',
@@ -77,7 +78,7 @@ const setBootLoadingOverlay = (isActive, message = '') => {
   }
 };
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
-const APP_SCRIPT_VERSION = 'v2.83 loaded';
+const APP_SCRIPT_VERSION = 'v2.84 loaded';
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
 const widgetBusinessNameStorageKey = 'tools-ninja-widget-business-name';
@@ -2728,6 +2729,10 @@ const shouldApplyClientSearch = (queryValue) => {
   return normalizedQuery.length >= 3 || queryDigits.length >= 3;
 };
 
+const clearPinnedClientList = () => {
+  state.pinnedClientId = '';
+};
+
 const getExactClientIdMatches = (queryValue, clients) => {
   const normalizedQuery = normalizeClientSearchValue(queryValue);
   if (!normalizedQuery) {
@@ -3703,8 +3708,8 @@ const getFilteredClients = () => {
   const exactClientIdMatches = getExactClientIdMatches(query, state.clients);
 
   return state.clients.filter((client) => {
-    if (state.selectedClientId && !query) {
-      return client.id === state.selectedClientId;
+    if (state.pinnedClientId) {
+      return client.id === state.pinnedClientId;
     }
 
     const matchesStatus = state.statusFilter === '__all__' || (client.status || 'Client') === state.statusFilter;
@@ -3753,6 +3758,9 @@ const renderClients = () => {
     tableSearchInput.addEventListener('input', (event) => {
       const previousQuery = state.query;
       state.query = event.target.value;
+      if (state.pinnedClientId && state.query !== previousQuery) {
+        clearPinnedClientList();
+      }
       const wasFiltering = shouldApplyClientSearch(previousQuery);
       const isFiltering = shouldApplyClientSearch(state.query);
       if (!isFiltering && !wasFiltering) {
@@ -3771,6 +3779,7 @@ const renderClients = () => {
   if (statusFilterSelect) {
     statusFilterSelect.addEventListener('change', (event) => {
       state.statusFilter = String(event.target.value || '__all__');
+      clearPinnedClientList();
       state.selectedClientId = '';
       persistLearningSelectedClientId('');
       renderClients();
@@ -5242,6 +5251,9 @@ const syncClientPortalToggleValue = () => {
 const loadClients = async () => {
   const payload = await request('/api/clients');
   state.clients = payload.clients;
+  if (state.pinnedClientId && !state.clients.some((client) => client.id === state.pinnedClientId)) {
+    clearPinnedClientList();
+  }
   state.currentUser = String(payload.currentUser || state.currentUser || 'admin').trim() || 'admin';
   applyDisputeDueDateCountdownToClients(state.clients);
   state.statuses = payload.statuses || state.statuses;
@@ -5260,15 +5272,11 @@ const loadClients = async () => {
 
 const loadClientDetail = async (clientId) => {
   state.selectedClientId = clientId;
+  state.pinnedClientId = clientId;
   persistLearningSelectedClientId(clientId);
   state.accountCategoryFilter = 'all';
-  state.query = '';
   clientDetailLoadToken += 1;
   const myLoadToken = clientDetailLoadToken;
-  const searchInput = byId('searchInput');
-  if (searchInput) {
-    searchInput.value = '';
-  }
   updateBrowserTabTitle(null);
   renderClientDetailLoading();
   renderClients();
@@ -5314,6 +5322,7 @@ const deleteClient = async (clientId) => {
 
   if (state.selectedClientId === clientId) {
     state.selectedClientId = '';
+    clearPinnedClientList();
     persistLearningSelectedClientId('');
     byId('clientDetail').innerHTML = '<p class="muted">Choose a client to load the credit scores.</p>';
     setWidgetRefreshHeader(null);
@@ -6332,6 +6341,9 @@ const bindEvents = () => {
   byId('searchInput')?.addEventListener('input', (event) => {
     const previousQuery = state.query;
     state.query = event.target.value;
+    if (state.pinnedClientId && state.query !== previousQuery) {
+      clearPinnedClientList();
+    }
     const wasFiltering = shouldApplyClientSearch(previousQuery);
     const isFiltering = shouldApplyClientSearch(state.query);
     if (!isFiltering && !wasFiltering) {
@@ -6342,6 +6354,7 @@ const bindEvents = () => {
 
   byId('statusFilter')?.addEventListener('change', (event) => {
     state.statusFilter = event.target.value;
+    clearPinnedClientList();
     state.selectedClientId = '';
     persistLearningSelectedClientId('');
     updateBrowserTabTitle(null);

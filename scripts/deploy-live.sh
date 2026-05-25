@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-/Users/drewdrew/NinjaTools}"
-REMOTE_HOST="${REMOTE_HOST:-147.93.190.166}"
+REMOTE_HOST="${REMOTE_HOST:-5.78.214.176}"
 REMOTE_USER="${REMOTE_USER:-root}"
 REMOTE_APP_DIR="${REMOTE_APP_DIR:-/home/ninjacore/htdocs/ninjacore.ninjadispute.com}"
 REMOTE_PM2_NAME="${REMOTE_PM2_NAME:-ninjacore}"

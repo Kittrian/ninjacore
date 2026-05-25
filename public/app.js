@@ -28,6 +28,7 @@ const state = {
   currentUser: 'admin',
   query: '',
   selectedClientId: '',
+  pinnedClientId: '',
   accountCategoryFilter: 'all',
   editingClientId: '',
   addFormEditingClientId: '',
@@ -50,6 +51,7 @@ const state = {
 };
 const CLIENTS_RENDER_INITIAL_LIMIT = 80;
 const CLIENTS_RENDER_INCREMENT = 120;
+const CLIENTS_SEARCH_RENDER_LIMIT = 120;
 
 const affiliateMonitoringOrder = ['identityiq', 'myscoreiq', 'smartcredit', 'myfreescorenow'];
 const affiliateMonitoringFallbacks = {
@@ -105,7 +107,7 @@ const setBootLoadingOverlay = (isActive, message = '') => {
   }
 };
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
-const APP_SCRIPT_VERSION = 'v3.00 loaded';
+const APP_SCRIPT_VERSION = 'v3.01 loaded';
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
 const widgetBusinessNameStorageKey = 'tools-ninja-widget-business-name';
@@ -170,6 +172,7 @@ const createQuickSaveClientIdentityController = () => {
     progress.style.width = '0';
     progress.style.height = '10px';
     progress.style.borderRadius = '200px';
+    progress.style.opacity = '1';
     check.style.opacity = '0';
     const len = checkPath.getTotalLength();
     checkPath.style.strokeDasharray = String(len);
@@ -219,6 +222,13 @@ const createQuickSaveClientIdentityController = () => {
     progress.style.width = '80px';
     progress.style.height = '80px';
     progress.style.borderRadius = '80px';
+
+    progress.animate(
+      [{ opacity: 1 }, { opacity: 0 }],
+      { duration: 120, fill: 'forwards', easing: 'linear' },
+    );
+    await wait(120);
+    progress.style.opacity = '0';
 
     check.style.opacity = '1';
     checkPath.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], {
@@ -1746,7 +1756,7 @@ const queueClientSearchRender = () => {
   searchRenderTimer = window.setTimeout(() => {
     searchRenderTimer = null;
     renderClientsRowsOnly();
-  }, 220);
+  }, 80);
 };
 
 const syncNotesPaperHeight = (notesInput, notesPanel) => {
@@ -2905,6 +2915,10 @@ const shouldApplyClientSearch = (queryValue) => {
   return normalizedQuery.length >= 3 || queryDigits.length >= 3;
 };
 
+const clearPinnedClientList = () => {
+  state.pinnedClientId = '';
+};
+
 const getExactClientIdMatches = (queryValue, clients) => {
   const normalizedQuery = normalizeClientSearchValue(queryValue);
   if (!normalizedQuery) {
@@ -3981,6 +3995,10 @@ const getFilteredClients = () => {
   const exactClientIdMatches = getExactClientIdMatches(query, state.clients);
 
   return state.clients.filter((client) => {
+    if (state.pinnedClientId) {
+      return client.id === state.pinnedClientId;
+    }
+
     const matchesStatus = state.statusFilter === '__all__' || (client.status || 'Client') === state.statusFilter;
 
     if (!query || !applyQuerySearch) {
@@ -4019,9 +4037,14 @@ const renderClients = () => {
     : 'No clients saved yet.';
   const shouldProgressivelyRender = !hasSearchQuery && sortedClients.length > CLIENTS_RENDER_INITIAL_LIMIT;
   const normalizedLimit = Math.max(CLIENTS_RENDER_INITIAL_LIMIT, Number(state.clientsRenderLimit) || CLIENTS_RENDER_INITIAL_LIMIT);
-  const visibleLimit = shouldProgressivelyRender ? normalizedLimit : sortedClients.length;
+  const searchLimited = hasSearchQuery && sortedClients.length > CLIENTS_SEARCH_RENDER_LIMIT;
+  const visibleLimit = shouldProgressivelyRender
+    ? normalizedLimit
+    : searchLimited
+      ? CLIENTS_SEARCH_RENDER_LIMIT
+      : sortedClients.length;
   const visibleClients = sortedClients.slice(0, visibleLimit);
-  const hasMoreRows = shouldProgressivelyRender && visibleClients.length < sortedClients.length;
+  const hasMoreRows = (shouldProgressivelyRender || searchLimited) && visibleClients.length < sortedClients.length;
 
   list.innerHTML = renderClientsTable(visibleClients, {
     emptyMessage,
@@ -4037,6 +4060,9 @@ const renderClients = () => {
       const previousQuery = state.query;
       state.query = event.target.value;
       state.clientsRenderLimit = CLIENTS_RENDER_INITIAL_LIMIT;
+      if (state.pinnedClientId && state.query !== previousQuery) {
+        clearPinnedClientList();
+      }
       const wasFiltering = shouldApplyClientSearch(previousQuery);
       const isFiltering = shouldApplyClientSearch(state.query);
       if (!isFiltering && !wasFiltering) {
@@ -4056,6 +4082,7 @@ const renderClients = () => {
     statusFilterSelect.addEventListener('change', (event) => {
       state.statusFilter = String(event.target.value || '__all__');
       state.clientsRenderLimit = CLIENTS_RENDER_INITIAL_LIMIT;
+      clearPinnedClientList();
       state.selectedClientId = '';
       persistLearningSelectedClientId('');
       renderClients();
@@ -4348,9 +4375,14 @@ const renderClientsRowsOnly = () => {
     : 'No clients saved yet.';
   const shouldProgressivelyRender = !hasSearchQuery && sortedClients.length > CLIENTS_RENDER_INITIAL_LIMIT;
   const normalizedLimit = Math.max(CLIENTS_RENDER_INITIAL_LIMIT, Number(state.clientsRenderLimit) || CLIENTS_RENDER_INITIAL_LIMIT);
-  const visibleLimit = shouldProgressivelyRender ? normalizedLimit : sortedClients.length;
+  const searchLimited = hasSearchQuery && sortedClients.length > CLIENTS_SEARCH_RENDER_LIMIT;
+  const visibleLimit = shouldProgressivelyRender
+    ? normalizedLimit
+    : searchLimited
+      ? CLIENTS_SEARCH_RENDER_LIMIT
+      : sortedClients.length;
   const visibleClients = sortedClients.slice(0, visibleLimit);
-  const hasMoreRows = shouldProgressivelyRender && visibleClients.length < sortedClients.length;
+  const hasMoreRows = (shouldProgressivelyRender || searchLimited) && visibleClients.length < sortedClients.length;
 
   const virtualTableContainer = document.createElement('div');
   virtualTableContainer.innerHTML = renderClientsTable(visibleClients, {
@@ -5584,6 +5616,9 @@ const loadClients = async ({ showSkeleton = false } = {}) => {
   const payload = await request('/api/clients');
   state.clients = payload.clients;
   state.clientsRenderLimit = CLIENTS_RENDER_INITIAL_LIMIT;
+  if (state.pinnedClientId && !state.clients.some((client) => client.id === state.pinnedClientId)) {
+    clearPinnedClientList();
+  }
   state.currentUser = String(payload.currentUser || state.currentUser || 'admin').trim() || 'admin';
   applyDisputeDueDateCountdownToClients(state.clients);
   state.statuses = payload.statuses || state.statuses;
@@ -5654,14 +5689,10 @@ const loadClientDetail = async (clientId) => {
     applyDisputeDueDateCountdownToClients([liveClient]);
   }
   state.selectedClientId = clientId;
+  state.pinnedClientId = clientId;
   persistLearningSelectedClientId(clientId);
   state.accountCategoryFilter = 'all';
-  state.query = '';
   state.clientsRenderLimit = CLIENTS_RENDER_INITIAL_LIMIT;
-  const searchInput = byId('searchInput');
-  if (searchInput) {
-    searchInput.value = '';
-  }
   const selectedName = `${payload.client?.firstName || ''} ${payload.client?.lastName || ''}`.trim();
   if (selectedName) {
     setWidgetConsoleMessage(`${selectedName} loaded. Ready to refresh.`);
@@ -5687,6 +5718,7 @@ const deleteClient = async (clientId) => {
 
   if (state.selectedClientId === clientId) {
     state.selectedClientId = '';
+    clearPinnedClientList();
     persistLearningSelectedClientId('');
     byId('clientDetail').innerHTML = '<p class="muted">Choose a client to load the credit scores.</p>';
     setWidgetRefreshHeader(null);
@@ -6695,6 +6727,9 @@ const bindEvents = () => {
     const previousQuery = state.query;
     state.query = event.target.value;
     state.clientsRenderLimit = CLIENTS_RENDER_INITIAL_LIMIT;
+    if (state.pinnedClientId && state.query !== previousQuery) {
+      clearPinnedClientList();
+    }
     const wasFiltering = shouldApplyClientSearch(previousQuery);
     const isFiltering = shouldApplyClientSearch(state.query);
     if (!isFiltering && !wasFiltering) {
@@ -6706,6 +6741,7 @@ const bindEvents = () => {
   byId('statusFilter')?.addEventListener('change', (event) => {
     state.statusFilter = event.target.value;
     state.clientsRenderLimit = CLIENTS_RENDER_INITIAL_LIMIT;
+    clearPinnedClientList();
     state.selectedClientId = '';
     persistLearningSelectedClientId('');
     updateBrowserTabTitle(null);

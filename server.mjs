@@ -7,6 +7,7 @@ import { promises as fs } from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 import mysql from 'mysql2/promise';
+import { Server as SocketIOServer } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 
@@ -39,6 +40,74 @@ const reportRuns = new Map();
 const learningContextByOwner = new Map();
 const requestContext = new AsyncLocalStorage();
 const dynamicUsernames = new Set();
+const defaultCorsOrigins = [
+  'https://ninjadispute.com',
+  'https://www.ninjadispute.com',
+  'https://dashboard.ninjadispute.com',
+  'https://api.ninjadispute.com',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3017',
+  'http://127.0.0.1:3017',
+];
+const configuredCorsOrigins = String(process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter(Boolean);
+const allowedCorsOrigins = new Set(
+  (configuredCorsOrigins.length ? configuredCorsOrigins : defaultCorsOrigins)
+    .map((origin) => origin.toLowerCase()),
+);
+
+const resolveCorsOrigin = (originHeader = '') => {
+  const origin = String(originHeader || '').trim();
+  if (!origin) {
+    return '';
+  }
+  const normalized = origin.toLowerCase();
+  if (allowedCorsOrigins.has(normalized)) {
+    return origin;
+  }
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+    return origin;
+  }
+  return '';
+};
+
+const toHeaderObject = (headers) => {
+  if (!headers) {
+    return {};
+  }
+  if (Array.isArray(headers)) {
+    const out = {};
+    for (let i = 0; i < headers.length; i += 2) {
+      const key = headers[i];
+      const value = headers[i + 1];
+      if (typeof key === 'string' && value !== undefined) {
+        out[key] = value;
+      }
+    }
+    return out;
+  }
+  if (typeof headers === 'object') {
+    return { ...headers };
+  }
+  return {};
+};
+
+const buildCorsHeaders = (origin = '', requestHeaders = '') => {
+  const headers = {
+    Vary: 'Origin',
+  };
+  if (!origin) {
+    return headers;
+  }
+  headers['Access-Control-Allow-Origin'] = origin;
+  headers['Access-Control-Allow-Credentials'] = 'true';
+  headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
+  headers['Access-Control-Allow-Headers'] = requestHeaders || 'Content-Type, Authorization, X-Requested-With';
+  return headers;
+};
 const toolsNinjaDbConfig = {
   host: String(process.env.TOOLSNINJA_DB_HOST || process.env.MYSQL_HOST || '127.0.0.1').trim(),
   port: Number.parseInt(process.env.TOOLSNINJA_DB_PORT || process.env.MYSQL_PORT || '3306', 10) || 3306,
@@ -107,23 +176,17 @@ const paymentFrequencyOptions = [
   { value: 'custom', label: 'Custom Days' },
 ];
 
-const LEGACY_PID = '68951';
-const NEW_CLIENT_PID = '35540';
-const allowedPids = new Set([LEGACY_PID, NEW_CLIENT_PID]);
 const allowedIntegrationServices = new Set(['smartcredit35540', 'smartcredit68951', 'myfreescorenow', 'gohighlevel', 'billing', 'ninjadispute', 'contabo']);
 const defaultIntegrations = {
   smartcredit35540: {
-    pid: NEW_CLIENT_PID,
     tokenId: '1c03c715-bb56-4574-b098-97f596a06308',
     apiSecret: '7AvEEVHUTb7Y4j64ilK89a7cLvN3cwp_CR9AyDJeYpg',
   },
   smartcredit68951: {
-    pid: LEGACY_PID,
     tokenId: '1c03c715-bb56-4574-b098-97f596a06308',
     apiSecret: '7AvEEVHUTb7Y4j64ilK89a7cLvN3cwp_CR9AyDJeYpg',
   },
   myfreescorenow: {
-    pid: '',
     tokenId: 'api@besttexascreditpros.com',
     apiSecret: 'Texas123!',
   },
@@ -254,7 +317,6 @@ const seedData = {
       assignedTo: '',
       status: 'Client',
       phase: 'None',
-      pid: LEGACY_PID,
       monitoringAgency: '',
       yearlyIncome: '',
       housingPayment: '',
@@ -279,9 +341,12 @@ const seedData = {
 };
 
 const send = (res, statusCode, payload, contentType = 'application/json; charset=utf-8') => {
+  const activeOrigin = String(requestContext.getStore()?.requestOrigin || '').trim();
+  const requestHeaders = String(requestContext.getStore()?.requestHeaders || '').trim();
+  const corsHeaders = buildCorsHeaders(activeOrigin, requestHeaders);
   res.writeHead(statusCode, {
     'Content-Type': contentType,
-    'Access-Control-Allow-Origin': '*',
+    ...corsHeaders,
   });
   if (Buffer.isBuffer(payload) || payload instanceof Uint8Array) {
     res.end(payload);
@@ -587,14 +652,9 @@ const callAnthropicRewrite = async ({ prompt = '' } = {}) => {
 
 const generateId = () => `client-${Math.random().toString(36).slice(2, 10)}`;
 
-const normalizePid = (value, fallback = LEGACY_PID) => {
-  const normalized = String(value || '').trim();
-  return allowedPids.has(normalized) ? normalized : fallback;
-};
-
 const normalizeIntegrationPayload = (payload = {}, service = '') => {
   const normalizedService = String(service || '').trim().toLowerCase();
-  const defaults = defaultIntegrations[normalizedService] || { pid: '', tokenId: '', apiSecret: '' };
+  const defaults = defaultIntegrations[normalizedService] || { tokenId: '', apiSecret: '' };
   if (normalizedService === 'gohighlevel') {
     return {
       webhookKey: String(payload.webhookKey ?? defaults.webhookKey ?? '').trim(),
@@ -629,17 +689,7 @@ const normalizeIntegrationPayload = (payload = {}, service = '') => {
       s3Bucket: String(payload.s3Bucket ?? defaults.s3Bucket ?? 'id-docs').trim(),
     };
   }
-  const fixedPid = normalizedService === 'smartcredit35540'
-    ? NEW_CLIENT_PID
-    : normalizedService === 'smartcredit68951'
-      ? LEGACY_PID
-      : '';
   return {
-    pid: fixedPid
-      ? fixedPid
-      : normalizedService === 'smartcredit'
-        ? normalizePid(payload.pid, defaults.pid || NEW_CLIENT_PID)
-      : String(payload.pid ?? defaults.pid ?? '').trim(),
     tokenId: String(payload.tokenId ?? defaults.tokenId ?? '').trim(),
     apiSecret: String(payload.apiSecret ?? defaults.apiSecret ?? '').trim(),
   };
@@ -655,10 +705,6 @@ const getIntegrationKeyForAgency = (agency = '') => {
   }
   return '';
 };
-
-const getSmartCreditServiceKeyForPid = (pid = '') => (
-  normalizePid(pid, LEGACY_PID) === NEW_CLIENT_PID ? 'smartcredit35540' : 'smartcredit68951'
-);
 
 const normalizeAffiliateFlag = (value) => value === true || value === 'true' || value === '1' || value === 1;
 
@@ -1299,7 +1345,7 @@ const getReportAgeDays = (reportDate) => {
   return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
 };
 
-const normalizeClientRecord = (client = {}, fallbackPid = LEGACY_PID) => ({
+const normalizeClientRecord = (client = {}) => ({
   ...client,
   id: client.id || generateId(),
   firstName: client.firstName || '',
@@ -1316,7 +1362,6 @@ const normalizeClientRecord = (client = {}, fallbackPid = LEGACY_PID) => ({
   affiliateAssigned: client.affiliateAssigned || 'None',
   status: client.status || 'Client',
   phase: client.phase || 'None',
-  pid: normalizePid(client.pid, fallbackPid),
   monitoringAgency: client.monitoringAgency || '',
   yearlyIncome: client.yearlyIncome || '',
   housingPayment: client.housingPayment || '',
@@ -2112,7 +2157,6 @@ const extractHighLevelContactPayload = (payload = {}) => {
     email: getHighLevelPayloadValue(payload, customFields, 'contact.email', 'email'),
     phone: getHighLevelPayloadValue(payload, customFields, 'contact.phone', 'phone'),
     status: getHighLevelPayloadValue(payload, customFields, 'status', 'contact.status', 'client_status', 'clientstatus'),
-    pid: getHighLevelPayloadValue(payload, customFields, 'pid', 'sub_account_pid'),
     goal: getHighLevelPayloadValue(payload, customFields, 'goal'),
     notes: getHighLevelPayloadValue(payload, customFields, 'notes', 'contact.notes'),
     monitoringAgency: getHighLevelPayloadValue(payload, customFields, 'monitoringAgency', 'monitoring_agency'),
@@ -4141,7 +4185,34 @@ const parseDateValue = (value) => {
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
+  const fallbackDate = new Date(text);
+  if (!Number.isNaN(fallbackDate.getTime())) {
+    return fallbackDate;
+  }
+
   return null;
+};
+
+const toIsoDateOnly = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return local.toISOString().slice(0, 10);
+};
+
+const normalizeDateOnlyValue = (value) => toIsoDateOnly(parseDateValue(value));
+
+const normalizeIsoDateTimeValue = (value, fallback = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return fallback;
+  }
+  const asDate = new Date(raw);
+  if (Number.isNaN(asDate.getTime())) {
+    return fallback;
+  }
+  return asDate.toISOString();
 };
 
 const calculateNextImport = (reportDateValue) => {
@@ -4166,7 +4237,7 @@ const calculateNextImport = (reportDateValue) => {
   const daysUntilNextImport = 35 - reportAgeDays;
 
   return {
-    reportDate: reportDateValue,
+    reportDate: toIsoDateOnly(reportDate),
     nextImportDate: new Date(nextImportTimestamp).toISOString(),
     reportAgeDays,
     daysUntilNextImport,
@@ -4191,7 +4262,7 @@ const calculateManualNextImport = (client) => {
   const elapsed = Math.max(0, Math.floor((now.getTime() - anchor.getTime()) / (24 * 60 * 60 * 1000)));
   const days = startDays - elapsed;
   return {
-    reportDate: client.manualNextImportSetDate || '',
+    reportDate: toIsoDateOnly(anchor),
     nextImportDate: null,
     reportAgeDays: elapsed,
     ...formatNextImportFromDays(days),
@@ -4213,7 +4284,7 @@ const calculateRefreshNextImport = (client) => {
   const nextImportDate = new Date(anchor.getTime());
   nextImportDate.setDate(nextImportDate.getDate() + 35);
   return {
-    reportDate: startDateText,
+    reportDate: toIsoDateOnly(startDate),
     nextImportDate: nextImportDate.toISOString(),
     reportAgeDays: elapsed,
     ...formatNextImportFromDays(days),
@@ -4894,7 +4965,6 @@ const toSafeClient = (client) => {
     ghlSource: client.ghlSource || '',
     status: client.status || 'Client',
     phase: client.phase || 'None',
-    pid: normalizePid(client.pid),
     monitoringAgency: inferMonitoringAgency(client),
     yearlyIncome: client.yearlyIncome || '',
     housingPayment: client.housingPayment || '',
@@ -4937,10 +5007,14 @@ const toSafeClient = (client) => {
 };
 
 const toClientListItem = (client) => {
-  const reportDate = String(client.reportDate || '').trim();
+  const reportDate = normalizeDateOnlyValue(client.reportDate);
+  const manualNextImportSetDate = normalizeDateOnlyValue(client.manualNextImportSetDate);
+  const refreshNextImportStartDate = normalizeDateOnlyValue(client.refreshNextImportStartDate);
   const nextImport = calculateNextImportForClient({
     ...client,
     reportDate,
+    manualNextImportSetDate,
+    refreshNextImportStartDate,
   });
 
   return {
@@ -4962,7 +5036,6 @@ const toClientListItem = (client) => {
     ghlSource: client.ghlSource || '',
     status: client.status || 'Client',
     phase: client.phase || 'None',
-    pid: normalizePid(client.pid),
     monitoringAgency: inferMonitoringAgency(client),
     yearlyIncome: client.yearlyIncome || '',
     housingPayment: client.housingPayment || '',
@@ -4983,10 +5056,10 @@ const toClientListItem = (client) => {
     manualNextImportStartDays: Number.isFinite(Number(client.manualNextImportStartDays))
       ? Number.parseInt(client.manualNextImportStartDays, 10)
       : null,
-    manualNextImportSetDate: client.manualNextImportSetDate || '',
-    refreshNextImportStartDate: client.refreshNextImportStartDate || '',
+    manualNextImportSetDate,
+    refreshNextImportStartDate,
     nextImport,
-    createdAt: client.createdAt,
+    createdAt: normalizeIsoDateTimeValue(client.createdAt),
     creditScores: null,
   };
 };
@@ -4998,7 +5071,7 @@ const normalizeStore = (store) => {
   };
   if (Array.isArray(store?.clients)) {
     return {
-      clients: store.clients.map((client) => normalizeClientRecord(client, LEGACY_PID)),
+      clients: store.clients.map((client) => normalizeClientRecord(client)),
       statuses: uniqueStatuses([...(Array.isArray(store.statuses) ? store.statuses : []), ...defaultStatuses]),
       phases: uniquePhases([...(Array.isArray(store.phases) ? store.phases : []), ...defaultPhases]),
       businessSettings: normalizedBusinessSettings,
@@ -5029,7 +5102,6 @@ const normalizeStore = (store) => {
           assignedTo: '',
           status: 'Client',
           phase: 'None',
-          pid: LEGACY_PID,
           monitoringAgency: '',
           yearlyIncome: '',
           housingPayment: '',
@@ -5813,16 +5885,15 @@ const loadIntegrations = async () => {
     return [String(row.settingKey || '').replace('integration.', ''), parsed];
   }));
 
-  const legacySmartCredit = normalizeIntegrationPayload(map.smartcredit, 'smartcredit');
   const smartcredit35540 = map.smartcredit35540
     ? normalizeIntegrationPayload(map.smartcredit35540, 'smartcredit35540')
-    : legacySmartCredit.pid === NEW_CLIENT_PID
-      ? normalizeIntegrationPayload(legacySmartCredit, 'smartcredit35540')
+    : map.smartcredit
+      ? normalizeIntegrationPayload(map.smartcredit, 'smartcredit35540')
       : normalizeIntegrationPayload(defaultIntegrations.smartcredit35540, 'smartcredit35540');
   const smartcredit68951 = map.smartcredit68951
     ? normalizeIntegrationPayload(map.smartcredit68951, 'smartcredit68951')
-    : legacySmartCredit.pid === LEGACY_PID
-      ? normalizeIntegrationPayload(legacySmartCredit, 'smartcredit68951')
+    : map.smartcredit
+      ? normalizeIntegrationPayload(map.smartcredit, 'smartcredit68951')
       : normalizeIntegrationPayload(defaultIntegrations.smartcredit68951, 'smartcredit68951');
 
   return {
@@ -7667,7 +7738,6 @@ const sendClientToGoHighLevelWebhook = async (client, options = {}) => {
       email: client.email || '',
       phone: client.phone || '',
       status: client.status || '',
-      pid: normalizePid(client.pid, NEW_CLIENT_PID),
       goal: client.goal || '',
       monitoringAgency: client.monitoringAgency || '',
       monitoringUsername: client.monitoringUsername || '',
@@ -8944,10 +9014,56 @@ const server = createServer((req, res) => {
   const cookies = parseCookies(req?.headers?.cookie || '');
   const requestUser = normalizeUsername(cookies.get('txn') || '');
   const scopedOwnerKey = normalizeOwnerKey(requestUser || appLoginUsername);
-  requestContext.run({ ownerKey: scopedOwnerKey, knownUsers: dynamicUsernames }, async () => {
+  const requestOriginHeader = String(req.headers.origin || '').trim();
+  const requestOrigin = resolveCorsOrigin(requestOriginHeader);
+  const requestHeaders = String(req.headers['access-control-request-headers'] || '').trim();
+  requestContext.run({ ownerKey: scopedOwnerKey, knownUsers: dynamicUsernames, requestOrigin, requestHeaders }, async () => {
     try {
+    const corsHeaders = buildCorsHeaders(requestOrigin, requestHeaders);
+    const originalWriteHead = res.writeHead.bind(res);
+    res.writeHead = (statusCode, statusMessageOrHeaders, maybeHeaders) => {
+      if (typeof statusMessageOrHeaders === 'string') {
+        const mergedHeaders = {
+          ...toHeaderObject(maybeHeaders),
+          ...corsHeaders,
+        };
+        return originalWriteHead(statusCode, statusMessageOrHeaders, mergedHeaders);
+      }
+      const mergedHeaders = {
+        ...toHeaderObject(statusMessageOrHeaders),
+        ...corsHeaders,
+      };
+      return originalWriteHead(statusCode, mergedHeaders);
+    };
+
+    if (req.method === 'OPTIONS') {
+      if (!requestOriginHeader || !requestOrigin) {
+        res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'CORS origin not allowed.' }, null, 2));
+        return;
+      }
+      res.writeHead(204, corsHeaders);
+      res.end();
+      return;
+    }
+
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
-    const pathname = url.pathname;
+    const requestHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase();
+    const isApiHost = requestHost === 'api.ninjadispute.com';
+    const rawPathname = (url.pathname.length > 1 && url.pathname.endsWith('/'))
+      ? url.pathname.slice(0, -1)
+      : url.pathname;
+    let pathname = rawPathname;
+    if (
+      isApiHost
+      && pathname !== '/'
+      && pathname !== '/api'
+      && !pathname.startsWith('/api/')
+      && !pathname.startsWith('/socket.io')
+      && !path.extname(pathname)
+    ) {
+      pathname = `/api${pathname}`;
+    }
     if ((pathname === '/payments' || pathname === '/payments.html') && !isAppAuthenticated(req)) {
       res.writeHead(302, { Location: '/' });
       res.end();
@@ -9054,6 +9170,47 @@ const server = createServer((req, res) => {
     const cookies = parseCookies(req?.headers?.cookie || '');
     const username = normalizeUsername(cookies.get('txn') || '');
     send(res, 200, { authenticated: isAppAuthenticated(req), user: username || '' });
+    return;
+  }
+
+  if (pathname === '/api/auth/sso-login' && req.method === 'POST') {
+    try {
+      const cookies = parseCookies(req?.headers?.cookie || '');
+      const ninjaToken = String(cookies.get('ninja_token') || '').trim();
+      if (!ninjaToken) {
+        send(res, 401, { error: 'No SSO token present.' });
+        return;
+      }
+      const verifyRes = await fetch('https://auth.ninjadispute.com/verify', {
+        headers: { Authorization: `Bearer ${ninjaToken}` },
+      });
+      if (!verifyRes.ok) {
+        send(res, 401, { error: 'SSO token invalid.' });
+        return;
+      }
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      if (!verifyData?.authenticated) {
+        send(res, 401, { error: 'SSO token not authenticated.' });
+        return;
+      }
+      const ssoUsername = normalizeUsername(verifyData.username || verifyData.email || '');
+      if (!ssoUsername) {
+        send(res, 401, { error: 'SSO token missing username.' });
+        return;
+      }
+      dynamicUsernames.add(ssoUsername);
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': req.headers.origin || '*',
+        'Access-Control-Allow-Credentials': 'true',
+        'Set-Cookie': [
+          `txn=${encodeURIComponent(ssoUsername)}; Path=/; Max-Age=3600; SameSite=Lax; Secure`,
+        ],
+      });
+      res.end(JSON.stringify({ authenticated: true, user: ssoUsername }, null, 2));
+    } catch (error) {
+      send(res, 500, { error: error.message || 'SSO login failed.' });
+    }
     return;
   }
 
@@ -9860,10 +10017,25 @@ const server = createServer((req, res) => {
           matchedBy = 'phone';
         }
       }
+      if (!client) {
+        const normalizedFirst = normalizeLookupValue(payload.firstName);
+        const normalizedLast = normalizeLookupValue(payload.lastName);
+        if (normalizedFirst && normalizedLast) {
+          client = store.clients.find((entry) => {
+            if (normalizeLookupValue(entry.firstName) !== normalizedFirst) return false;
+            if (normalizeLookupValue(entry.lastName) !== normalizedLast) return false;
+            if (normalizedEmail && normalizeLookupValue(entry.email) === normalizedEmail) return true;
+            if (normalizedPhone && normalizeLookupPhone(entry.phone) === normalizedPhone) return true;
+            return false;
+          });
+          if (client) {
+            matchedBy = 'name+contact';
+          }
+        }
+      }
 
       const nextStatus = payload.status || client?.status || 'Lead';
       const nextPhase = client?.phase || 'None';
-      const resolvedPid = normalizePid(payload.pid || client?.pid, NEW_CLIENT_PID);
       const nowIso = new Date().toISOString();
       const action = client ? 'updated' : 'created';
 
@@ -9877,7 +10049,6 @@ const server = createServer((req, res) => {
           phone: payload.phone,
           status: nextStatus,
           phase: nextPhase,
-          pid: resolvedPid,
           monitoringAgency: payload.monitoringAgency || '',
           monitoringUsername: payload.monitoringUsername || '',
           monitoringPassword: payload.monitoringPassword || '',
@@ -9890,7 +10061,7 @@ const server = createServer((req, res) => {
           goal: payload.goal || '',
           notes: payload.notes || '',
           createdAt: nowIso,
-        }, NEW_CLIENT_PID);
+        });
         store.clients.unshift(client);
       } else {
         client.firstName = payload.firstName || client.firstName;
@@ -9899,7 +10070,6 @@ const server = createServer((req, res) => {
         client.phone = payload.phone || client.phone;
         client.status = nextStatus;
         client.phase = nextPhase;
-        client.pid = resolvedPid;
         client.monitoringAgency = payload.monitoringAgency || client.monitoringAgency || '';
         client.monitoringUsername = payload.monitoringUsername || client.monitoringUsername || '';
         client.monitoringPassword = payload.monitoringPassword || client.monitoringPassword || '';
@@ -10307,7 +10477,6 @@ const server = createServer((req, res) => {
       client.affiliateAssigned = readOptionalStringField(body, 'affiliateAssigned', client.affiliateAssigned || 'None') || 'None';
       client.status = nextStatus;
       client.phase = nextPhase;
-      client.pid = normalizePid(hasOwnField(body, 'pid') ? body.pid : client.pid, LEGACY_PID);
       client.monitoringAgency = readOptionalStringField(body, 'monitoringAgency', client.monitoringAgency || '');
       client.monitoringUsername = readOptionalStringField(body, 'monitoringUsername', client.monitoringUsername || '');
       client.monitoringPassword = readOptionalStringField(body, 'monitoringPassword', client.monitoringPassword || '');
@@ -10413,12 +10582,12 @@ const server = createServer((req, res) => {
 
       const integrations = await loadIntegrations();
       const resolvedIntegrationKey = integrationKey === 'smartcredit'
-        ? getSmartCreditServiceKeyForPid(client.pid)
+        ? 'smartcredit35540'
         : integrationKey;
       const integration = integrations[resolvedIntegrationKey];
       if (!integration || !integration.tokenId || !integration.apiSecret) {
         if (resolvedIntegrationKey === 'smartcredit35540' || resolvedIntegrationKey === 'smartcredit68951') {
-          send(res, 400, { error: `The SmartCredit integration for PID ${normalizePid(client.pid)} is not configured yet.` });
+          send(res, 400, { error: 'The SmartCredit integration is not configured yet.' });
           return;
         }
         send(res, 400, { error: `The ${integrationKey} integration is not configured yet.` });
@@ -10758,6 +10927,19 @@ const server = createServer((req, res) => {
         || parseReportDateFromHtml(reportHtml || '')
         || parseReportDateFromFilename(body.creditReportFileName || '');
 
+      const normalizedFirst = normalizeLookupValue(body.firstName || '');
+      const normalizedLast = normalizeLookupValue(body.lastName || '');
+      const normalizedEmail = normalizeLookupValue(body.email || '');
+      const normalizedPhone = normalizeLookupPhone(body.phone || '');
+
+      const existingClient = store.clients.find((entry) => {
+        if (normalizeLookupValue(entry.firstName) !== normalizedFirst) return false;
+        if (normalizeLookupValue(entry.lastName) !== normalizedLast) return false;
+        if (normalizedEmail && normalizeLookupValue(entry.email) === normalizedEmail) return true;
+        if (normalizedPhone && normalizeLookupPhone(entry.phone) === normalizedPhone) return true;
+        return false;
+      });
+
       const client = {
         id: clientId,
         firstName: body.firstName.trim(),
@@ -10774,7 +10956,6 @@ const server = createServer((req, res) => {
         affiliateAssigned: String(body.affiliateAssigned || 'None').trim() || 'None',
         status: body.status?.trim() || 'Client',
         phase: String(body.phase || '').trim() || 'None',
-        pid: normalizePid(body.pid, NEW_CLIENT_PID),
         monitoringAgency: String(body.monitoringAgency || '').trim(),
         yearlyIncome: String(body.yearlyIncome || '').trim(),
         housingPayment: String(body.housingPayment || '').trim(),
@@ -10802,26 +10983,36 @@ const server = createServer((req, res) => {
         creditReportHtml: reportHtml,
         createdAt: new Date().toISOString(),
       };
-
-      store.clients.unshift(client);
+      if (existingClient) {
+        const existingCreatedAt = existingClient.createdAt || client.createdAt;
+        Object.assign(existingClient, {
+          ...existingClient,
+          ...client,
+          id: existingClient.id,
+          createdAt: existingCreatedAt,
+        });
+      } else {
+        store.clients.unshift(client);
+      }
       store.statuses = uniqueStatuses([...store.statuses, client.status]);
       store.phases = uniquePhases([...(store.phases || defaultPhases), client.phase]);
       await writeStore(store);
-      await insertReportSnapshot(client, {
-        source: client.creditReportSource,
-        reportDate: client.reportDate,
-        reportFileName: client.creditReportFileName,
-        reportHtml: client.creditReportHtml,
-        reportJson: client.creditReportJson,
-        createdAt: client.lastSyncedAt,
+      const savedClient = existingClient || client;
+      await insertReportSnapshot(savedClient, {
+        source: savedClient.creditReportSource,
+        reportDate: savedClient.reportDate,
+        reportFileName: savedClient.creditReportFileName,
+        reportHtml: savedClient.creditReportHtml,
+        reportJson: savedClient.creditReportJson,
+        createdAt: savedClient.lastSyncedAt,
       });
       let gohighlevelSync = { attempted: false, reason: 'not-run' };
       try {
-        gohighlevelSync = await sendClientToGoHighLevelWebhook(client, { event: 'client.created' });
+        gohighlevelSync = await sendClientToGoHighLevelWebhook(savedClient, { event: existingClient ? 'client.updated' : 'client.created' });
         if (gohighlevelSync.ok && gohighlevelSync.contactId) {
-          client.ghlContactId = gohighlevelSync.contactId;
-          client.ghlLocationId = gohighlevelSync.locationId || client.ghlLocationId || '';
-          client.ghlSource = 'ninja-tools-outbound';
+          savedClient.ghlContactId = gohighlevelSync.contactId;
+          savedClient.ghlLocationId = gohighlevelSync.locationId || savedClient.ghlLocationId || '';
+          savedClient.ghlSource = 'ninja-tools-outbound';
           await writeStore(store);
         }
       } catch (error) {
@@ -10833,8 +11024,9 @@ const server = createServer((req, res) => {
       }
 
       send(res, 201, {
-        client: toSafeClient(client),
+        client: toSafeClient(savedClient),
         gohighlevelSync,
+        deduped: Boolean(existingClient),
       });
     } catch (error) {
       send(res, 400, { error: error.message });
@@ -10866,7 +11058,6 @@ const server = createServer((req, res) => {
             ssn: normalizeSsnInput(String(row.ssn || row.SSN || '').trim()),
             status: String(row.status || '').trim() || 'Client',
             phase: String(row.phase || '').trim() || 'None',
-            pid: normalizePid(row.pid || row.PID, NEW_CLIENT_PID),
             monitoringAgency: '',
             yearlyIncome: '',
             housingPayment: '',
@@ -11141,6 +11332,31 @@ const server = createServer((req, res) => {
       send(res, 500, { error: error?.message || 'Server error.' });
     }
   });
+});
+
+const io = new SocketIOServer(server, {
+  path: '/socket.io',
+  transports: ['websocket', 'polling'],
+  cors: {
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      const allowedOrigin = resolveCorsOrigin(origin);
+      if (allowedOrigin) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('CORS origin not allowed for socket.io'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST'],
+  },
+});
+
+io.on('connection', (socket) => {
+  socket.emit('socket:ready', { ok: true, id: socket.id, at: new Date().toISOString() });
 });
 
 server.listen(port, host, async () => {

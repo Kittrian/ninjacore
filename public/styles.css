@@ -2084,12 +2084,13 @@ nav.tab.client-hub-switch[data-selected="3"] .middle .circle {
   --ntqs-accent: #71dfbe;
   --ntqs-ink: #1d1f20;
   position: relative;
-  width: 200px;
+  width: 300px;
   height: 52px;
   flex: 0 0 auto;
   margin-top: 2px;
   margin-left: auto;
-  margin-right: 84px;
+  margin-right: 112px;
+  overflow: hidden;
 }
 
 .nt-qs-button {
