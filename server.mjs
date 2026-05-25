@@ -9175,8 +9175,10 @@ const server = createServer((req, res) => {
 
   if (pathname === '/api/auth/sso-login' && req.method === 'POST') {
     try {
+      const body = await readBody(req);
       const cookies = parseCookies(req?.headers?.cookie || '');
-      const ninjaToken = String(cookies.get('ninja_token') || '').trim();
+      // Client sends token explicitly in body; cookie header is a fallback.
+      const ninjaToken = String(body.token || cookies.get('ninja_token') || '').trim();
       if (!ninjaToken) {
         send(res, 401, { error: 'No SSO token present.' });
         return;

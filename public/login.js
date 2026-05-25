@@ -131,9 +131,14 @@
   };
 
   const trySSOLogin = async () => {
-    if (!getNinjaCookie()) return false;
+    const token = getNinjaCookie();
+    if (!token) return false;
     try {
-      const res = await fetch('/api/auth/sso-login', { method: 'POST', credentials: 'include' });
+      const res = await fetch('/api/auth/sso-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
         if (data?.authenticated) return true;
