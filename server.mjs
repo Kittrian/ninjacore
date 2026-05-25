@@ -9175,6 +9175,12 @@ const server = createServer((req, res) => {
 
   if (pathname === '/api/auth/sso-login' && req.method === 'POST') {
     try {
+      // Short-circuit: if txn session is already valid, no SSO verification needed.
+      if (isAppAuthenticated(req)) {
+        const txnUser = normalizeUsername(parseCookies(req?.headers?.cookie || '').get('txn') || '');
+        send(res, 200, { authenticated: true, user: txnUser });
+        return;
+      }
       const body = await readBody(req);
       const cookies = parseCookies(req?.headers?.cookie || '');
       // Client sends token explicitly in body; cookie header is a fallback.

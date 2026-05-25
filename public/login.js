@@ -151,10 +151,19 @@
 
   showLogin();
   (async () => {
+    // Check existing txn session first — avoids SSO entirely for already-authenticated users.
+    try {
+      const response = await fetch('/api/auth/status');
+      const payload = await response.json().catch(() => ({}));
+      if (payload?.authenticated) {
+        showApp();
+        return;
+      }
+    } catch {}
+    // No valid session — try SSO via ninja_token cookie from auth.ninjadispute.com.
     if (await trySSOLogin()) {
       showApp();
-    } else {
-      void checkSession();
     }
+    // If both fail, login form remains visible.
   })();
 })();
