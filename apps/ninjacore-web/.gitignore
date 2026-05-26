@@ -1,0 +1,23 @@
+node_modules/
+.next/
+.open-next/
+.wrangler/
+dist/
+out/
+build/
+
+# env
+.env
+.env.local
+.env*.local
+
+# tooling
+*.log
+.DS_Store
+coverage/
+.turbo/
+.cache/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

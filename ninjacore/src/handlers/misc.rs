@@ -38,7 +38,7 @@ pub async fn address_suggestions(Query(q): Query<AddressQuery>) -> AppResult<Jso
     let ua = std::env::var("ADDRESS_SUGGEST_UA")
         .unwrap_or_else(|_| "ninjacore/0.1 (contact: admin@ninjadispute.com)".into());
 
-    let client = reqwest::Client::new();
+    let client = crate::http::shared();
     let resp = client
         .get(&base)
         .query(&[
@@ -640,15 +640,19 @@ pub async fn report_sync_iiq(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| format!("identityiq-report-{}.html", report_date));
 
+    // Schema requires non-null report_id (separate from the record id).
+    // Mirror the record id into report_id so the row is uniquely addressable.
+    let report_record_id = format!("{}_{}", client_id_str, uuid::Uuid::new_v4().simple());
     state
         .db
         .query(
             "CREATE reports SET \
-             id = $id, client_id = $cid, source = $src, monitoring_agency = $mag, \
+             id = $id, report_id = $rid, report_type = $src, client_id = $cid, source = $src, monitoring_agency = $mag, \
              report_date = $rd, report_file_name = $rfn, report_html = $rh, \
              report_json = $rj, response_url = $rurl, created_at = $ca, source_db = 'ninjatools'",
         )
-        .bind(("id", format!("{}_{}", client_id_str, uuid::Uuid::new_v4().simple())))
+        .bind(("id", report_record_id.clone()))
+        .bind(("rid", report_record_id))
         .bind(("cid", client_id_str.clone()))
         .bind(("src", "identityiq-json"))
         .bind(("mag", monitoring_agency.clone()))
@@ -769,15 +773,17 @@ pub async fn report_sync_sc(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| format!("smartcredit-report-{}.json", report_date));
 
+    let report_record_id = format!("{}_{}", client_id_str, uuid::Uuid::new_v4().simple());
     state
         .db
         .query(
             "CREATE reports SET \
-             id = $id, client_id = $cid, source = $src, monitoring_agency = $mag, \
+             id = $id, report_id = $rid, report_type = $src, client_id = $cid, source = $src, monitoring_agency = $mag, \
              report_date = $rd, report_file_name = $rfn, report_json = $rj, \
              response_url = $rurl, created_at = $ca, source_db = 'ninjatools'",
         )
-        .bind(("id", format!("{}_{}", client_id_str, uuid::Uuid::new_v4().simple())))
+        .bind(("id", report_record_id.clone()))
+        .bind(("rid", report_record_id))
         .bind(("cid", client_id_str.clone()))
         .bind(("src", "smartcredit-json"))
         .bind(("mag", monitoring_agency.clone()))

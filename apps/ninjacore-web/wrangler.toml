@@ -1,0 +1,26 @@
+name = "ninjacore-web"
+main = ".open-next/worker.js"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Workers Assets — serves static files (built CSS/JS) from the Worker.
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# Public production env. Secrets (API tokens, etc.) go through
+# `wrangler secret put NAME` — never commit them.
+[vars]
+NEXT_PUBLIC_API_BASE = "https://api.ninjacore.ninjadispute.com"
+NINJACORE_API_ORIGIN = "https://api.ninjacore.ninjadispute.com"
+
+# R2 bucket for ISR/cache. Create with: wrangler r2 bucket create ninjacore-web-cache
+[[r2_buckets]]
+binding = "NEXT_INC_CACHE_R2_BUCKET"
+bucket_name = "ninjacore-web-cache"
+
+# Custom hostname route. Add this once Cloudflare DNS for ninjacore.ninjadispute.com
+# is set to Proxied (orange-cloud) and the Worker route is configured.
+# [[routes]]
+# pattern = "ninjacore.ninjadispute.com/*"
+# zone_name = "ninjadispute.com"
