@@ -6,6 +6,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { promises as fs } from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
+import zlib from 'node:zlib';
 
 import { Server as SocketIOServer } from 'socket.io';
 import { fileURLToPath } from 'node:url';
@@ -398,20 +399,68 @@ const seedData = {
   ],
 };
 
+const COMPRESS_MIN_BYTES = 1024;
+
+const pickEncoding = (acceptEncoding = '') => {
+  const ae = String(acceptEncoding || '').toLowerCase();
+  if (ae.includes('br')) return 'br';
+  if (ae.includes('gzip')) return 'gzip';
+  return null;
+};
+
+const compressBuffer = (buf, encoding) => {
+  if (encoding === 'br') {
+    return zlib.brotliCompressSync(buf, {
+      params: {
+        [zlib.constants.BROTLI_PARAM_QUALITY]: 4,
+        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length,
+      },
+    });
+  }
+  return zlib.gzipSync(buf, { level: 6 });
+};
+
 const send = (res, statusCode, payload, contentType = 'application/json; charset=utf-8') => {
-  const activeOrigin = String(requestContext.getStore()?.requestOrigin || '').trim();
-  const requestHeaders = String(requestContext.getStore()?.requestHeaders || '').trim();
+  const ctx = requestContext.getStore();
+  const activeOrigin = String(ctx?.requestOrigin || '').trim();
+  const requestHeaders = String(ctx?.requestHeaders || '').trim();
+  const acceptEncoding = String(ctx?.acceptEncoding || '').trim();
   const corsHeaders = buildCorsHeaders(activeOrigin, requestHeaders);
-  res.writeHead(statusCode, {
-    'Content-Type': contentType,
-    ...corsHeaders,
-  });
-  if (Buffer.isBuffer(payload) || payload instanceof Uint8Array) {
-    res.end(payload);
-    return;
+
+  let bodyBuf;
+  if (Buffer.isBuffer(payload)) {
+    bodyBuf = payload;
+  } else if (payload instanceof Uint8Array) {
+    bodyBuf = Buffer.from(payload);
+  } else if (typeof payload === 'string') {
+    bodyBuf = Buffer.from(payload, 'utf8');
+  } else {
+    bodyBuf = Buffer.from(JSON.stringify(payload, null, 2), 'utf8');
   }
 
-  res.end(typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2));
+  const headers = {
+    'Content-Type': contentType,
+    Vary: 'Accept-Encoding, Origin',
+    ...corsHeaders,
+  };
+
+  const encoding = bodyBuf.length >= COMPRESS_MIN_BYTES ? pickEncoding(acceptEncoding) : null;
+  if (encoding) {
+    try {
+      const compressed = compressBuffer(bodyBuf, encoding);
+      headers['Content-Encoding'] = encoding;
+      headers['Content-Length'] = String(compressed.length);
+      res.writeHead(statusCode, headers);
+      res.end(compressed);
+      return;
+    } catch {
+      // Fall through to uncompressed.
+    }
+  }
+
+  headers['Content-Length'] = String(bodyBuf.length);
+  res.writeHead(statusCode, headers);
+  res.end(bodyBuf);
 };
 
 const notFound = (res) => send(res, 404, { error: 'Not found' });
@@ -5376,17 +5425,54 @@ const mergeClientProfileRow = (client, row) => {
   };
 };
 
+const PROFILE_MAP_CACHE_TTL_MS = 10 * 60 * 1000;
+const profileMapCache = new Map();
+const profileMapLoading = new Map();
+
+const invalidateProfileMapCache = (ownerKey) => {
+  if (ownerKey == null) { profileMapCache.clear(); return; }
+  profileMapCache.delete(normalizeOwnerKey(ownerKey));
+};
+
+const patchProfileMapCacheEntries = (ownerKey, entries) => {
+  if (!entries || !entries.length) return;
+  const owner = normalizeOwnerKey(ownerKey);
+  const cached = profileMapCache.get(owner);
+  if (!cached) return;
+  for (const { clientId, row } of entries) {
+    if (!clientId) continue;
+    const existing = cached.map.get(clientId) || {};
+    cached.map.set(clientId, { ...existing, ...row });
+  }
+};
+
 const loadClientProfilesMap = async (ownerKey = getCurrentOwnerKey()) => {
   const normalizedOwner = normalizeOwnerKey(ownerKey);
-  const rows = await surql(`SELECT client_id AS clientId, first_name AS firstName, last_name AS lastName, email, dob, ssn, address, phone, spouse_client_id AS spouseClientId, spouse_client_label AS spouseClientLabel, assigned_to AS assignedTo, ninja_assigned AS ninjaAssigned, affiliate_assigned AS affiliateAssigned, status, phase, monitoring_agency AS monitoringAgency, monitoring_username AS monitoringUsername, monitoring_password AS monitoringPassword, secret_key AS secretKey, monitoring_token AS monitoringToken, portal_password AS portalPassword, portal_enabled AS portalEnabled, language, goal, notes, yearly_income AS yearlyIncome, housing_payment AS housingPayment, debt_monthly_payments AS debtMonthlyPayments, next_import_int AS nextImportInt, next_import_label AS nextImportLabel, next_import_mode AS nextImportMode, manual_next_import_start_days AS manualNextImportStartDays, manual_next_import_set_date AS manualNextImportSetDate, refresh_next_import_start_date AS refreshNextImportStartDate, documents_json AS documentsJson, report_date AS reportDate FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools"`);
-  return new Map(rows.map((row) => {
-    let documents = null;
+  const cached = profileMapCache.get(normalizedOwner);
+  if (cached && (Date.now() - cached.loadedAt) < PROFILE_MAP_CACHE_TTL_MS) {
+    return cached.map;
+  }
+  let inflight = profileMapLoading.get(normalizedOwner);
+  if (inflight) return inflight;
+  inflight = (async () => {
     try {
-      const parsed = JSON.parse(String(row.documentsJson || '[]'));
-      documents = Array.isArray(parsed) ? parsed : null;
-    } catch { documents = null; }
-    return [row.clientId, { ...row, documents }];
-  }));
+      const rows = await surql(`SELECT client_id AS clientId, first_name AS firstName, last_name AS lastName, email, dob, ssn, address, phone, spouse_client_id AS spouseClientId, spouse_client_label AS spouseClientLabel, assigned_to AS assignedTo, ninja_assigned AS ninjaAssigned, affiliate_assigned AS affiliateAssigned, status, phase, monitoring_agency AS monitoringAgency, monitoring_username AS monitoringUsername, monitoring_password AS monitoringPassword, secret_key AS secretKey, monitoring_token AS monitoringToken, portal_password AS portalPassword, portal_enabled AS portalEnabled, language, goal, notes, yearly_income AS yearlyIncome, housing_payment AS housingPayment, debt_monthly_payments AS debtMonthlyPayments, next_import_int AS nextImportInt, next_import_label AS nextImportLabel, next_import_mode AS nextImportMode, manual_next_import_start_days AS manualNextImportStartDays, manual_next_import_set_date AS manualNextImportSetDate, refresh_next_import_start_date AS refreshNextImportStartDate, documents_json AS documentsJson, report_date AS reportDate FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools"`);
+      const map = new Map(rows.map((row) => {
+        let documents = null;
+        try {
+          const parsed = JSON.parse(String(row.documentsJson || '[]'));
+          documents = Array.isArray(parsed) ? parsed : null;
+        } catch { documents = null; }
+        return [row.clientId, { ...row, documents }];
+      }));
+      profileMapCache.set(normalizedOwner, { map, loadedAt: Date.now() });
+      return map;
+    } finally {
+      profileMapLoading.delete(normalizedOwner);
+    }
+  })();
+  profileMapLoading.set(normalizedOwner, inflight);
+  return inflight;
 };
 
 const mergeStoreWithProfileDb = async (store, ownerKey = getCurrentOwnerKey()) => {
@@ -5456,8 +5542,16 @@ const mergeStoreWithProfileDb = async (store, ownerKey = getCurrentOwnerKey()) =
   };
 };
 
-const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKey()) => {
+const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKey(), options = {}) => {
   const normalizedOwner = normalizeOwnerKey(ownerKey);
+  const onlyIdsRaw = options.onlyClientIds;
+  const onlyIds = Array.isArray(onlyIdsRaw) && onlyIdsRaw.length
+    ? new Set(onlyIdsRaw.map((v) => String(v).trim()).filter(Boolean))
+    : null;
+  const filteredClients = onlyIds
+    ? clients.filter((c) => onlyIds.has(String(c.id || '').trim()))
+    : clients;
+  if (onlyIds && filteredClients.length === 0) return;
   const existingRows = await surql(`SELECT client_id, first_name, last_name, email, ssn FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools"`);
   const canonicalBySsn = new Map();
   const canonicalByEmailName = new Map();
@@ -5472,7 +5566,7 @@ const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKe
   }
   const updatedAt = new Date().toISOString();
   const syncedTargetIdsInPass = new Set();
-  for (const client of clients) {
+  for (const client of filteredClients) {
     const normalizedSsn = normalizeSsnInput(client.ssn || '');
     const normalizedDob = normalizeDobInput(client.dob || '');
     let targetClientId = String(client.id || '').trim();
@@ -5487,7 +5581,7 @@ const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKe
     }
     if (syncedTargetIdsInPass.has(targetClientId)) continue;
     const recordId = `${targetClientId}_ninjatools`;
-    await surqlRestPut('clients', recordId, {
+    const recordPayload = {
       client_id: targetClientId,
       owner_key: normalizedOwner,
       source_db: 'ninjatools',
@@ -5528,7 +5622,52 @@ const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKe
       report_date: client.reportDate || '',
       updated_at: updatedAt,
       created_at: client.createdAt || updatedAt,
-    }).catch(() => {});
+    };
+    let putOk = true;
+    await surqlRestPut('clients', recordId, recordPayload).catch(() => { putOk = false; });
+    if (putOk) {
+      patchProfileMapCacheEntries(normalizedOwner, [{
+        clientId: targetClientId,
+        row: {
+          clientId: targetClientId,
+          firstName: recordPayload.first_name,
+          lastName: recordPayload.last_name,
+          email: recordPayload.email,
+          dob: recordPayload.dob,
+          ssn: recordPayload.ssn,
+          address: recordPayload.address,
+          phone: recordPayload.phone,
+          spouseClientId: recordPayload.spouse_client_id,
+          spouseClientLabel: recordPayload.spouse_client_label,
+          assignedTo: recordPayload.assigned_to,
+          ninjaAssigned: recordPayload.ninja_assigned,
+          affiliateAssigned: recordPayload.affiliate_assigned,
+          status: recordPayload.status,
+          phase: recordPayload.phase,
+          monitoringAgency: recordPayload.monitoring_agency,
+          monitoringUsername: recordPayload.monitoring_username,
+          monitoringPassword: recordPayload.monitoring_password,
+          secretKey: recordPayload.secret_key,
+          monitoringToken: recordPayload.monitoring_token,
+          portalPassword: recordPayload.portal_password,
+          portalEnabled: recordPayload.portal_enabled,
+          language: recordPayload.language,
+          goal: recordPayload.goal,
+          notes: recordPayload.notes,
+          yearlyIncome: recordPayload.yearly_income,
+          housingPayment: recordPayload.housing_payment,
+          debtMonthlyPayments: recordPayload.debt_monthly_payments,
+          nextImportInt: recordPayload.next_import_int,
+          nextImportLabel: recordPayload.next_import_label,
+          nextImportMode: recordPayload.next_import_mode,
+          manualNextImportStartDays: recordPayload.manual_next_import_start_days,
+          manualNextImportSetDate: recordPayload.manual_next_import_set_date,
+          refreshNextImportStartDate: recordPayload.refresh_next_import_start_date,
+          documents: normalizeClientDocumentsInput(client.documents),
+          reportDate: recordPayload.report_date,
+        },
+      }]);
+    }
     syncedTargetIdsInPass.add(targetClientId);
   }
 };
@@ -5537,6 +5676,8 @@ const deleteClientProfile = async (clientId, ownerKey = getCurrentOwnerKey()) =>
   const normalizedOwner = normalizeOwnerKey(ownerKey);
   const recordId = `${String(clientId)}_ninjatools`;
   await surql(`DELETE clients:⟨${sEsc(recordId)}⟩`).catch(() => {});
+  const cached = profileMapCache.get(normalizedOwner);
+  if (cached) cached.map.delete(String(clientId));
 };
 
 const loadIntegrations = async () => {
@@ -8286,7 +8427,7 @@ const syncConsumerDirectReportToClient = async ({
     client.manualNextImportStartDays = null;
     client.manualNextImportSetDate = '';
   }
-  await writeStore(store);
+  await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
 
   return toSafeClient(client);
 };
@@ -8313,19 +8454,29 @@ const ensureStorageReady = async (ownerKey = getCurrentOwnerKey()) => {
   const normalizedOwner = normalizeOwnerKey(ownerKey);
   if (!storageReadyByOwner.has(normalizedOwner)) {
     storageReadyByOwner.set(normalizedOwner, (async () => {
-      const targetDataFile = getOwnerDataFile(normalizedOwner);
+      // Fast path: ensure the data file exists so reads can proceed.
+      // Heavy reconcile work (DB sync of all clients, integration seeding,
+      // S3 mirroring) is fire-and-forget so the HTTP server doesn't block on it.
       await ensureDataFile(normalizedOwner);
-      const raw = await fs.readFile(targetDataFile, 'utf8');
-      const normalized = await mergeStoreWithProfileDb(normalizeStore(JSON.parse(raw)), normalizedOwner);
-      await syncClientProfilesToDb(normalized.clients, normalizedOwner);
-      await seedIntegrations();
-      await seedReportHistory(normalized);
-      void mirrorBusinessBlobToS3(normalizedOwner, 'store/store.json', JSON.stringify(normalized, null, 2)).catch((error) => {
-        console.warn(`[S3 Mirror] ensureStorageReady store export failed: ${error.message}`);
-      });
-      void mirrorBusinessControlPlaneToS3(normalizedOwner).catch((error) => {
-        console.warn(`[S3 Mirror] ensureStorageReady control-plane export failed: ${error.message}`);
-      });
+      void (async () => {
+        try {
+          const targetDataFile = getOwnerDataFile(normalizedOwner);
+          const raw = await fs.readFile(targetDataFile, 'utf8');
+          const normalized = await mergeStoreWithProfileDb(normalizeStore(JSON.parse(raw)), normalizedOwner);
+          await syncClientProfilesToDb(normalized.clients, normalizedOwner);
+          await seedIntegrations();
+          await seedReportHistory(normalized);
+          void mirrorBusinessBlobToS3(normalizedOwner, 'store/store.json', JSON.stringify(normalized, null, 2)).catch((error) => {
+            console.warn(`[S3 Mirror] ensureStorageReady store export failed: ${error.message}`);
+          });
+          void mirrorBusinessControlPlaneToS3(normalizedOwner).catch((error) => {
+            console.warn(`[S3 Mirror] ensureStorageReady control-plane export failed: ${error.message}`);
+          });
+          console.log(`[init] background reconcile complete for ${normalizedOwner}`);
+        } catch (error) {
+          console.warn(`[init] background reconcile failed for ${normalizedOwner}: ${error.message}`);
+        }
+      })();
     })());
   }
 
@@ -8340,12 +8491,14 @@ const readStore = async (ownerKey = getCurrentOwnerKey()) => {
   return mergeStoreWithProfileDb(normalizeStore(JSON.parse(raw)), normalizedOwner);
 };
 
-const writeStore = async (store, ownerKey = getCurrentOwnerKey()) => {
+const writeStore = async (store, ownerKey = getCurrentOwnerKey(), options = {}) => {
   const normalizedOwner = normalizeOwnerKey(ownerKey);
   const targetDataFile = getOwnerDataFile(normalizedOwner);
   const normalized = normalizeStore(store);
   await writeJsonFileAtomic(targetDataFile, JSON.stringify(normalized, null, 2));
-  await syncClientProfilesToDb(normalized.clients, normalizedOwner);
+  await syncClientProfilesToDb(normalized.clients, normalizedOwner, {
+    onlyClientIds: options.syncClientIds,
+  });
   void mirrorBusinessBlobToS3(normalizedOwner, 'store/store.json', JSON.stringify(normalized, null, 2)).catch((error) => {
     console.warn(`[S3 Mirror] store export failed: ${error.message}`);
   });
@@ -8467,7 +8620,8 @@ const server = createServer((req, res) => {
   const requestOriginHeader = String(req.headers.origin || '').trim();
   const requestOrigin = resolveCorsOrigin(requestOriginHeader);
   const requestHeaders = String(req.headers['access-control-request-headers'] || '').trim();
-  requestContext.run({ ownerKey: scopedOwnerKey, knownUsers: dynamicUsernames, requestOrigin, requestHeaders }, async () => {
+  const acceptEncoding = String(req.headers['accept-encoding'] || '').trim();
+  requestContext.run({ ownerKey: scopedOwnerKey, knownUsers: dynamicUsernames, requestOrigin, requestHeaders, acceptEncoding }, async () => {
     try {
     const corsHeaders = buildCorsHeaders(requestOrigin, requestHeaders);
     const originalWriteHead = res.writeHead.bind(res);
@@ -8603,7 +8757,7 @@ const server = createServer((req, res) => {
         ...seedData.businessSettings,
         ...incoming,
       };
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [] });
       send(res, 200, { ok: true, settings: store.businessSettings });
     } catch (error) {
       send(res, 400, { error: error.message || 'Unable to save business settings.' });
@@ -8614,6 +8768,10 @@ const server = createServer((req, res) => {
   if (pathname === '/api/health' && req.method === 'GET') {
     send(res, 200, { ok: true });
     return;
+  }
+
+  if (pathname.startsWith('/api/auth')) {
+    console.log('[DEBUG] OAuth-related request:', { pathname, method: req.method });
   }
 
   if (pathname === '/api/auth/status' && req.method === 'GET') {
@@ -8947,17 +9105,44 @@ const server = createServer((req, res) => {
         return;
       }
 
-      // 3. PDF placeholder (no ghostscript yet)
+      // 3. PDF → ghostscript renders page 1 → sharp → WebP
       if (ext === 'pdf') {
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="520" viewBox="0 0 400 520"><rect width="400" height="520" fill="#f3f4f8"/><rect x="60" y="60" width="280" height="380" rx="18" fill="#fff" stroke="#cdd3df" stroke-width="2"/><text x="200" y="260" font-family="-apple-system,Segoe UI,sans-serif" font-size="64" font-weight="700" fill="#5b6470" text-anchor="middle">PDF</text><text x="200" y="310" font-family="-apple-system,Segoe UI,sans-serif" font-size="18" fill="#8b94a3" text-anchor="middle">Click to view</text></svg>`;
         try {
+          const { spawn } = await import('node:child_process');
+          const { writeFileSync, readFileSync, mkdtempSync, rmSync } = await import('node:fs');
+          const os = await import('node:os');
+          const tmpDir = mkdtempSync(`${os.tmpdir()}/pdfthumb-`);
+          const inPath = `${tmpDir}/in.pdf`;
+          const outPath = `${tmpDir}/page.png`;
+          writeFileSync(inPath, originalBuf);
+          await new Promise((resolve, reject) => {
+            const gs = spawn('gs', [
+              '-dQUIET', '-dNOPAUSE', '-dBATCH', '-dSAFER',
+              '-sDEVICE=png16m', '-r100',
+              '-dFirstPage=1', '-dLastPage=1',
+              `-sOutputFile=${outPath}`, inPath,
+            ]);
+            gs.on('error', reject);
+            gs.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`gs exit ${code}`)));
+          });
+          const png = readFileSync(outPath);
+          try { rmSync(tmpDir, { recursive: true, force: true }); } catch {}
           const sharp = (await import('sharp')).default;
-          const buf = await sharp(Buffer.from(svg)).webp({ quality: 88 }).toBuffer();
-          sendWebp(buf);
-        } catch {
+          const thumb = await sharp(png)
+            .resize({ width: 400, withoutEnlargement: true })
+            .webp({ quality: 80 })
+            .toBuffer();
+          void (async () => {
+            try { await putContaboObject(cacheKey, thumb, 'image/webp'); }
+            catch (err) { console.warn(`[thumb] pdf cache write failed: ${err.message}`); }
+          })();
+          sendWebp(thumb);
+        } catch (err) {
+          console.warn(`[thumb] pdf render failed for ${cleanKey}: ${err.message}`);
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="520" viewBox="0 0 400 520"><rect width="400" height="520" fill="#f3f4f8"/><rect x="60" y="60" width="280" height="380" rx="18" fill="#fff" stroke="#cdd3df" stroke-width="2"/><text x="200" y="260" font-family="-apple-system,Segoe UI,sans-serif" font-size="64" font-weight="700" fill="#5b6470" text-anchor="middle">PDF</text></svg>`;
           res.writeHead(200, {
             'Content-Type': 'image/svg+xml',
-            'Cache-Control': 'public, max-age=31536000, immutable',
+            'Cache-Control': 'public, max-age=3600',
             'Access-Control-Allow-Origin': '*',
           });
           res.end(svg);
@@ -9809,7 +9994,7 @@ const server = createServer((req, res) => {
 
       store.statuses = uniqueStatuses([...store.statuses, nextStatus]);
       store.phases = uniquePhases([...(store.phases || defaultPhases), nextPhase]);
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
 
       send(res, createdNew ? 201 : 200, {
         ok: true,
@@ -9974,7 +10159,7 @@ const server = createServer((req, res) => {
         client.ghlLocationId = result.locationId;
       }
       client.ghlSource = client.ghlSource || 'ninja-tools-outbound';
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
 
       send(res, 200, {
         ok: true,
@@ -10005,7 +10190,7 @@ const server = createServer((req, res) => {
     }
 
     store.clients = nextClients;
-    await writeStore(store);
+    await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [] });
     await deleteReportHistory(id);
     await deleteClientProfile(id);
     send(res, 200, { ok: true, deletedId: id });
@@ -10024,7 +10209,7 @@ const server = createServer((req, res) => {
 
       const store = await readStore();
       store.statuses = uniqueStatuses([...store.statuses, status]);
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [] });
       send(res, 201, { ok: true, statuses: store.statuses });
     } catch (error) {
       send(res, 400, { error: error.message });
@@ -10044,7 +10229,7 @@ const server = createServer((req, res) => {
 
       const store = await readStore();
       store.phases = uniquePhases([...(store.phases || defaultPhases), phase]);
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [] });
       send(res, 201, { ok: true, phases: store.phases });
     } catch (error) {
       send(res, 400, { error: error.message });
@@ -10073,7 +10258,7 @@ const server = createServer((req, res) => {
 
       client.status = nextStatus;
       store.statuses = uniqueStatuses([...store.statuses, nextStatus]);
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
       send(res, 200, { ok: true, client: toSafeClient(client), statuses: store.statuses });
     } catch (error) {
       send(res, 400, { error: error.message });
@@ -10102,7 +10287,7 @@ const server = createServer((req, res) => {
 
       client.phase = nextPhase;
       store.phases = uniquePhases([...(store.phases || defaultPhases), nextPhase]);
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
       send(res, 200, { ok: true, client: toSafeClient(client), phases: store.phases });
     } catch (error) {
       send(res, 400, { error: error.message });
@@ -10136,7 +10321,7 @@ const server = createServer((req, res) => {
       client.manualNextImportStartDays = inputDays;
       client.manualNextImportSetDate = getTodayIsoDate();
 
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
       send(res, 200, { ok: true, client: toSafeClient(client) });
     } catch (error) {
       send(res, 400, { error: error.message });
@@ -10159,7 +10344,7 @@ const server = createServer((req, res) => {
       }
 
       client.yearlyIncome = yearlyIncome;
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
       send(res, 200, { ok: true, client: toSafeClient(client) });
     } catch (error) {
       send(res, 400, { error: error.message });
@@ -10233,7 +10418,7 @@ const server = createServer((req, res) => {
 
       store.statuses = uniqueStatuses([...store.statuses, nextStatus]);
       store.phases = uniquePhases([...(store.phases || defaultPhases), nextPhase]);
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
       send(res, 200, { ok: true, client: toSafeClient(client), statuses: store.statuses, phases: store.phases });
     } catch (error) {
       send(res, 400, { error: error.message });
@@ -10264,7 +10449,9 @@ const server = createServer((req, res) => {
       client.secretKey = refreshSecret || getLastFourDigits(client.ssn || '');
 
       const hydratedFrom = hydrateBrowserCredentialsFromDuplicate(store, client);
-      await writeStore(store);
+      const syncClientIds = [client.id];
+      if (hydratedFrom && hydratedFrom.id) syncClientIds.push(hydratedFrom.id);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds });
 
       const refreshMode = chooseReportRefreshMode(client);
       if (
@@ -10720,7 +10907,7 @@ const server = createServer((req, res) => {
       }
       store.statuses = uniqueStatuses([...store.statuses, client.status]);
       store.phases = uniquePhases([...(store.phases || defaultPhases), client.phase]);
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
       const savedClient = existingClient || client;
       await insertReportSnapshot(savedClient, {
         source: savedClient.creditReportSource,
@@ -10737,7 +10924,7 @@ const server = createServer((req, res) => {
           savedClient.ghlContactId = gohighlevelSync.contactId;
           savedClient.ghlLocationId = gohighlevelSync.locationId || savedClient.ghlLocationId || '';
           savedClient.ghlSource = 'ninja-tools-outbound';
-          await writeStore(store);
+          await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [savedClient.id] });
         }
       } catch (error) {
         gohighlevelSync = {
@@ -10916,7 +11103,7 @@ const server = createServer((req, res) => {
       client.phase = advanceClientPhase(client.phase);
       store.phases = uniquePhases([...(store.phases || defaultPhases), client.phase]);
 
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
 
       send(res, 200, {
         ok: true,
@@ -11010,7 +11197,7 @@ const server = createServer((req, res) => {
       client.phase = advanceClientPhase(client.phase);
       store.phases = uniquePhases([...(store.phases || defaultPhases), client.phase]);
 
-      await writeStore(store);
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
 
       send(res, 200, {
         ok: true,
@@ -11086,4 +11273,8 @@ io.on('connection', (socket) => {
 server.listen(port, host, async () => {
   await ensureStorageReady();
   console.log(`Tools Ninja is running at http://${host}:${port}`);
+  // Pre-warm the client profile map cache so the first user request is never cold.
+  loadClientProfilesMap('admin')
+    .then((m) => console.log(`[cache] profile map pre-warmed: ${m.size} clients`))
+    .catch((err) => console.warn(`[cache] profile map pre-warm failed: ${err.message}`));
 });

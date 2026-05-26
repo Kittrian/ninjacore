@@ -1133,6 +1133,7 @@ const main = async () => {
 
   const runProfileDir = await mkdtemp(path.join(tmpdir(), 'tools-ninja-iso-'));
   let context;
+  const chromiumExecutablePath = String(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '').trim();
   try {
     context = await chromium.launchPersistentContext(runProfileDir, {
       headless: true,
@@ -1148,6 +1149,7 @@ const main = async () => {
         '--no-sandbox',
         '--disable-dev-shm-usage',
       ],
+      ...(chromiumExecutablePath ? { executablePath: chromiumExecutablePath } : {}),
     });
     await context.addInitScript(() => {
       try {
