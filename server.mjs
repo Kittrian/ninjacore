@@ -32,6 +32,11 @@ const vantageSimulatorScriptFile = path.join(__dirname, 'scripts', 'models', 'va
 const pythonBinary = String(process.env.PYTHON_BIN || 'python3').trim() || 'python3';
 const groqApiKey = String(process.env.GROQ_API_KEY || '').trim();
 const anthropicApiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
+const googleClientId = String(process.env.GOOGLE_CLIENT_ID || '').trim();
+const googleClientSecret = String(process.env.GOOGLE_CLIENT_SECRET || '').trim();
+const githubClientId = String(process.env.GITHUB_CLIENT_ID || '').trim();
+const githubClientSecret = String(process.env.GITHUB_CLIENT_SECRET || '').trim();
+const oauthRedirectUri = String(process.env.OAUTH_REDIRECT_URI || 'https://api.ninjadispute.com/api/auth/callback').trim();
 
 let initialS3MirrorQueued = false;
 const storageReadyByOwner = new Map();
@@ -8618,6 +8623,147 @@ const server = createServer((req, res) => {
     return;
   }
 
+  if (pathname === '/api/auth/google-login' && req.method === 'GET') {
+    const state = createHash('sha256').update(randomUUID()).digest('hex');
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', googleClientId);
+    authUrl.searchParams.set('redirect_uri', oauthRedirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', 'openid email profile');
+    authUrl.searchParams.set('state', state);
+    res.writeHead(302, { 'Location': authUrl.toString() });
+    res.end();
+    return;
+  }
+
+  if (pathname === '/api/auth/github-login' && req.method === 'GET') {
+    const state = createHash('sha256').update(randomUUID()).digest('hex');
+    const authUrl = new URL('https://github.com/login/oauth/authorize');
+    authUrl.searchParams.set('client_id', githubClientId);
+    authUrl.searchParams.set('redirect_uri', oauthRedirectUri);
+    authUrl.searchParams.set('scope', 'user:email');
+    authUrl.searchParams.set('state', state);
+    res.writeHead(302, { 'Location': authUrl.toString() });
+    res.end();
+    return;
+  }
+
+  if (pathname === '/api/auth/callback' && req.method === 'GET') {
+    try {
+      const code = url.searchParams.get('code');
+      const state = url.searchParams.get('state');
+      const provider = url.searchParams.get('provider') || 'google';
+
+      if (!code) {
+        send(res, 400, { error: 'Missing authorization code.' });
+        return;
+      }
+
+      let accessToken = '';
+      let userEmail = '';
+      let userName = '';
+
+      if (provider === 'google') {
+        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            code,
+            client_id: googleClientId,
+            client_secret: googleClientSecret,
+            redirect_uri: oauthRedirectUri,
+            grant_type: 'authorization_code',
+          }).toString(),
+        });
+
+        if (!tokenRes.ok) {
+          throw new Error(`Google token exchange failed: ${tokenRes.status}`);
+        }
+
+        const tokenData = await tokenRes.json();
+        accessToken = tokenData.access_token;
+
+        const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        if (!userRes.ok) {
+          throw new Error(`Google user info fetch failed: ${userRes.status}`);
+        }
+
+        const userData = await userRes.json();
+        userEmail = userData.email;
+        userName = userData.name;
+      } else if (provider === 'github') {
+        const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            code,
+            client_id: githubClientId,
+            client_secret: githubClientSecret,
+            redirect_uri: oauthRedirectUri,
+          }),
+        });
+
+        if (!tokenRes.ok) {
+          throw new Error(`GitHub token exchange failed: ${tokenRes.status}`);
+        }
+
+        const tokenData = await tokenRes.json();
+        accessToken = tokenData.access_token;
+
+        const userRes = await fetch('https://api.github.com/user', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        if (!userRes.ok) {
+          throw new Error(`GitHub user info fetch failed: ${userRes.status}`);
+        }
+
+        const userData = await userRes.json();
+        userName = userData.login;
+        userEmail = userData.email;
+
+        if (!userEmail) {
+          const emailRes = await fetch('https://api.github.com/user/emails', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (emailRes.ok) {
+            const emails = await emailRes.json();
+            userEmail = emails.find((e) => e.primary)?.email || emails[0]?.email || userName;
+          }
+        }
+      }
+
+      if (!userEmail) {
+        send(res, 400, { error: 'Could not retrieve user email from OAuth provider.' });
+        return;
+      }
+
+      const ssoUsername = normalizeUsername(userEmail);
+      dynamicUsernames.add(ssoUsername);
+
+      const redirectUrl = new URL('https://ninjadispute.com');
+      redirectUrl.searchParams.set('token', accessToken);
+      redirectUrl.searchParams.set('user', ssoUsername);
+
+      res.writeHead(302, {
+        'Location': redirectUrl.toString(),
+        'Set-Cookie': [
+          `txn=${encodeURIComponent(ssoUsername)}; Path=/; Max-Age=3600; SameSite=Lax; Secure`,
+        ],
+      });
+      res.end();
+    } catch (error) {
+      send(res, 500, { error: error.message || 'OAuth callback failed.' });
+    }
+    return;
+  }
+
   if (pathname === '/api/auth/sso-login' && req.method === 'POST') {
     try {
       // Short-circuit: if txn session is already valid, no SSO verification needed.
@@ -8741,6 +8887,122 @@ const server = createServer((req, res) => {
       res.end(resolved.body);
     } catch (error) {
       send(res, 500, { error: error.message || 'Document proxy failed.' });
+    }
+    return;
+  }
+
+  // ── Thumbnail proxy: /api/documents/thumb?key=... ───────────────────────────
+  // Returns a 400px-wide WebP preview of the source document. Generated on the
+  // fly the first time and cached in Contabo S3 at `thumbs/{key}.webp` so
+  // subsequent requests are just a stream-through.
+  //   - Images: sharp resize → WebP
+  //   - PDFs: not yet (ghostscript missing on host) — falls back to a generic
+  //     PDF placeholder SVG so the UI still has something to render.
+  if (pathname === '/api/documents/thumb' && req.method === 'GET') {
+    try {
+      const storageKey = String(url.searchParams.get('key') || '').trim();
+      if (!storageKey) {
+        send(res, 400, { error: 'Missing document key.' });
+        return;
+      }
+      const cleanKey = storageKey.replace(/\\/g, '/').replace(/\?.*$/, '');
+      const lastDot = cleanKey.lastIndexOf('.');
+      const ext = lastDot >= 0 ? cleanKey.slice(lastDot + 1).toLowerCase() : '';
+      const flatBase = cleanKey.replace(/\//g, '_').slice(0, lastDot >= 0 ? -ext.length - 1 : undefined);
+      const cacheKey = `thumbs/${flatBase}.webp`;
+
+      const sendWebp = (buf) => {
+        res.writeHead(200, {
+          'Content-Type': 'image/webp',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Cross-Origin-Resource-Policy': 'cross-origin',
+          'Access-Control-Allow-Origin': '*',
+          'Content-Length': String(buf.length),
+        });
+        res.end(buf);
+      };
+
+      // 1. Try cache
+      try {
+        const cached = await fetchContaboObject(cacheKey);
+        if (cached.ok && cached.body) {
+          sendWebp(Buffer.from(cached.body));
+          return;
+        }
+      } catch { /* miss */ }
+
+      // 2. Fetch original
+      let originalBuf = null;
+      const originalResp = await fetchContaboObject(cleanKey);
+      if (originalResp.ok && originalResp.body) {
+        originalBuf = Buffer.from(originalResp.body);
+      } else {
+        const localFallback = await fetchLocalPublicDocument(cleanKey);
+        if (localFallback.ok && localFallback.body) {
+          originalBuf = Buffer.from(localFallback.body);
+        }
+      }
+      if (!originalBuf) {
+        send(res, 404, { error: 'Source document not found.' });
+        return;
+      }
+
+      // 3. PDF placeholder (no ghostscript yet)
+      if (ext === 'pdf') {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="520" viewBox="0 0 400 520"><rect width="400" height="520" fill="#f3f4f8"/><rect x="60" y="60" width="280" height="380" rx="18" fill="#fff" stroke="#cdd3df" stroke-width="2"/><text x="200" y="260" font-family="-apple-system,Segoe UI,sans-serif" font-size="64" font-weight="700" fill="#5b6470" text-anchor="middle">PDF</text><text x="200" y="310" font-family="-apple-system,Segoe UI,sans-serif" font-size="18" fill="#8b94a3" text-anchor="middle">Click to view</text></svg>`;
+        try {
+          const sharp = (await import('sharp')).default;
+          const buf = await sharp(Buffer.from(svg)).webp({ quality: 88 }).toBuffer();
+          sendWebp(buf);
+        } catch {
+          res.writeHead(200, {
+            'Content-Type': 'image/svg+xml',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(svg);
+        }
+        return;
+      }
+
+      // 4. Image → sharp → WebP
+      let sharp;
+      try { sharp = (await import('sharp')).default; }
+      catch (err) {
+        console.warn('[thumb] sharp missing, serving original:', err.message);
+        res.writeHead(200, {
+          'Content-Type': originalResp.contentType || 'application/octet-stream',
+          'Cache-Control': 'public, max-age=3600',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(originalBuf);
+        return;
+      }
+
+      let thumb;
+      try {
+        thumb = await sharp(originalBuf)
+          .rotate()
+          .resize({ width: 400, withoutEnlargement: true })
+          .webp({ quality: 80 })
+          .toBuffer();
+      } catch (err) {
+        send(res, 500, { error: `Thumbnail generation failed: ${err.message}` });
+        return;
+      }
+
+      // 5. Fire-and-forget cache write (skip on failure)
+      void (async () => {
+        try {
+          await putContaboObject(cacheKey, thumb, 'image/webp');
+        } catch (err) {
+          console.warn(`[thumb] cache write failed for ${cacheKey}: ${err.message}`);
+        }
+      })();
+
+      sendWebp(thumb);
+    } catch (error) {
+      send(res, 500, { error: error.message || 'Thumbnail proxy failed.' });
     }
     return;
   }
