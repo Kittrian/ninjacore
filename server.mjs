@@ -420,11 +420,20 @@ const compressBuffer = (buf, encoding) => {
   return zlib.gzipSync(buf, { level: 6 });
 };
 
+const ETAG_MIN_BYTES = 1024;
+
+const computeWeakEtag = (buf) => {
+  const hash = createHash('sha1').update(buf).digest('base64').slice(0, 16);
+  return `W/"${buf.length.toString(16)}-${hash}"`;
+};
+
 const send = (res, statusCode, payload, contentType = 'application/json; charset=utf-8') => {
   const ctx = requestContext.getStore();
   const activeOrigin = String(ctx?.requestOrigin || '').trim();
   const requestHeaders = String(ctx?.requestHeaders || '').trim();
   const acceptEncoding = String(ctx?.acceptEncoding || '').trim();
+  const ifNoneMatch = String(ctx?.ifNoneMatch || '').trim();
+  const method = String(ctx?.method || '').toUpperCase();
   const corsHeaders = buildCorsHeaders(activeOrigin, requestHeaders);
 
   let bodyBuf;
@@ -444,6 +453,19 @@ const send = (res, statusCode, payload, contentType = 'application/json; charset
     ...corsHeaders,
   };
 
+  // ETag short-circuit for cacheable GET/HEAD responses on success.
+  const canEtag = statusCode === 200 && (method === 'GET' || method === 'HEAD') && bodyBuf.length >= ETAG_MIN_BYTES;
+  let etag = null;
+  if (canEtag) {
+    etag = computeWeakEtag(bodyBuf);
+    headers.ETag = etag;
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+  }
+
   const encoding = bodyBuf.length >= COMPRESS_MIN_BYTES ? pickEncoding(acceptEncoding) : null;
   if (encoding) {
     try {
@@ -451,7 +473,7 @@ const send = (res, statusCode, payload, contentType = 'application/json; charset
       headers['Content-Encoding'] = encoding;
       headers['Content-Length'] = String(compressed.length);
       res.writeHead(statusCode, headers);
-      res.end(compressed);
+      res.end(method === 'HEAD' ? undefined : compressed);
       return;
     } catch {
       // Fall through to uncompressed.
@@ -460,7 +482,7 @@ const send = (res, statusCode, payload, contentType = 'application/json; charset
 
   headers['Content-Length'] = String(bodyBuf.length);
   res.writeHead(statusCode, headers);
-  res.end(bodyBuf);
+  res.end(method === 'HEAD' ? undefined : bodyBuf);
 };
 
 const notFound = (res) => send(res, 404, { error: 'Not found' });
@@ -8483,12 +8505,46 @@ const ensureStorageReady = async (ownerKey = getCurrentOwnerKey()) => {
   await storageReadyByOwner.get(normalizedOwner);
 };
 
+// Per-owner cache of the parsed store.json keyed by file mtime. Avoids the
+// 7.5MB JSON.parse on every read. writeStore() invalidates by writing a new
+// mtime; bulk imports / external file edits naturally bust the cache too.
+const storeFileCache = new Map();
+const storeFileLoading = new Map();
+
+const invalidateStoreFileCache = (ownerKey) => {
+  if (ownerKey == null) { storeFileCache.clear(); return; }
+  storeFileCache.delete(normalizeOwnerKey(ownerKey));
+};
+
+const readStoreFileCached = async (targetDataFile, owner) => {
+  let stat;
+  try { stat = await fs.stat(targetDataFile); }
+  catch { stat = null; }
+  const mtimeMs = stat ? stat.mtimeMs : 0;
+  const cached = storeFileCache.get(owner);
+  if (cached && cached.mtimeMs === mtimeMs) return cached.parsed;
+  let inflight = storeFileLoading.get(owner);
+  if (inflight) return inflight;
+  inflight = (async () => {
+    try {
+      const raw = await fs.readFile(targetDataFile, 'utf8');
+      const parsed = normalizeStore(JSON.parse(raw));
+      storeFileCache.set(owner, { mtimeMs, parsed });
+      return parsed;
+    } finally {
+      storeFileLoading.delete(owner);
+    }
+  })();
+  storeFileLoading.set(owner, inflight);
+  return inflight;
+};
+
 const readStore = async (ownerKey = getCurrentOwnerKey()) => {
   const normalizedOwner = normalizeOwnerKey(ownerKey);
   const targetDataFile = getOwnerDataFile(normalizedOwner);
   await ensureStorageReady(normalizedOwner);
-  const raw = await fs.readFile(targetDataFile, 'utf8');
-  return mergeStoreWithProfileDb(normalizeStore(JSON.parse(raw)), normalizedOwner);
+  const parsed = await readStoreFileCached(targetDataFile, normalizedOwner);
+  return mergeStoreWithProfileDb(parsed, normalizedOwner);
 };
 
 const writeStore = async (store, ownerKey = getCurrentOwnerKey(), options = {}) => {
@@ -8621,7 +8677,9 @@ const server = createServer((req, res) => {
   const requestOrigin = resolveCorsOrigin(requestOriginHeader);
   const requestHeaders = String(req.headers['access-control-request-headers'] || '').trim();
   const acceptEncoding = String(req.headers['accept-encoding'] || '').trim();
-  requestContext.run({ ownerKey: scopedOwnerKey, knownUsers: dynamicUsernames, requestOrigin, requestHeaders, acceptEncoding }, async () => {
+  const ifNoneMatch = String(req.headers['if-none-match'] || '').trim();
+  const method = String(req.method || '').toUpperCase();
+  requestContext.run({ ownerKey: scopedOwnerKey, knownUsers: dynamicUsernames, requestOrigin, requestHeaders, acceptEncoding, ifNoneMatch, method }, async () => {
     try {
     const corsHeaders = buildCorsHeaders(requestOrigin, requestHeaders);
     const originalWriteHead = res.writeHead.bind(res);
