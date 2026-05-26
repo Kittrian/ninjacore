@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { api, ApiError } from '@/lib/api';
 import type { ClientDetailResponse } from '@/lib/types';
 import BureauCards from '@/components/BureauCards';
+import UploadDocument from '@/components/UploadDocument';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,10 @@ export default async function ClientDetailPage({
               <div className="text-xs text-white/50 mt-3">Open accounts</div>
               <div className="text-lg tabular-nums">{data.client.openAccounts?.length ?? 0}</div>
             </div>
+          </section>
+
+          <section className="mt-8">
+            <UploadDocument clientId={data.client.id} />
           </section>
         </>
       )}

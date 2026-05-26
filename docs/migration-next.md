@@ -132,3 +132,94 @@ Round-trip benchmarks projected (US east coast user):
 | `/clients/:id` warm | ~80ms | **~30ms** edge SSR (cached upstream JSON) |
 | `POST /api/proxy/clients/:id/refresh-report` | ~600ms (Node) | **~50ms** to dispatch (Rust returns 202 instantly) |
 | Cache poll (304) | 81ms | **~10ms** edge cache hit, no upstream call |
+
+---
+
+## Upload pipeline — direct-to-R2 with presigned URLs
+
+**Live as of de17aed+** (`POST /api/uploads/presign` + `POST /api/clients/:id/documents/attach`):
+
+```
+1. Browser → Next.js /api/proxy/uploads/presign
+                ↓
+2. Rust ninjacore signs an AWS SigV4 PUT URL for R2 (5-min TTL)
+                ↓
+3. Browser PUTs file bytes DIRECT to R2 (Hetzner never touches them)
+                ↓
+4. Browser → Next.js /api/proxy/clients/:id/documents/attach
+                ↓
+5. Rust CREATE client_documents { storage_key, public_url, ... } in SurrealDB
+                ↓
+6. (later, async) thumbnail worker watches client_documents, generates WebP
+```
+
+Required env on the Rust backend:
+
+| Var | Example | Purpose |
+|---|---|---|
+| `R2_ENDPOINT` | `https://<account>.r2.cloudflarestorage.com` | S3 API endpoint |
+| `R2_BUCKET` | `clients-docs` | Bucket name |
+| `R2_ACCESS_KEY` | (R2 token) | Signing key |
+| `R2_SECRET_KEY` | (R2 token) | Signing secret |
+| `R2_REGION` | `auto` (R2) or `us-east-1` (Contabo) | Sig V4 region |
+| `R2_PUBLIC_BASE` | `https://r2.ninjadispute.com` | Optional read URL base (Worker) |
+
+Falls back to `CONTABO_S3_*` env vars when `R2_*` is missing so existing
+deploys keep working unchanged.
+
+### Why this is faster than the old upload path
+
+| Stage | Old (multipart through Node) | New (direct-to-R2 via presigned URL) |
+|---|---|---|
+| Bytes traverse Hetzner | Yes — eats bandwidth, RAM, event loop | **No — bytes go browser → R2 only** |
+| Time to first byte stored | 2× the round trip (upload then S3 write) | 1× round trip |
+| Concurrency limit | Bound by Node event loop | Bound by R2 (essentially unlimited) |
+| Max file size | Node memory pressure | 32MB cap configurable per-request |
+| Failure surface | One opaque "upload failed" | Browser sees R2's exact response |
+
+### Cloudflare Worker in front of R2 (long-term)
+
+Set `R2_PUBLIC_BASE` to a Worker URL that:
+
+1. Verifies a short-lived **PASETO token** issued by `ninja-auth`
+2. Honors `Cache-Control: public, max-age=31536000, immutable` on hashed keys
+3. Adds `Vary: Authorization` so per-user responses don't pollute the cache
+4. Streams the R2 object back
+
+Skeleton (Workers TypeScript):
+
+```ts
+export default {
+  async fetch(req: Request, env: Env): Promise<Response> {
+    const url = new URL(req.url);
+    const key = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+    if (!key) return new Response('missing key', { status: 400 });
+
+    const token = req.headers.get('authorization')?.replace(/^Bearer /, '');
+    if (!await verifyPaseto(token, env.AUTH_PASETO_PUBLIC_KEY)) {
+      return new Response('unauthorized', { status: 401 });
+    }
+
+    const obj = await env.R2.get(key, { range: req.headers });
+    if (!obj) return new Response('not found', { status: 404 });
+
+    const h = new Headers();
+    obj.writeHttpMetadata(h);
+    h.set('etag', obj.httpEtag);
+    h.set('cache-control', 'private, max-age=300');
+    h.set('vary', 'authorization');
+    return new Response(obj.body, { headers: h });
+  },
+};
+```
+
+Bind R2 in `wrangler.toml`:
+
+```toml
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "clients-docs"
+```
+
+Then on Hetzner: `R2_PUBLIC_BASE=https://r2.ninjadispute.com` and the
+`public_url` returned to clients automatically goes through the auth gate.

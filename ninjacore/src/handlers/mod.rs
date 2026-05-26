@@ -11,3 +11,4 @@ pub mod payments;
 pub mod settings;
 pub mod sso;
 pub mod training;
+pub mod uploads;

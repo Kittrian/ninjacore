@@ -3,6 +3,8 @@ mod config;
 mod db;
 mod error;
 mod handlers;
+mod http;
+mod r2;
 mod report_run;
 mod state;
 
@@ -108,6 +110,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/client-phases", post(handlers::misc::add_phase))
         // Uploads
         .route("/uploads/text-attachment", post(handlers::misc::upload_text_attachment))
+        .route("/uploads/presign", post(handlers::uploads::presign))
         // Clients full CRUD
         .route("/clients", get(handlers::clients::list_clients).post(handlers::misc::create_client))
         .route(
@@ -120,6 +123,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/clients/:id/financial-profile", axum::routing::patch(handlers::clients::patch_financial))
         .route("/clients/:id/profile", axum::routing::patch(handlers::clients::patch_profile))
         .route("/clients/:id/refresh-report", post(handlers::clients::refresh_report))
+        .route("/clients/:id/documents/attach", post(handlers::uploads::attach))
         .route("/report-runs/:id", get(handlers::clients::get_report_run))
         .route("/clients/import-csv", post(handlers::misc::import_csv))
         // Report sync (stubs)
@@ -155,8 +159,76 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(&cfg.bind_addr).await?;
-    tracing::info!(addr = %cfg.bind_addr, "ninjacore listening");
-    axum::serve(listener, app).await?;
+    // Always bind TCP — the browser-runner script calls back via HTTP and
+    // needs a host:port. Optionally also bind a Unix domain socket so Caddy
+    // can proxy to ninjacore over the loopback filesystem (skips a TCP
+    // roundtrip per request — measurable on streamed PDF responses).
+    let tcp_listener = tokio::net::TcpListener::bind(&cfg.bind_addr).await?;
+    tracing::info!(addr = %cfg.bind_addr, "ninjacore listening (tcp)");
+
+    let unix_socket_path = std::env::var("UNIX_SOCKET").ok().filter(|s| !s.trim().is_empty());
+
+    let tcp_app = app.clone();
+    let tcp_handle = tokio::spawn(async move {
+        if let Err(e) = axum::serve(tcp_listener, tcp_app).await {
+            tracing::error!(error = %e, "tcp serve ended");
+        }
+    });
+
+    if let Some(path) = unix_socket_path {
+        use hyper_util::rt::{TokioExecutor, TokioIo};
+        use hyper_util::server::conn::auto;
+        use hyper_util::service::TowerToHyperService;
+        use std::os::unix::fs::PermissionsExt;
+        use tower::Service;
+
+        // Stale socket file would block bind — ninjacore restart wouldn't work
+        // without this. Caddy gracefully reconnects.
+        let _ = std::fs::remove_file(&path);
+        let unix_listener = tokio::net::UnixListener::bind(&path)?;
+        // 0o660 + a shared group between caddy & ninjacore is the right
+        // long-term answer; 0o666 is fine for single-user dev/prod boxes.
+        let mode: u32 = std::env::var("UNIX_SOCKET_MODE")
+            .ok()
+            .and_then(|s| u32::from_str_radix(s.trim_start_matches("0o"), 8).ok())
+            .unwrap_or(0o666);
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode))?;
+        tracing::info!(path = %path, mode = format!("0o{:o}", mode), "ninjacore listening (unix)");
+
+        // axum 0.7's `axum::serve` only accepts `TcpListener`, so wire the
+        // unix socket up to hyper-util directly. Same Router → Service stack,
+        // same handlers — just a different transport.
+        let unix_app = app;
+        tokio::spawn(async move {
+            let mut make_svc = unix_app.into_make_service();
+            loop {
+                let (stream, _addr) = match unix_listener.accept().await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::error!(error = %e, "unix accept failed");
+                        continue;
+                    }
+                };
+                let tower_svc = match make_svc.call(()).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!(error = %e, "make_service call failed");
+                        continue;
+                    }
+                };
+                let hyper_svc = TowerToHyperService::new(tower_svc);
+                tokio::spawn(async move {
+                    if let Err(e) = auto::Builder::new(TokioExecutor::new())
+                        .serve_connection(TokioIo::new(stream), hyper_svc)
+                        .await
+                    {
+                        tracing::debug!(error = %e, "unix conn closed");
+                    }
+                });
+            }
+        });
+    }
+
+    tcp_handle.await?;
     Ok(())
 }
