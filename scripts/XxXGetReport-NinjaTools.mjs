@@ -586,18 +586,28 @@ const tryClickIdentityIqRefreshControl = async (iqPage) => {
     iqPage.getByRole('button', { name: refreshName }).first(),
     iqPage.getByRole('link', { name: refreshName }).first(),
     iqPage.locator('button:has-text("Refresh Report"), a:has-text("Refresh Report"), [role="button"]:has-text("Refresh Report")').first(),
+    iqPage.locator('button, a, [role="button"]').filter({ hasText: refreshName }).first(),
   ];
 
-  for (const locator of refreshLocators) {
+  for (let i = 0; i < refreshLocators.length; i += 1) {
+    const locator = refreshLocators[i];
     try {
-      await locator.waitFor({ state: 'visible', timeout: 6000 });
+      const isVisible = await locator.isVisible({ timeout: 4000 }).catch(() => false);
+      if (!isVisible) {
+        console.log(`-> Refresh control locator ${i + 1}/${refreshLocators.length} not visible`);
+        continue;
+      }
+      console.log(`-> Found refresh control with locator ${i + 1}, attempting click...`);
       await locator.click({ timeout: 8000 });
+      console.log(`-> Refresh control clicked successfully`);
+      await iqPage.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
       return true;
-    } catch {
-      // try next locator
+    } catch (err) {
+      console.log(`-> Refresh control locator ${i + 1} click failed: ${err.message}`);
     }
   }
 
+  console.log('-> No refresh control found with any locator strategy');
   return false;
 };
 
