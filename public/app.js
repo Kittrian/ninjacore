@@ -107,7 +107,7 @@ const setBootLoadingOverlay = (isActive, message = '') => {
   }
 };
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
-const APP_SCRIPT_VERSION = 'v3.01 loaded';
+const APP_SCRIPT_VERSION = 'v3.02 loaded';
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
 const widgetBusinessNameStorageKey = 'tools-ninja-widget-business-name';
@@ -2355,7 +2355,7 @@ const getAccountVisualType = (account) => {
     return {
       key: 'reported-account',
       label: 'Reported Account',
-      iconPath: '/assets/account-types/reported.png',
+      iconPath: '/assets/account-types/reported.svg',
       isSelfReported: true,
     };
   }
@@ -6268,9 +6268,20 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
     setWidgetConsoleMessage('Refreshing report... Lets Go !', false, true);
     setRefreshLoaderRunning(true);
     refreshRunRequested = true;
+
+    const detailShell = document.getElementById('clientDetail');
+    const currentMonitoringUsername = String(detailShell?.querySelector('.monitoring-username-input')?.value || '').trim();
+    const currentMonitoringPassword = String(detailShell?.querySelector('.monitoring-password-input')?.value || '').trim();
+    const currentMonitoringAgency = selectedClient?.monitoringAgency || '';
+
     const payload = await request(`/api/clients/${state.selectedClientId}/refresh-report`, {
       method: 'POST',
-      body: JSON.stringify({ forcePaid }),
+      body: JSON.stringify({
+        forcePaid,
+        monitoringAgency: currentMonitoringAgency,
+        monitoringUsername: currentMonitoringUsername,
+        monitoringPassword: currentMonitoringPassword,
+      }),
     });
 
     if (payload.runId) {

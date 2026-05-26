@@ -265,12 +265,134 @@ DEFINE FIELD last_synced_at    ON sync_state TYPE string;
 
 DEFINE INDEX idx_sync_key      ON sync_state FIELDS source, table_name UNIQUE;
 
+-- ─────────────────────────────────────────────
+-- api_users table  (from api.Users)
+-- Kept separate from ninjatools users until auth is intentionally unified.
+-- ─────────────────────────────────────────────
+DEFINE TABLE api_users SCHEMAFULL;
+DEFINE FIELD api_user_id       ON api_users TYPE int;
+DEFINE FIELD name              ON api_users TYPE option<string>;
+DEFINE FIELD email             ON api_users TYPE string;
+DEFINE FIELD password_hash     ON api_users TYPE string;
+DEFINE FIELD profile           ON api_users TYPE option<string>;
+DEFINE FIELD token_version     ON api_users TYPE int DEFAULT 0;
+DEFINE FIELD tenant_id         ON api_users TYPE option<int>;
+DEFINE FIELD is_online         ON api_users TYPE bool DEFAULT false;
+DEFINE FIELD status            ON api_users TYPE option<string>;
+DEFINE FIELD last_login        ON api_users TYPE option<datetime>;
+DEFINE FIELD created_at        ON api_users TYPE option<datetime>;
+DEFINE FIELD updated_at        ON api_users TYPE option<datetime>;
+DEFINE INDEX idx_api_users_email ON api_users FIELDS email UNIQUE;
+DEFINE INDEX idx_api_users_api_id ON api_users FIELDS api_user_id UNIQUE;
+
+-- ─────────────────────────────────────────────
+-- api_reports table  (from api.Reports)
+-- Holds saved dispute/report arrays without touching merged clients yet.
+-- ─────────────────────────────────────────────
+DEFINE TABLE api_reports SCHEMAFULL;
+DEFINE FIELD client_id               ON api_reports TYPE int;
+DEFINE FIELD username                ON api_reports TYPE option<string>;
+DEFINE FIELD password                ON api_reports TYPE option<string>;
+DEFINE FIELD report_type             ON api_reports TYPE option<string>;
+DEFINE FIELD deletions_lists         ON api_reports TYPE option<array>;
+DEFINE FIELD compare                 ON api_reports TYPE option<array>;
+DEFINE FIELD progress                ON api_reports TYPE option<array>;
+DEFINE FIELD accounts                ON api_reports TYPE option<array>;
+DEFINE FIELD alternate_letters       ON api_reports TYPE option<array>;
+DEFINE FIELD new_version             ON api_reports TYPE bool DEFAULT true;
+DEFINE FIELD created_at              ON api_reports TYPE option<datetime>;
+DEFINE FIELD updated_at              ON api_reports TYPE option<datetime>;
+DEFINE INDEX idx_api_reports_client_id ON api_reports FIELDS client_id UNIQUE;
+
+-- ─────────────────────────────────────────────
+-- report_data_entries table  (from api.ReportData)
+-- Stores dated imported report payload partitions and credit score blobs.
+-- ─────────────────────────────────────────────
+DEFINE TABLE report_data_entries SCHEMAFULL;
+DEFINE FIELD client_id               ON report_data_entries TYPE int;
+DEFINE FIELD key_date                ON report_data_entries TYPE option<string>;
+DEFINE FIELD inquiry_partition       ON report_data_entries TYPE option<array>;
+DEFINE FIELD subscriber              ON report_data_entries TYPE option<array>;
+DEFINE FIELD trade_line_partition    ON report_data_entries TYPE option<array>;
+DEFINE FIELD credit_score            ON report_data_entries TYPE option<object>;
+DEFINE FIELD deletions_lists         ON report_data_entries TYPE option<array>;
+DEFINE FIELD public_record_partition ON report_data_entries TYPE option<array>;
+DEFINE FIELD origin                  ON report_data_entries TYPE option<object>;
+DEFINE FIELD created_at              ON report_data_entries TYPE option<datetime>;
+DEFINE FIELD updated_at              ON report_data_entries TYPE option<datetime>;
+DEFINE INDEX idx_report_data_client_key ON report_data_entries FIELDS client_id, key_date UNIQUE;
+DEFINE INDEX idx_report_data_client_date ON report_data_entries FIELDS client_id, key_date;
+
+-- ─────────────────────────────────────────────
+-- extra_infos table  (from api.ExtraInfos)
+-- Name/value client extras kept separate from merged clients for now.
+-- ─────────────────────────────────────────────
+DEFINE TABLE extra_infos SCHEMAFULL;
+DEFINE FIELD client_id               ON extra_infos TYPE int;
+DEFINE FIELD name                    ON extra_infos TYPE string;
+DEFINE FIELD value                   ON extra_infos TYPE option<string>;
+DEFINE FIELD created_at              ON extra_infos TYPE option<datetime>;
+DEFINE FIELD updated_at              ON extra_infos TYPE option<datetime>;
+DEFINE INDEX idx_extra_infos_client  ON extra_infos FIELDS client_id;
+
+-- ─────────────────────────────────────────────
+-- alternate_letters table  (from api.AlternateLetters)
+-- ─────────────────────────────────────────────
+DEFINE TABLE alternate_letters SCHEMAFULL;
+DEFINE FIELD name                    ON alternate_letters TYPE string;
+DEFINE FIELD file_html               ON alternate_letters TYPE option<string>;
+DEFINE FIELD created_at              ON alternate_letters TYPE option<datetime>;
+DEFINE FIELD updated_at              ON alternate_letters TYPE option<datetime>;
+DEFINE INDEX idx_alternate_letters_name ON alternate_letters FIELDS name;
+
+-- ─────────────────────────────────────────────
+-- creditor_contacts table  (from api.CreditorContacts)
+-- ─────────────────────────────────────────────
+DEFINE TABLE creditor_contacts SCHEMAFULL;
+DEFINE FIELD name                    ON creditor_contacts TYPE string;
+DEFINE FIELD value                   ON creditor_contacts TYPE option<string>;
+DEFINE FIELD created_at              ON creditor_contacts TYPE option<datetime>;
+DEFINE FIELD updated_at              ON creditor_contacts TYPE option<datetime>;
+DEFINE INDEX idx_creditor_contacts_name ON creditor_contacts FIELDS name;
+
+-- ─────────────────────────────────────────────
+-- gemini_keys table  (from api.gemini_keys)
+-- ─────────────────────────────────────────────
+DEFINE TABLE gemini_keys SCHEMAFULL;
+DEFINE FIELD key                     ON gemini_keys TYPE string;
+DEFINE FIELD owner                   ON gemini_keys TYPE option<string>;
+DEFINE FIELD is_active               ON gemini_keys TYPE bool DEFAULT true;
+DEFINE FIELD last_used_at            ON gemini_keys TYPE option<datetime>;
+DEFINE FIELD cooldown_until          ON gemini_keys TYPE option<datetime>;
+DEFINE FIELD created_at              ON gemini_keys TYPE option<datetime>;
+DEFINE FIELD updated_at              ON gemini_keys TYPE option<datetime>;
+DEFINE INDEX idx_gemini_keys_key     ON gemini_keys FIELDS key UNIQUE;
+
+-- ─────────────────────────────────────────────
+-- gemini_usages table  (from api.gemini_usages)
+-- ─────────────────────────────────────────────
+DEFINE TABLE gemini_usages SCHEMAFULL;
+DEFINE FIELD api_key_id              ON gemini_usages TYPE int;
+DEFINE FIELD model_name              ON gemini_usages TYPE option<string>;
+DEFINE FIELD usage_date              ON gemini_usages TYPE option<string>;
+DEFINE FIELD request_count           ON gemini_usages TYPE int DEFAULT 0;
+DEFINE FIELD created_at              ON gemini_usages TYPE option<datetime>;
+DEFINE FIELD updated_at              ON gemini_usages TYPE option<datetime>;
+DEFINE INDEX idx_gemini_usages_key_date ON gemini_usages FIELDS api_key_id, usage_date;
+
 -- seed initial sync_state rows
 INSERT INTO sync_state [
   { source: 'ninjatools', table_name: 'client_profiles', last_synced_at: '1970-01-01 00:00:00' },
   { source: 'ninjatools', table_name: 'report_history',  last_synced_at: '1970-01-01 00:00:00' },
   { source: 'api',        table_name: 'Clients',         last_synced_at: '1970-01-01 00:00:00' },
   { source: 'api',        table_name: 'Reports',         last_synced_at: '1970-01-01 00:00:00' },
+  { source: 'api',        table_name: 'ReportData',      last_synced_at: '1970-01-01 00:00:00' },
+  { source: 'api',        table_name: 'ExtraInfos',      last_synced_at: '1970-01-01 00:00:00' },
   { source: 'api',        table_name: 'Templates',       last_synced_at: '1970-01-01 00:00:00' },
-  { source: 'api',        table_name: 'Paraghraphs',     last_synced_at: '1970-01-01 00:00:00' }
+  { source: 'api',        table_name: 'Paraghraphs',     last_synced_at: '1970-01-01 00:00:00' },
+  { source: 'api',        table_name: 'AlternateLetters', last_synced_at: '1970-01-01 00:00:00' },
+  { source: 'api',        table_name: 'CreditorContacts', last_synced_at: '1970-01-01 00:00:00' },
+  { source: 'api',        table_name: 'Users',           last_synced_at: '1970-01-01 00:00:00' },
+  { source: 'api',        table_name: 'gemini_keys',     last_synced_at: '1970-01-01 00:00:00' },
+  { source: 'api',        table_name: 'gemini_usages',   last_synced_at: '1970-01-01 00:00:00' }
 ];

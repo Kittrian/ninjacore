@@ -1,5 +1,6 @@
 // migrate-api-to-surreal.mjs
-// Migrates all api MySQL tables to SurrealDB on the same server (Contabo)
+// Migrates api MySQL supporting tables to SurrealDB on the same server (Contabo)
+// Intentionally skips api client migration until the single merged clients model is finalized.
 // Run: node migrate-api-to-surreal.mjs
 
 import mysql from 'mysql2/promise';
@@ -42,6 +43,25 @@ async function surql(query) {
   return d;
 }
 
+async function restPut(table, id, data) {
+  const res = await fetch(`http://127.0.0.1:8000/key/${table}/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Surreal-NS': SURREAL_NS,
+      'Surreal-DB': SURREAL_DB,
+      Authorization: SURREAL_AUTH,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`SurrealDB PUT HTTP ${res.status}: ${txt.slice(0, 400)}`);
+  }
+  return res.json();
+}
+
 // Escape a value for embedding in SurrealQL string literals
 function esc(v) {
   if (v == null) return '';
@@ -74,6 +94,16 @@ function j(v) {
   return JSON.stringify(v);
 }
 
+function asJson(v, fallback) {
+  if (v == null || v === '') return fallback;
+  if (typeof v === 'object') return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return fallback;
+  }
+}
+
 // ─── Migration functions ──────────────────────────────────────────────────────
 
 async function migrateUsers(db) {
@@ -83,20 +113,20 @@ async function migrateUsers(db) {
 
   for (const row of rows) {
     try {
-      const dt = fmtDt(row.lastLogin) || 'time::now()';
-      const lastLoginField = dt !== 'time::now()' ? `d"${dt}"` : 'time::now()';
-      await surql(`UPSERT api_users:${row.id} SET
-        name         = "${esc(row.name)}",
-        email        = "${esc(row.email)}",
-        password_hash = "${esc(row.password_hash)}",
-        profile      = "${esc(row.profile || 'user')}",
-        token_version = ${row.tokenVersion || 0},
-        tenant_id    = ${row.tenantId || 0},
-        is_online    = false,
-        status       = "offline",
-        last_login   = ${lastLoginField},
-        created_at   = ${fmtDt(row.createdAt) ? `d"${fmtDt(row.createdAt)}"` : 'time::now()'},
-        updated_at   = ${fmtDt(row.updatedAt) ? `d"${fmtDt(row.updatedAt)}"` : 'time::now()'}`);
+      await restPut('api_users', row.id, {
+        api_user_id: Number(row.id) || 0,
+        name: row.name || '',
+        email: row.email || '',
+        password_hash: row.password_hash || '',
+        profile: row.profile || 'user',
+        token_version: Number(row.tokenVersion) || 0,
+        tenant_id: Number(row.tenantId) || 0,
+        is_online: Boolean(row.isOnline),
+        status: row.status || 'offline',
+        last_login: fmtDt(row.lastLogin),
+        created_at: fmtDt(row.createdAt),
+        updated_at: fmtDt(row.updatedAt),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN user ${row.id}: ${e.message.slice(0, 100)}`);
@@ -159,19 +189,20 @@ async function migrateReports(db) {
 
   for (const row of rows) {
     try {
-      await surql(`UPSERT api_reports:${row.ClientId} SET
-        client_id        = ${row.ClientId},
-        username         = "${esc(row.username)}",
-        password         = "${esc(row.password)}",
-        report_type      = "${esc(row.reportType || 'identity')}",
-        deletions_lists  = "${esc(j(row.deletetionsLists))}",
-        compare          = "${esc(j(row.compare))}",
-        progress         = "${esc(j(row.progress))}",
-        accounts         = "${esc(j(row.accounts))}",
-        alternate_letters = "${esc(j(row.alternateLetters))}",
-        new_version      = ${row.newVersion ? 'true' : 'false'},
-        created_at       = ${fmtDt(row.createdAt) ? `d"${fmtDt(row.createdAt)}"` : 'time::now()'},
-        updated_at       = ${fmtDt(row.updatedAt) ? `d"${fmtDt(row.updatedAt)}"` : 'time::now()'}`);
+      await restPut('api_reports', row.ClientId, {
+        client_id: Number(row.ClientId) || 0,
+        username: row.username || '',
+        password: row.password || '',
+        report_type: row.reportType || 'identity',
+        deletions_lists: asJson(row.deletetionsLists, []),
+        compare: asJson(row.compare, []),
+        progress: asJson(row.progress, []),
+        accounts: asJson(row.accounts, []),
+        alternate_letters: asJson(row.alternateLetters, []),
+        new_version: Boolean(row.newVersion),
+        created_at: fmtDt(row.createdAt),
+        updated_at: fmtDt(row.updatedAt),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN report client=${row.ClientId}: ${e.message.slice(0, 120)}`);
@@ -188,12 +219,13 @@ async function migrateExtraInfos(db) {
 
   for (const row of rows) {
     try {
-      await surql(`UPSERT extra_infos:${row.id} SET
-        client_id  = ${row.ClientId},
-        name       = "${esc(row.name)}",
-        value      = "${esc(row.value)}",
-        created_at = ${fmtDt(row.createdAt) ? `d"${fmtDt(row.createdAt)}"` : 'time::now()'},
-        updated_at = ${fmtDt(row.updatedAt) ? `d"${fmtDt(row.updatedAt)}"` : 'time::now()'}`);
+      await restPut('extra_infos', row.id, {
+        client_id: Number(row.ClientId) || 0,
+        name: row.name || '',
+        value: row.value || '',
+        created_at: fmtDt(row.createdAt),
+        updated_at: fmtDt(row.updatedAt),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN extra_info ${row.id}: ${e.message.slice(0, 100)}`);
@@ -211,18 +243,19 @@ async function migrateReportData(db) {
 
   for (const row of rows) {
     try {
-      await surql(`UPSERT report_data_entries:${row.id} SET
-        client_id              = ${row.ClientId},
-        key_date               = "${esc(fmtDate(row.keyDate) || '')}",
-        inquiry_partition      = "${esc(j(row.InquiryPartition))}",
-        subscriber             = "${esc(j(row.Subscriber))}",
-        trade_line_partition   = "${esc(j(row.TradeLinePartition))}",
-        credit_score           = "${esc(j(row.creditScore))}",
-        deletions_lists        = "${esc(j(row.deletetionsLists))}",
-        public_record_partition = "${esc(j(row.PulblicRecordPartition))}",
-        origin                 = "${esc(j(row.origin))}",
-        created_at             = ${fmtDt(row.createdAt) ? `d"${fmtDt(row.createdAt)}"` : 'time::now()'},
-        updated_at             = ${fmtDt(row.updatedAt) ? `d"${fmtDt(row.updatedAt)}"` : 'time::now()'}`);
+      await restPut('report_data_entries', row.id, {
+        client_id: Number(row.ClientId) || 0,
+        key_date: fmtDate(row.keyDate) || '',
+        inquiry_partition: asJson(row.InquiryPartition, []),
+        subscriber: asJson(row.Subscriber, []),
+        trade_line_partition: asJson(row.TradeLinePartition, []),
+        credit_score: asJson(row.creditScore, {}),
+        deletions_lists: asJson(row.deletetionsLists, []),
+        public_record_partition: asJson(row.PulblicRecordPartition, []),
+        origin: asJson(row.origin, {}),
+        created_at: fmtDt(row.createdAt),
+        updated_at: fmtDt(row.updatedAt),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN report_data ${row.id}: ${e.message.slice(0, 120)}`);
@@ -240,16 +273,18 @@ async function migrateTemplates(db) {
 
   for (const row of rows) {
     try {
-      await surql(`UPSERT templates:${row.id} SET
-        name          = "${esc(row.name)}",
-        file_name     = "${esc(row.file_name)}",
-        file_html     = "${esc(row.file_html)}",
-        tu_json       = "${esc(j(row.tu))}",
-        ex_json       = "${esc(j(row.ex))}",
-        eq_json       = "${esc(j(row.eq))}",
-        paragraphs_json = "${esc(j(row.paraghraphs))}",
-        created_at    = "${esc(row.createdAt)}",
-        updated_at    = "${esc(row.updatedAt)}"`);
+      await restPut('templates', row.id, {
+        template_id: String(row.id),
+        name: row.name || '',
+        file_name: row.file_name || '',
+        file_html: row.file_html || '',
+        tu_json: j(row.tu),
+        ex_json: j(row.ex),
+        eq_json: j(row.eq),
+        paragraphs_json: j(row.paraghraphs),
+        created_at: String(row.createdAt || ''),
+        updated_at: String(row.updatedAt || ''),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN template ${row.id}: ${e.message.slice(0, 100)}`);
@@ -266,11 +301,13 @@ async function migrateParagraphs(db) {
 
   for (const row of rows) {
     try {
-      await surql(`UPSERT paragraphs:${row.id} SET
-        key_name   = "${esc(row.key)}",
-        value      = "${esc(row.value)}",
-        created_at = "${esc(row.createdAt)}",
-        updated_at = "${esc(row.updatedAt)}"`);
+      await restPut('paragraphs', row.id, {
+        paragraph_id: String(row.id),
+        key_name: row.key || '',
+        value: row.value || '',
+        created_at: String(row.createdAt || ''),
+        updated_at: String(row.updatedAt || ''),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN paragraph ${row.id}: ${e.message.slice(0, 100)}`);
@@ -287,11 +324,12 @@ async function migrateAlternateLetters(db) {
 
   for (const row of rows) {
     try {
-      await surql(`UPSERT alternate_letters:${row.id} SET
-        name      = "${esc(row.name)}",
-        file_html = "${esc(row.file_html)}",
-        created_at = ${fmtDt(row.createdAt) ? `d"${fmtDt(row.createdAt)}"` : 'time::now()'},
-        updated_at = ${fmtDt(row.updatedAt) ? `d"${fmtDt(row.updatedAt)}"` : 'time::now()'}`);
+      await restPut('alternate_letters', row.id, {
+        name: row.name || '',
+        file_html: row.file_html || '',
+        created_at: fmtDt(row.createdAt),
+        updated_at: fmtDt(row.updatedAt),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN alt_letter ${row.id}: ${e.message.slice(0, 100)}`);
@@ -308,11 +346,12 @@ async function migrateCreditorContacts(db) {
 
   for (const row of rows) {
     try {
-      await surql(`UPSERT creditor_contacts:${row.id} SET
-        name      = "${esc(row.name)}",
-        value     = "${esc(row.value)}",
-        created_at = ${fmtDt(row.createdAt) ? `d"${fmtDt(row.createdAt)}"` : 'time::now()'},
-        updated_at = ${fmtDt(row.updatedAt) ? `d"${fmtDt(row.updatedAt)}"` : 'time::now()'}`);
+      await restPut('creditor_contacts', row.id, {
+        name: row.name || '',
+        value: row.value || '',
+        created_at: fmtDt(row.createdAt),
+        updated_at: fmtDt(row.updatedAt),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN creditor ${row.id}: ${e.message.slice(0, 100)}`);
@@ -329,16 +368,15 @@ async function migrateGeminiKeys(db) {
 
   for (const row of rows) {
     try {
-      const lastUsed    = fmtDt(row.lastUsedAt);
-      const cooldown    = fmtDt(row.cooldownUntil);
-      await surql(`UPSERT gemini_keys:${row.id} SET
-        key           = "${esc(row.key)}",
-        owner         = "${esc(row.owner)}",
-        is_active     = ${row.isActive ? 'true' : 'false'},
-        last_used_at  = ${lastUsed ? `d"${lastUsed}"` : 'NONE'},
-        cooldown_until = ${cooldown ? `d"${cooldown}"` : 'NONE'},
-        created_at    = ${fmtDt(row.createdAt) ? `d"${fmtDt(row.createdAt)}"` : 'time::now()'},
-        updated_at    = ${fmtDt(row.updatedAt) ? `d"${fmtDt(row.updatedAt)}"` : 'time::now()'}`);
+      await restPut('gemini_keys', row.id, {
+        key: row.key || '',
+        owner: row.owner || '',
+        is_active: Boolean(row.isActive),
+        last_used_at: fmtDt(row.lastUsedAt),
+        cooldown_until: fmtDt(row.cooldownUntil),
+        created_at: fmtDt(row.createdAt),
+        updated_at: fmtDt(row.updatedAt),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN gemini_key ${row.id}: ${e.message.slice(0, 100)}`);
@@ -355,13 +393,14 @@ async function migrateGeminiUsages(db) {
 
   for (const row of rows) {
     try {
-      await surql(`UPSERT gemini_usages:${row.id} SET
-        api_key_id   = ${row.apiKeyId},
-        model_name   = "${esc(row.modelName)}",
-        usage_date   = "${esc(row.usageDate)}",
-        request_count = ${row.requestCount || 0},
-        created_at   = time::now(),
-        updated_at   = time::now()`);
+      await restPut('gemini_usages', row.id, {
+        api_key_id: Number(row.apiKeyId) || 0,
+        model_name: row.modelName || '',
+        usage_date: row.usageDate || '',
+        request_count: Number(row.requestCount) || 0,
+        created_at: fmtDt(row.createdAt) || new Date().toISOString(),
+        updated_at: fmtDt(row.updatedAt) || new Date().toISOString(),
+      });
       ok++;
     } catch (e) {
       console.warn(`  WARN gemini_usage ${row.id}: ${e.message.slice(0, 100)}`);
@@ -374,7 +413,7 @@ async function migrateGeminiUsages(db) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('=== api MySQL → SurrealDB Migration ===');
+  console.log('=== api MySQL supporting tables → SurrealDB Migration ===');
   console.log(`SurrealDB: ${SURREAL_URL}`);
 
   // verify surreal connectivity
@@ -386,7 +425,8 @@ async function main() {
   console.log('✓ MySQL connected');
 
   await migrateUsers(db);
-  await migrateClients(db);
+  console.log('\n── Skipping Clients ──');
+  console.log('  Clients are intentionally not migrated by this script yet.');
   await migrateReports(db);
   await migrateExtraInfos(db);
   await migrateReportData(db);
@@ -404,7 +444,6 @@ async function main() {
   const AUTH = 'Basic ' + Buffer.from('root:Malachi77').toString('base64');
   const countQuery = `
     SELECT count() as n FROM api_users GROUP ALL;
-    SELECT count() as n FROM api_clients GROUP ALL;
     SELECT count() as n FROM api_reports GROUP ALL;
     SELECT count() as n FROM extra_infos GROUP ALL;
     SELECT count() as n FROM report_data_entries GROUP ALL;
@@ -421,7 +460,7 @@ async function main() {
     body: countQuery,
   });
   const cd = await cr.json();
-  const tables = ['api_users','api_clients','api_reports','extra_infos','report_data_entries','templates','paragraphs','alternate_letters','creditor_contacts','gemini_keys','gemini_usages'];
+  const tables = ['api_users','api_reports','extra_infos','report_data_entries','templates','paragraphs','alternate_letters','creditor_contacts','gemini_keys','gemini_usages'];
   console.log('\nFinal SurrealDB counts:');
   cd.forEach((r, i) => {
     if (r.status === 'OK') console.log(`  ${tables[i]}: ${r.result[0]?.n ?? 0}`);

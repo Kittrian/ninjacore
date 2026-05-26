@@ -6,7 +6,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { promises as fs } from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
-import mysql from 'mysql2/promise';
+
 import { Server as SocketIOServer } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
@@ -32,8 +32,7 @@ const vantageSimulatorScriptFile = path.join(__dirname, 'scripts', 'models', 'va
 const pythonBinary = String(process.env.PYTHON_BIN || 'python3').trim() || 'python3';
 const groqApiKey = String(process.env.GROQ_API_KEY || '').trim();
 const anthropicApiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
-let reportsDb;
-let reportsDbReady = false;
+
 let initialS3MirrorQueued = false;
 const storageReadyByOwner = new Map();
 const reportRuns = new Map();
@@ -108,13 +107,67 @@ const buildCorsHeaders = (origin = '', requestHeaders = '') => {
   headers['Access-Control-Allow-Headers'] = requestHeaders || 'Content-Type, Authorization, X-Requested-With';
   return headers;
 };
-const toolsNinjaDbConfig = {
-  host: String(process.env.TOOLSNINJA_DB_HOST || process.env.MYSQL_HOST || '127.0.0.1').trim(),
-  port: Number.parseInt(process.env.TOOLSNINJA_DB_PORT || process.env.MYSQL_PORT || '3306', 10) || 3306,
-  user: String(process.env.TOOLSNINJA_DB_USER || process.env.MYSQL_USER || 'ninjacore').trim(),
-  password: String(process.env.TOOLSNINJA_DB_PASSWORD || process.env.MYSQL_PASSWORD || '').trim(),
-  database: String(process.env.TOOLSNINJA_DB_NAME || process.env.MYSQL_DATABASE || 'TOOLSNINJA').trim(),
+// ─── SurrealDB Master (Hetzner) ───────────────────────────────────────────────
+const SURREAL_URL  = String(process.env.SURREAL_URL  || 'http://5.78.214.176:8000/sql');
+const SURREAL_REST = String(process.env.SURREAL_REST || 'http://5.78.214.176:8000');
+const SURREAL_NS   = String(process.env.SURREAL_NS   || 'ninja');
+const SURREAL_DB   = String(process.env.SURREAL_DB   || 'dispute');
+const SURREAL_AUTH = 'Basic ' + Buffer.from(
+  `${process.env.SURREAL_USER || 'root'}:${process.env.SURREAL_PASS || 'Malachi77'}`
+).toString('base64');
+const SURREAL_HEADERS = {
+  Accept: 'application/json',
+  Authorization: SURREAL_AUTH,
+  'Surreal-NS': SURREAL_NS,
+  'Surreal-DB': SURREAL_DB,
 };
+
+const sEsc = (v) => String(v ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+
+const surql = async (query) => {
+  const res = await fetch(SURREAL_URL, {
+    method: 'POST',
+    headers: { ...SURREAL_HEADERS, 'Content-Type': 'application/surrealql' },
+    body: query,
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(`SurrealDB ${res.status}: ${t.slice(0, 300)}`); }
+  const d = await res.json();
+  const errs = d.filter((r) => r.status === 'ERR');
+  if (errs.length) throw new Error(`SurrealDB ERR: ${JSON.stringify(errs[0]).slice(0, 300)}`);
+  return Array.isArray(d[0]?.result) ? d[0].result : [];
+};
+
+const surqlMultiResult = async (query) => {
+  const res = await fetch(SURREAL_URL, {
+    method: 'POST',
+    headers: { ...SURREAL_HEADERS, 'Content-Type': 'application/surrealql' },
+    body: query,
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(`SurrealDB ${res.status}: ${t.slice(0, 300)}`); }
+  const d = await res.json();
+  return d.map((r) => Array.isArray(r?.result) ? r.result : []);
+};
+
+const surqlRestPut = async (table, id, data) => {
+  const res = await fetch(`${SURREAL_REST}/key/${table}/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { ...SURREAL_HEADERS, 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(`SurrealDB PUT ${res.status}: ${t.slice(0, 300)}`); }
+  const d = await res.json();
+  return Array.isArray(d) ? d[0] : d;
+};
+
+const surrealExtractNumId = (surrealId) => {
+  const str = String(surrealId ?? '');
+  const idx = str.lastIndexOf(':');
+  const raw = idx >= 0 ? str.slice(idx + 1) : str;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? n : raw;
+};
+
+const surrealRandIntId = () => Math.floor(Math.random() * 9_000_000) + 1_000_000;
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -432,21 +485,14 @@ const getOwnerDataFile = (ownerKey = '') => (
 
 const getReportSavePaths = (ownerKey = getCurrentOwnerKey()) => ({
   currentClientStorePath: getOwnerDataFile(ownerKey),
-  reportHistoryDbPath: `mysql://${toolsNinjaDbConfig.host}:${toolsNinjaDbConfig.port}/${toolsNinjaDbConfig.database}`,
+  reportHistoryDbPath: `${SURREAL_URL}`,
 });
 
 const getUserByUsername = async (username = '') => {
   const normalized = normalizeUsername(username);
-  if (!normalized) {
-    return null;
-  }
-  const db = await getReportsDb();
-  const [rows] = await db.query(`
-    SELECT username, password_hash AS passwordHash, password_salt AS passwordSalt, created_at AS createdAt
-    FROM app_users
-    WHERE username = ?
-  `, [normalized]);
-  return rows?.[0] || null;
+  if (!normalized) return null;
+  const rows = await surql(`SELECT username, password_hash AS passwordHash, password_salt AS passwordSalt, created_at AS createdAt FROM users WHERE username = "${sEsc(normalized)}" LIMIT 1`);
+  return rows[0] ?? null;
 };
 
 const verifyUserCredential = async (username = '', password = '') => {
@@ -461,27 +507,16 @@ const verifyUserCredential = async (username = '', password = '') => {
 const createAppUser = async (username = '', password = '') => {
   const normalized = normalizeUsername(username);
   const nextPassword = String(password || '').trim();
-  if (!normalized || !nextPassword) {
-    throw new Error('Username and password are required.');
-  }
-  const db = await getReportsDb();
-  const [existingRows] = await db.query('SELECT username FROM app_users WHERE username = ?', [normalized]);
-  const existing = existingRows?.[0] || null;
-  if (existing) {
-    throw new Error('That username is already in use.');
-  }
+  if (!normalized || !nextPassword) throw new Error('Username and password are required.');
+  const existing = await surql(`SELECT username FROM users WHERE username = "${sEsc(normalized)}" LIMIT 1`);
+  if (existing.length) throw new Error('That username is already in use.');
   const salt = randomUUID();
   const passwordHash = hashUserPassword(nextPassword, salt);
   const now = new Date().toISOString();
-  await db.query(`
-    INSERT INTO app_users (username, password_hash, password_salt, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?)
-  `, [normalized, passwordHash, salt, now, now]);
+  await surqlRestPut('users', normalized, { username: normalized, password_hash: passwordHash, password_salt: salt, created_at: now, updated_at: now });
   dynamicUsernames.add(normalized);
   await ensureDataFile(normalized);
-  void mirrorBusinessControlPlaneToS3('admin').catch((error) => {
-    console.warn(`[S3 Mirror] app user export failed: ${error.message}`);
-  });
+  void mirrorBusinessControlPlaneToS3('admin').catch((error) => console.warn(`[S3 Mirror] app user export failed: ${error.message}`));
   return { username: normalized, createdAt: now };
 };
 
@@ -1114,10 +1149,13 @@ const hydrateBrowserCredentialsFromDuplicate = (store, selectedClient) => {
 const startBrowserReportRun = async (client, options = {}) => {
   const agency = getBrowserRunnerTypeForAgency(client.monitoringAgency);
   if (!agency) {
-    throw new Error('This client is not set to an IdentityIQ or SmartCredit browser-run service.');
+    const agencyValue = String(client.monitoringAgency || '').trim() || '[empty]';
+    throw new Error(`This client is not set to an IdentityIQ or SmartCredit browser-run service. Currently set to: ${agencyValue}`);
   }
-  if (!String(client.monitoringUsername || '').trim() || !String(client.monitoringPassword || '').trim()) {
-    throw new Error('This client needs monitoring username and password before running a browser report refresh.');
+  const username = String(client.monitoringUsername || '').trim();
+  const password = String(client.monitoringPassword || '').trim();
+  if (!username || !password) {
+    throw new Error(`This client needs monitoring username and password before running a browser report refresh. Username: ${username ? '✓' : '✗'}, Password: ${password ? '✓' : '✗'}`);
   }
 
   const existingRun = [...reportRuns.values()].find((entry) => (
@@ -5159,263 +5197,35 @@ const writeJsonFileAtomic = async (targetPath, payload) => {
   await fs.rename(tempPath, targetPath);
 };
 
-const getReportsDb = async () => {
-  if (!reportsDb) {
-    reportsDb = mysql.createPool({
-      host: toolsNinjaDbConfig.host,
-      port: toolsNinjaDbConfig.port,
-      user: toolsNinjaDbConfig.user,
-      password: toolsNinjaDbConfig.password,
-      database: toolsNinjaDbConfig.database,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-      multipleStatements: true,
+let _surrealSchemaReady = false;
+const ensureSurrealSchema = async () => {
+  if (_surrealSchemaReady) return;
+  _surrealSchemaReady = true;
+  // Seed default users into SurrealDB users table
+  const now = new Date().toISOString();
+  for (const credential of getAllowedLoginCredentials()) {
+    const username = normalizeUsername(credential.username);
+    const password = String(credential.password || '');
+    if (!username || !password) continue;
+    const salt = `seed:${username}`;
+    const existing = await surql(`SELECT username FROM users WHERE username = "${sEsc(username)}" LIMIT 1`).catch(() => []);
+    if (!existing.length) {
+      await surqlRestPut('users', username, { username, password_hash: hashUserPassword(password, salt), password_salt: salt, created_at: now, updated_at: now }).catch(() => {});
+    }
+    dynamicUsernames.add(username);
+  }
+  // Load all known usernames into memory
+  const allUsers = await surql('SELECT username FROM users').catch(() => []);
+  for (const row of allUsers) {
+    const u = normalizeUsername(row?.username || '');
+    if (u) dynamicUsernames.add(u);
+  }
+  if (!initialS3MirrorQueued) {
+    initialS3MirrorQueued = true;
+    void mirrorBusinessControlPlaneToS3('admin').catch((error) => {
+      console.warn(`[S3 Mirror] initial control-plane export failed: ${error.message}`);
     });
   }
-
-  if (!reportsDbReady) {
-    await reportsDb.query(`
-      CREATE TABLE IF NOT EXISTS report_history (
-        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        client_id VARCHAR(128) NOT NULL,
-        source VARCHAR(128) NOT NULL,
-        monitoring_agency VARCHAR(255) NULL,
-        report_date VARCHAR(64) NULL,
-        report_file_name VARCHAR(512) NULL,
-        report_html LONGTEXT NULL,
-        report_json LONGTEXT NULL,
-        response_url TEXT NULL,
-        snapshot_checksum VARCHAR(128) NOT NULL,
-        metadata_json LONGTEXT NULL,
-        created_at VARCHAR(64) NOT NULL,
-        UNIQUE KEY idx_report_history_client_checksum (client_id, snapshot_checksum),
-        KEY idx_report_history_client_created_at (client_id, created_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    await reportsDb.query(`
-      CREATE TABLE IF NOT EXISTS client_profiles (
-        owner_key VARCHAR(191) NOT NULL DEFAULT 'admin',
-        client_id VARCHAR(128) NOT NULL,
-        first_name VARCHAR(255) NULL,
-        last_name VARCHAR(255) NULL,
-        email VARCHAR(320) NULL,
-        dob VARCHAR(64) NULL,
-        ssn VARCHAR(64) NULL,
-        address TEXT NULL,
-        phone VARCHAR(64) NULL,
-        spouse_client_id VARCHAR(128) NULL,
-        spouse_client_label VARCHAR(255) NULL,
-        assigned_to VARCHAR(255) NULL,
-        ninja_assigned VARCHAR(255) NULL,
-        affiliate_assigned VARCHAR(255) NULL,
-        status VARCHAR(128) NULL,
-        phase VARCHAR(128) NULL,
-        monitoring_agency VARCHAR(128) NULL,
-        monitoring_username VARCHAR(320) NULL,
-        monitoring_password TEXT NULL,
-        secret_key TEXT NULL,
-        monitoring_token TEXT NULL,
-        portal_password VARCHAR(255) NULL,
-        portal_enabled TINYINT(1) NULL,
-        language VARCHAR(64) NULL,
-        goal LONGTEXT NULL,
-        notes LONGTEXT NULL,
-        yearly_income VARCHAR(64) NULL,
-        housing_payment VARCHAR(64) NULL,
-        debt_monthly_payments TEXT NULL,
-        next_import_int VARCHAR(64) NULL,
-        next_import_label VARCHAR(128) NULL,
-        next_import_mode VARCHAR(64) NULL,
-        manual_next_import_start_days VARCHAR(64) NULL,
-        manual_next_import_set_date VARCHAR(64) NULL,
-        refresh_next_import_start_date VARCHAR(64) NULL,
-        documents_json LONGTEXT NULL,
-        report_date VARCHAR(64) NULL,
-        updated_at VARCHAR(64) NOT NULL,
-        PRIMARY KEY (owner_key, client_id),
-        UNIQUE KEY ux_client_profiles_owner_client (owner_key, client_id),
-        KEY idx_client_profiles_owner_name (owner_key, last_name, first_name)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    await reportsDb.query(`
-      CREATE TABLE IF NOT EXISTS app_users (
-        username VARCHAR(255) NOT NULL PRIMARY KEY,
-        password_hash TEXT NOT NULL,
-        password_salt TEXT NOT NULL,
-        created_at VARCHAR(64) NOT NULL,
-        updated_at VARCHAR(64) NOT NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    await reportsDb.query(`
-      CREATE TABLE IF NOT EXISTS app_settings (
-        setting_key VARCHAR(255) NOT NULL PRIMARY KEY,
-        value_json LONGTEXT NOT NULL,
-        updated_at VARCHAR(64) NOT NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    await reportsDb.query(`
-      CREATE TABLE IF NOT EXISTS payment_merchants (
-        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        owner_key VARCHAR(191) NOT NULL,
-        merchant_name VARCHAR(255) NOT NULL,
-        gateway VARCHAR(128) NOT NULL,
-        api_id TEXT NULL,
-        transaction_key TEXT NULL,
-        is_default TINYINT(1) NOT NULL DEFAULT 0,
-        status VARCHAR(128) NOT NULL DEFAULT 'Active',
-        allowed_retries INT NOT NULL DEFAULT 3,
-        retry_frequency_days INT NOT NULL DEFAULT 7,
-        metadata_json LONGTEXT NULL,
-        created_at VARCHAR(64) NOT NULL,
-        updated_at VARCHAR(64) NOT NULL,
-        KEY idx_payment_merchants_owner (owner_key)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    await reportsDb.query(`
-      CREATE TABLE IF NOT EXISTS payment_products (
-        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        owner_key VARCHAR(191) NOT NULL,
-        product_name VARCHAR(255) NOT NULL,
-        product_type VARCHAR(128) NOT NULL DEFAULT 'Service',
-        price_cents INT NOT NULL DEFAULT 0,
-        billing_frequency VARCHAR(64) NOT NULL DEFAULT 'monthly',
-        status VARCHAR(128) NOT NULL DEFAULT 'Active',
-        metadata_json LONGTEXT NULL,
-        created_at VARCHAR(64) NOT NULL,
-        updated_at VARCHAR(64) NOT NULL,
-        KEY idx_payment_products_owner (owner_key)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    await reportsDb.query(`
-      CREATE TABLE IF NOT EXISTS payment_autopay (
-        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        owner_key VARCHAR(191) NOT NULL,
-        client_id VARCHAR(128) NULL,
-        merchant_id BIGINT NULL,
-        product_id BIGINT NULL,
-        amount_cents INT NOT NULL DEFAULT 0,
-        frequency_type VARCHAR(64) NOT NULL DEFAULT 'monthly',
-        frequency_interval INT NOT NULL DEFAULT 1,
-        next_charge_at VARCHAR(64) NULL,
-        status VARCHAR(128) NOT NULL DEFAULT 'Active',
-        retry_limit INT NOT NULL DEFAULT 3,
-        retry_frequency_days INT NOT NULL DEFAULT 7,
-        failure_count INT NOT NULL DEFAULT 0,
-        last_error TEXT NULL,
-        last_charge_at VARCHAR(64) NULL,
-        metadata_json LONGTEXT NULL,
-        created_at VARCHAR(64) NOT NULL,
-        updated_at VARCHAR(64) NOT NULL,
-        KEY idx_payment_autopay_owner_next_charge (owner_key, next_charge_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    await reportsDb.query(`
-      CREATE TABLE IF NOT EXISTS failed_payment_events (
-        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        owner_key VARCHAR(191) NOT NULL,
-        transaction_id VARCHAR(255) NOT NULL,
-        event_at VARCHAR(64) NULL,
-        client_name VARCHAR(255) NULL,
-        email VARCHAR(320) NULL,
-        phone VARCHAR(64) NULL,
-        amount_cents INT NOT NULL DEFAULT 0,
-        card_last4 VARCHAR(16) NULL,
-        payment_method VARCHAR(128) NULL,
-        failure_reason TEXT NULL,
-        retry_label VARCHAR(128) NULL,
-        notes TEXT NULL,
-        status VARCHAR(128) NOT NULL DEFAULT 'Failed',
-        next_action VARCHAR(255) NULL,
-        completed VARCHAR(16) NOT NULL DEFAULT 'No',
-        processor VARCHAR(128) NULL,
-        customer_id VARCHAR(255) NULL,
-        retry_eligible TINYINT(1) NOT NULL DEFAULT 0,
-        occurrence_count INT NOT NULL DEFAULT 1,
-        webhook_synced_at VARCHAR(64) NULL,
-        webhook_last_status INT NULL,
-        raw_json LONGTEXT NULL,
-        created_at VARCHAR(64) NOT NULL,
-        updated_at VARCHAR(64) NOT NULL,
-        last_seen_at VARCHAR(64) NOT NULL,
-        UNIQUE KEY ux_failed_payment_owner_tx (owner_key, transaction_id),
-        KEY idx_failed_payment_events_owner_event (owner_key, event_at, id),
-        KEY idx_failed_payment_events_owner_name (owner_key, client_name)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    try {
-      await reportsDb.query('ALTER TABLE report_history MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT');
-    } catch {}
-    try {
-      await reportsDb.query('ALTER TABLE payment_merchants MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT');
-    } catch {}
-    try {
-      await reportsDb.query('ALTER TABLE payment_products MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT');
-    } catch {}
-    try {
-      await reportsDb.query('ALTER TABLE payment_autopay MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT');
-    } catch {}
-    try {
-      await reportsDb.query('ALTER TABLE failed_payment_events MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT');
-    } catch {}
-    // Shared-business cutover safety:
-    // 1) if admin row already exists for a client_id, remove non-admin duplicates first
-    // 2) collapse remaining cross-owner duplicates down to one row per client_id
-    // 3) then normalize everything to owner_key=admin
-    await reportsDb.query(`
-      DELETE cp
-      FROM client_profiles cp
-      INNER JOIN client_profiles ap
-        ON ap.client_id = cp.client_id
-       AND ap.owner_key = 'admin'
-      WHERE cp.owner_key <> 'admin'
-    `);
-    await reportsDb.query(`
-      DELETE older
-      FROM client_profiles older
-      INNER JOIN client_profiles newer
-        ON newer.client_id = older.client_id
-       AND newer.owner_key <> older.owner_key
-       AND older.owner_key <> 'admin'
-       AND newer.owner_key <> 'admin'
-       AND COALESCE(newer.updated_at, '') >= COALESCE(older.updated_at, '')
-    `);
-    await reportsDb.query(`UPDATE client_profiles SET owner_key = 'admin' WHERE owner_key IS NULL OR TRIM(owner_key) = '' OR owner_key <> 'admin'`);
-    await reportsDb.query(`UPDATE payment_merchants SET owner_key = 'admin' WHERE owner_key IS NULL OR TRIM(owner_key) = '' OR owner_key <> 'admin'`);
-    await reportsDb.query(`UPDATE payment_products SET owner_key = 'admin' WHERE owner_key IS NULL OR TRIM(owner_key) = '' OR owner_key <> 'admin'`);
-    await reportsDb.query(`UPDATE payment_autopay SET owner_key = 'admin' WHERE owner_key IS NULL OR TRIM(owner_key) = '' OR owner_key <> 'admin'`);
-    await reportsDb.query(`UPDATE failed_payment_events SET owner_key = 'admin' WHERE owner_key IS NULL OR TRIM(owner_key) = '' OR owner_key <> 'admin'`);
-
-    const now = new Date().toISOString();
-    for (const credential of getAllowedLoginCredentials()) {
-      const username = normalizeUsername(credential.username);
-      const password = String(credential.password || '');
-      if (!username || !password) continue;
-      const salt = `seed:${username}`;
-      await reportsDb.query(
-        `INSERT INTO app_users (username, password_hash, password_salt, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE username = username`,
-        [username, hashUserPassword(password, salt), salt, now, now],
-      );
-      dynamicUsernames.add(username);
-    }
-
-    const [allUsers] = await reportsDb.query('SELECT username FROM app_users');
-    for (const row of allUsers) {
-      const username = normalizeUsername(row?.username || '');
-      if (username) dynamicUsernames.add(username);
-    }
-    reportsDbReady = true;
-    if (!initialS3MirrorQueued) {
-      initialS3MirrorQueued = true;
-      void mirrorBusinessControlPlaneToS3('admin').catch((error) => {
-        console.warn(`[S3 Mirror] initial control-plane export failed: ${error.message}`);
-      });
-    }
-  }
-
-  return reportsDb;
 };
 
 const buildSnapshotChecksum = (payload) => createHash('sha256')
@@ -5448,11 +5258,8 @@ const insertReportSnapshot = async (client, payload = {}) => {
   if (!hasMeaningfulReportData({
     creditReportHtml: payload.reportHtml || client.creditReportHtml,
     creditReportJson: payload.reportJsonRaw || payload.reportJson || client.creditReportJson,
-  })) {
-    return null;
-  }
+  })) return null;
 
-  const db = await getReportsDb();
   const reportHtml = String(payload.reportHtml || client.creditReportHtml || '');
   const reportJson = stringifyJsonValue(payload.reportJsonRaw || payload.reportJson || client.creditReportJson || '');
   const reportDate = String(payload.reportDate || client.reportDate || '');
@@ -5462,50 +5269,27 @@ const insertReportSnapshot = async (client, payload = {}) => {
   const responseUrl = String(payload.responseUrl || '');
   const metadataJson = stringifyJsonValue(payload.metadata || '');
   const createdAt = String(payload.createdAt || new Date().toISOString());
-  const snapshotChecksum = buildSnapshotChecksum({
-    clientId: client.id,
-    source,
-    reportDate,
-    reportFileName,
-    reportHtml,
-    reportJson,
-  });
+  const snapshotChecksum = buildSnapshotChecksum({ clientId: client.id, source, reportDate, reportFileName, reportHtml, reportJson });
+  const recordId = `${String(client.id)}_${snapshotChecksum}`;
 
-  await db.query(`
-    INSERT INTO report_history (
-      client_id,
-      source,
-      monitoring_agency,
-      report_date,
-      report_file_name,
-      report_html,
-      report_json,
-      response_url,
-      snapshot_checksum,
-      metadata_json,
-      created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE id = id
-  `, [
-    client.id,
+  // Use REST PUT to handle large HTML payloads
+  await surqlRestPut('reports', recordId, {
+    client_id: String(client.id),
     source,
-    monitoringAgency,
-    reportDate,
-    reportFileName,
-    reportHtml,
-    reportJson,
-    responseUrl,
-    snapshotChecksum,
-    metadataJson,
-    createdAt,
-  ]);
+    monitoring_agency: monitoringAgency,
+    report_date: reportDate,
+    report_file_name: reportFileName,
+    report_html: reportHtml,
+    report_json: reportJson,
+    response_url: responseUrl,
+    snapshot_checksum: snapshotChecksum,
+    metadata_json: metadataJson,
+    created_at: createdAt,
+    source_db: 'ninjatools',
+  }).catch(() => {});
 
-  const [rows] = await db.query(`
-    SELECT id, client_id AS clientId, source, report_date AS reportDate, report_file_name AS reportFileName, created_at AS createdAt
-    FROM report_history
-    WHERE client_id = ? AND snapshot_checksum = ?
-  `, [client.id, snapshotChecksum]);
-  const snapshot = rows?.[0] || null;
+  const rows = await surql(`SELECT id, client_id AS clientId, source, report_date AS reportDate, report_file_name AS reportFileName, created_at AS createdAt FROM reports WHERE client_id = "${sEsc(String(client.id))}" AND snapshot_checksum = "${sEsc(snapshotChecksum)}" LIMIT 1`);
+  const snapshot = rows[0] ?? null;
   if (snapshot) {
     void mirrorCreditReportToS3(getCurrentOwnerKey(), client, snapshot, reportJson).catch((error) => {
       console.warn(`[S3 Mirror] report export failed for ${client.id}: ${error.message}`);
@@ -5588,61 +5372,15 @@ const mergeClientProfileRow = (client, row) => {
 };
 
 const loadClientProfilesMap = async (ownerKey = getCurrentOwnerKey()) => {
-  const db = await getReportsDb();
   const normalizedOwner = normalizeOwnerKey(ownerKey);
-  const [rows] = await db.query(`
-    SELECT
-      client_id AS clientId,
-      first_name AS firstName,
-      last_name AS lastName,
-      email,
-      dob,
-      ssn,
-      address,
-      phone,
-      spouse_client_id AS spouseClientId,
-      spouse_client_label AS spouseClientLabel,
-      assigned_to AS assignedTo,
-      ninja_assigned AS ninjaAssigned,
-      affiliate_assigned AS affiliateAssigned,
-      status,
-      phase,
-      monitoring_agency AS monitoringAgency,
-      monitoring_username AS monitoringUsername,
-      monitoring_password AS monitoringPassword,
-      secret_key AS secretKey,
-      monitoring_token AS monitoringToken,
-      portal_password AS portalPassword,
-      portal_enabled AS portalEnabled,
-      language,
-      goal,
-      notes,
-      yearly_income AS yearlyIncome,
-      housing_payment AS housingPayment,
-      debt_monthly_payments AS debtMonthlyPayments,
-      next_import_int AS nextImportInt,
-      next_import_label AS nextImportLabel,
-      next_import_mode AS nextImportMode,
-      manual_next_import_start_days AS manualNextImportStartDays,
-      manual_next_import_set_date AS manualNextImportSetDate,
-      refresh_next_import_start_date AS refreshNextImportStartDate,
-      documents_json AS documentsJson,
-      report_date AS reportDate
-    FROM client_profiles
-    WHERE owner_key = ?
-  `, [normalizedOwner]);
+  const rows = await surql(`SELECT client_id AS clientId, first_name AS firstName, last_name AS lastName, email, dob, ssn, address, phone, spouse_client_id AS spouseClientId, spouse_client_label AS spouseClientLabel, assigned_to AS assignedTo, ninja_assigned AS ninjaAssigned, affiliate_assigned AS affiliateAssigned, status, phase, monitoring_agency AS monitoringAgency, monitoring_username AS monitoringUsername, monitoring_password AS monitoringPassword, secret_key AS secretKey, monitoring_token AS monitoringToken, portal_password AS portalPassword, portal_enabled AS portalEnabled, language, goal, notes, yearly_income AS yearlyIncome, housing_payment AS housingPayment, debt_monthly_payments AS debtMonthlyPayments, next_import_int AS nextImportInt, next_import_label AS nextImportLabel, next_import_mode AS nextImportMode, manual_next_import_start_days AS manualNextImportStartDays, manual_next_import_set_date AS manualNextImportSetDate, refresh_next_import_start_date AS refreshNextImportStartDate, documents_json AS documentsJson, report_date AS reportDate FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools"`);
   return new Map(rows.map((row) => {
     let documents = null;
     try {
       const parsed = JSON.parse(String(row.documentsJson || '[]'));
       documents = Array.isArray(parsed) ? parsed : null;
-    } catch {
-      documents = null;
-    }
-    return [row.clientId, {
-      ...row,
-      documents,
-    }];
+    } catch { documents = null; }
+    return [row.clientId, { ...row, documents }];
   }));
 };
 
@@ -5714,13 +5452,8 @@ const mergeStoreWithProfileDb = async (store, ownerKey = getCurrentOwnerKey()) =
 };
 
 const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKey()) => {
-  const db = await getReportsDb();
   const normalizedOwner = normalizeOwnerKey(ownerKey);
-  const [existingRows] = await db.query(`
-    SELECT client_id, first_name, last_name, email, ssn
-    FROM client_profiles
-    WHERE owner_key = ?
-  `, [normalizedOwner]);
+  const existingRows = await surql(`SELECT client_id, first_name, last_name, email, ssn FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools"`);
   const canonicalBySsn = new Map();
   const canonicalByEmailName = new Map();
   for (const row of existingRows) {
@@ -5732,85 +5465,6 @@ const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKe
     const emailNameKey = `${String(row.email || '').trim().toLowerCase()}|${String(row.first_name || '').trim().toLowerCase()}|${String(row.last_name || '').trim().toLowerCase()}`;
     if (String(row.email || '').trim()) canonicalByEmailName.set(emailNameKey, canonicalId);
   }
-  const upsertSql = `
-    INSERT INTO client_profiles (
-      owner_key,
-      client_id,
-      first_name,
-      last_name,
-      email,
-      dob,
-      ssn,
-      address,
-      phone,
-      spouse_client_id,
-      spouse_client_label,
-      assigned_to,
-      ninja_assigned,
-      affiliate_assigned,
-      status,
-      phase,
-      monitoring_agency,
-      monitoring_username,
-      monitoring_password,
-      secret_key,
-      monitoring_token,
-      portal_password,
-      portal_enabled,
-      language,
-      goal,
-      notes,
-      yearly_income,
-      housing_payment,
-      debt_monthly_payments,
-      next_import_int,
-      next_import_label,
-      next_import_mode,
-      manual_next_import_start_days,
-      manual_next_import_set_date,
-      refresh_next_import_start_date,
-      documents_json,
-      report_date,
-      updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      first_name = VALUES(first_name),
-      last_name = VALUES(last_name),
-      email = VALUES(email),
-      dob = VALUES(dob),
-      ssn = VALUES(ssn),
-      address = VALUES(address),
-      phone = VALUES(phone),
-      spouse_client_id = VALUES(spouse_client_id),
-      spouse_client_label = VALUES(spouse_client_label),
-      assigned_to = VALUES(assigned_to),
-      ninja_assigned = VALUES(ninja_assigned),
-      affiliate_assigned = VALUES(affiliate_assigned),
-      status = VALUES(status),
-      phase = VALUES(phase),
-      monitoring_agency = VALUES(monitoring_agency),
-      monitoring_username = VALUES(monitoring_username),
-      monitoring_password = VALUES(monitoring_password),
-      secret_key = VALUES(secret_key),
-      monitoring_token = VALUES(monitoring_token),
-      portal_password = VALUES(portal_password),
-      portal_enabled = VALUES(portal_enabled),
-      language = VALUES(language),
-      goal = VALUES(goal),
-      notes = VALUES(notes),
-      yearly_income = VALUES(yearly_income),
-      housing_payment = VALUES(housing_payment),
-      debt_monthly_payments = VALUES(debt_monthly_payments),
-      next_import_int = VALUES(next_import_int),
-      next_import_label = VALUES(next_import_label),
-      next_import_mode = VALUES(next_import_mode),
-      manual_next_import_start_days = VALUES(manual_next_import_start_days),
-      manual_next_import_set_date = VALUES(manual_next_import_set_date),
-      refresh_next_import_start_date = VALUES(refresh_next_import_start_date),
-      documents_json = VALUES(documents_json),
-      report_date = VALUES(report_date),
-      updated_at = VALUES(updated_at)
-  `;
   const updatedAt = new Date().toISOString();
   const syncedTargetIdsInPass = new Set();
   for (const client of clients) {
@@ -5824,77 +5478,64 @@ const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKe
       const canonicalId = (ssnKey && canonicalBySsn.get(ssnKey))
         || (String(client.email || '').trim() ? canonicalByEmailName.get(emailNameKey) : '')
         || '';
-      if (canonicalId) {
-        targetClientId = canonicalId;
-      }
+      if (canonicalId) targetClientId = canonicalId;
     }
-    // Prevent duplicate INSERT attempts within the same sync pass when multiple
-    // in-memory records collapse to the same canonical client ID.
-    if (syncedTargetIdsInPass.has(targetClientId)) {
-      continue;
-    }
-    const params = [
-      client.firstName || '',
-      client.lastName || '',
-      client.email || '',
-      normalizedDob,
-      normalizedSsn,
-      client.address || '',
-      client.phone || '',
-      client.spouseClientId || '',
-      client.spouseClientLabel || '',
-      client.assignedTo || '',
-      client.ninjaAssigned || '',
-      client.affiliateAssigned || 'None',
-      client.status || 'Client',
-      client.phase || 'None',
-      client.monitoringAgency || '',
-      client.monitoringUsername || '',
-      client.monitoringPassword || '',
-      client.secretKey || '',
-      client.monitoringToken || '',
-      client.portalPassword || buildDefaultPortalPassword(client.lastName || '', normalizedSsn),
-      client.portalEnabled ? 1 : 0,
-      client.language || 'English',
-      client.goal || '',
-      client.notes || '',
-      client.yearlyIncome || '',
-      client.housingPayment || '',
-      client.debtMonthlyPayments || '',
-      client.nextImportInt || '',
-      client.nextImportLabel || '',
-      client.nextImportMode || 'manual',
-      Number.isFinite(Number(client.manualNextImportStartDays))
-        ? String(Number.parseInt(client.manualNextImportStartDays, 10))
-        : '',
-      client.manualNextImportSetDate || '',
-      client.refreshNextImportStartDate || '',
-      JSON.stringify(normalizeClientDocumentsInput(client.documents)),
-      client.reportDate || '',
-      updatedAt,
-    ];
-
-    await db.query(upsertSql, [
-      normalizedOwner,
-      targetClientId,
-      ...params,
-    ]);
+    if (syncedTargetIdsInPass.has(targetClientId)) continue;
+    const recordId = `${targetClientId}_ninjatools`;
+    await surqlRestPut('clients', recordId, {
+      client_id: targetClientId,
+      owner_key: normalizedOwner,
+      source_db: 'ninjatools',
+      first_name: client.firstName || '',
+      last_name: client.lastName || '',
+      email: client.email || '',
+      dob: normalizedDob,
+      ssn: normalizedSsn,
+      address: client.address || '',
+      phone: client.phone || '',
+      spouse_client_id: client.spouseClientId || '',
+      spouse_client_label: client.spouseClientLabel || '',
+      assigned_to: client.assignedTo || '',
+      ninja_assigned: client.ninjaAssigned || '',
+      affiliate_assigned: client.affiliateAssigned || 'None',
+      status: client.status || 'Client',
+      phase: client.phase || 'None',
+      monitoring_agency: client.monitoringAgency || '',
+      monitoring_username: client.monitoringUsername || '',
+      monitoring_password: client.monitoringPassword || '',
+      secret_key: client.secretKey || '',
+      monitoring_token: client.monitoringToken || '',
+      portal_password: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', normalizedSsn),
+      portal_enabled: !!client.portalEnabled,
+      language: client.language || 'English',
+      goal: client.goal || '',
+      notes: client.notes || '',
+      yearly_income: client.yearlyIncome || '',
+      housing_payment: client.housingPayment || '',
+      debt_monthly_payments: client.debtMonthlyPayments || '',
+      next_import_int: client.nextImportInt || '',
+      next_import_label: client.nextImportLabel || '',
+      next_import_mode: client.nextImportMode || 'manual',
+      manual_next_import_start_days: Number.isFinite(Number(client.manualNextImportStartDays)) ? String(Number.parseInt(client.manualNextImportStartDays, 10)) : '',
+      manual_next_import_set_date: client.manualNextImportSetDate || '',
+      refresh_next_import_start_date: client.refreshNextImportStartDate || '',
+      documents_json: JSON.stringify(normalizeClientDocumentsInput(client.documents)),
+      report_date: client.reportDate || '',
+      updated_at: updatedAt,
+      created_at: client.createdAt || updatedAt,
+    }).catch(() => {});
     syncedTargetIdsInPass.add(targetClientId);
   }
 };
 
 const deleteClientProfile = async (clientId, ownerKey = getCurrentOwnerKey()) => {
-  const db = await getReportsDb();
-  await db.query('DELETE FROM client_profiles WHERE owner_key = ? AND client_id = ?', [normalizeOwnerKey(ownerKey), clientId]);
+  const normalizedOwner = normalizeOwnerKey(ownerKey);
+  const recordId = `${String(clientId)}_ninjatools`;
+  await surql(`DELETE clients:⟨${sEsc(recordId)}⟩`).catch(() => {});
 };
 
 const loadIntegrations = async () => {
-  const db = await getReportsDb();
-  const [rows] = await db.query(`
-    SELECT setting_key AS settingKey, value_json AS valueJson
-    FROM app_settings
-    WHERE setting_key IN ('integration.smartcredit', 'integration.smartcredit35540', 'integration.smartcredit68951', 'integration.myfreescorenow', 'integration.gohighlevel', 'integration.billing', 'integration.ninjadispute', 'integration.contabo')
-  `);
+  const rows = await surql(`SELECT setting_key AS settingKey, value_json AS valueJson FROM settings WHERE setting_key IN ["integration.smartcredit","integration.smartcredit35540","integration.smartcredit68951","integration.myfreescorenow","integration.gohighlevel","integration.billing","integration.ninjadispute","integration.contabo"]`);
 
   const map = Object.fromEntries(rows.map((row) => {
     let parsed = {};
@@ -5930,23 +5571,10 @@ const loadIntegrations = async () => {
 
 const saveIntegration = async (service, payload = {}) => {
   const normalizedService = String(service || '').trim().toLowerCase();
-  if (!allowedIntegrationServices.has(normalizedService)) {
-    throw new Error('Unsupported integration service.');
-  }
-
+  if (!allowedIntegrationServices.has(normalizedService)) throw new Error('Unsupported integration service.');
   const normalized = normalizeIntegrationPayload(payload, normalizedService);
-  const db = await getReportsDb();
-  await db.query(`
-    INSERT INTO app_settings (setting_key, value_json, updated_at)
-    VALUES (?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      value_json = VALUES(value_json),
-      updated_at = VALUES(updated_at)
-  `, [
-    `integration.${normalizedService}`,
-    JSON.stringify(normalized),
-    new Date().toISOString(),
-  ]);
+  const key = `integration.${normalizedService}`;
+  await surqlRestPut('settings', key, { setting_key: key, value_json: JSON.stringify(normalized), updated_at: new Date().toISOString() });
 
   void mirrorBusinessControlPlaneToS3('admin').catch((error) => {
     console.warn(`[S3 Mirror] integration export failed: ${error.message}`);
@@ -5956,24 +5584,10 @@ const saveIntegration = async (service, payload = {}) => {
 };
 
 const mirrorBusinessControlPlaneToS3 = async (ownerKey = getCurrentOwnerKey()) => {
-  const db = await getReportsDb();
   const normalizedOwner = normalizeOwnerKey(ownerKey);
-  const [appUsers] = await db.query(`
-    SELECT username, created_at AS createdAt, updated_at AS updatedAt
-    FROM app_users
-    ORDER BY username ASC
-  `);
-  const [appSettings] = await db.query(`
-    SELECT setting_key AS settingKey, value_json AS valueJson, updated_at AS updatedAt
-    FROM app_settings
-    ORDER BY setting_key ASC
-  `);
-  const [clientProfiles] = await db.query(`
-    SELECT *
-    FROM client_profiles
-    WHERE owner_key = ?
-    ORDER BY client_id ASC
-  `, [normalizedOwner]);
+  const appUsers = await surql('SELECT username, created_at AS createdAt, updated_at AS updatedAt FROM users ORDER BY username ASC').catch(() => []);
+  const appSettings = await surql('SELECT setting_key AS settingKey, value_json AS valueJson, updated_at AS updatedAt FROM settings ORDER BY setting_key ASC').catch(() => []);
+  const clientProfiles = await surql(`SELECT * FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools" ORDER BY client_id ASC`).catch(() => []);
 
   const generatedAt = new Date().toISOString();
   await mirrorBusinessBlobToS3(normalizedOwner, 'control-plane/app_users.json', JSON.stringify({
@@ -5994,12 +5608,7 @@ const mirrorBusinessControlPlaneToS3 = async (ownerKey = getCurrentOwnerKey()) =
 };
 
 const loadAffiliateLinks = async () => {
-  const db = await getReportsDb();
-  const [rows] = await db.query(`
-    SELECT setting_key AS settingKey, value_json AS valueJson
-    FROM app_settings
-    WHERE setting_key IN ('affiliate.creditBuilder', 'affiliate.creditMonitoring')
-  `);
+  const rows = await surql(`SELECT setting_key AS settingKey, value_json AS valueJson FROM settings WHERE setting_key IN ["affiliate.creditBuilder","affiliate.creditMonitoring"]`);
 
   const map = Object.fromEntries(rows.map((row) => {
     let parsed = [];
@@ -6027,18 +5636,8 @@ const saveAffiliateSection = async (section, rows = []) => {
     ? await normalizeAffiliateBuilderRows(rows)
     : await normalizeAffiliateMonitoringRows(rows);
 
-  const db = await getReportsDb();
-  await db.query(`
-    INSERT INTO app_settings (setting_key, value_json, updated_at)
-    VALUES (?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      value_json = VALUES(value_json),
-      updated_at = VALUES(updated_at)
-  `, [
-    `affiliate.${normalizedSection}`,
-    JSON.stringify(normalizedRows),
-    new Date().toISOString(),
-  ]);
+  const key = `affiliate.${normalizedSection}`;
+  await surqlRestPut('settings', key, { setting_key: key, value_json: JSON.stringify(normalizedRows), updated_at: new Date().toISOString() });
 
   void mirrorBusinessControlPlaneToS3('admin').catch((error) => {
     console.warn(`[S3 Mirror] affiliate export failed: ${error.message}`);
@@ -6134,10 +5733,9 @@ const parseJsonField = (value, fallback = {}) => {
 const getPaymentConfigKey = (ownerKey) => `payments.config.${normalizeOwnerKey(ownerKey)}`;
 
 const loadPaymentConfig = async (ownerKey) => {
-  const db = await getReportsDb();
   const key = getPaymentConfigKey(ownerKey);
-  const [rows] = await db.query('SELECT value_json AS valueJson FROM app_settings WHERE setting_key = ?', [key]);
-  const row = rows?.[0] || null;
+  const rows = await surql(`SELECT value_json AS valueJson FROM settings WHERE setting_key = "${sEsc(key)}" LIMIT 1`);
+  const row = rows[0] ?? null;
   const parsed = parseJsonField(row?.valueJson, {});
   return {
     defaultRetryCount: clampInteger(parsed.defaultRetryCount, defaultPaymentConfig.defaultRetryCount, 0, 999),
@@ -6148,7 +5746,6 @@ const loadPaymentConfig = async (ownerKey) => {
 };
 
 const savePaymentConfig = async (ownerKey, payload = {}) => {
-  const db = await getReportsDb();
   const key = getPaymentConfigKey(ownerKey);
   const now = new Date().toISOString();
   const next = {
@@ -6157,13 +5754,7 @@ const savePaymentConfig = async (ownerKey, payload = {}) => {
     defaultRunTimeLocal: String(payload.defaultRunTimeLocal || defaultPaymentConfig.defaultRunTimeLocal).trim() || defaultPaymentConfig.defaultRunTimeLocal,
     timezone: String(payload.timezone || defaultPaymentConfig.timezone).trim() || defaultPaymentConfig.timezone,
   };
-  await db.query(`
-    INSERT INTO app_settings (setting_key, value_json, updated_at)
-    VALUES (?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      value_json = VALUES(value_json),
-      updated_at = VALUES(updated_at)
-  `, [key, JSON.stringify(next), now]);
+  await surqlRestPut('settings', key, { setting_key: key, value_json: JSON.stringify(next), updated_at: now });
   void mirrorBusinessControlPlaneToS3(ownerKey).catch((error) => {
     console.warn(`[S3 Mirror] payment config export failed: ${error.message}`);
   });
@@ -6185,118 +5776,69 @@ const formatMerchantRow = (row = {}) => ({
   updatedAt: String(row.updated_at || ''),
 });
 
+const _surrealNormMerchant = (row) => ({
+  ...row,
+  id: surrealExtractNumId(row.id),
+  is_default: row.is_default ? 1 : 0,
+});
+
 const listPaymentMerchants = async (ownerKey) => {
-  const db = await getReportsDb();
-  const [rows] = await db.query(`
-    SELECT *
-    FROM payment_merchants
-    WHERE owner_key = ?
-    ORDER BY is_default DESC, merchant_name ASC
-  `, [ownerKey]);
-  return rows.map(formatMerchantRow);
+  const rows = await surql(`SELECT * FROM merchants WHERE owner_key = "${sEsc(ownerKey)}" ORDER BY is_default DESC, merchant_name ASC`);
+  return rows.map(_surrealNormMerchant).map(formatMerchantRow);
 };
 
 const createPaymentMerchant = async (ownerKey, payload = {}) => {
-  const db = await getReportsDb();
   const now = new Date().toISOString();
   const merchantName = String(payload.merchantName || '').trim();
-  if (!merchantName) {
-    throw new Error('Merchant name is required.');
-  }
+  if (!merchantName) throw new Error('Merchant name is required.');
   const gateway = String(payload.gateway || '').trim();
-  if (!gateway) {
-    throw new Error('Gateway is required.');
-  }
+  if (!gateway) throw new Error('Gateway is required.');
   const isDefault = payload.isDefault === true || payload.isDefault === 'true';
-  if (isDefault) {
-    await db.query('UPDATE payment_merchants SET is_default = 0, updated_at = ? WHERE owner_key = ?', [now, ownerKey]);
-  }
-  const [result] = await db.query(`
-    INSERT INTO payment_merchants (
-      owner_key, merchant_name, gateway, api_id, transaction_key, is_default,
-      status, allowed_retries, retry_frequency_days, metadata_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    ownerKey,
-    merchantName,
-    gateway,
-    String(payload.apiId || '').trim(),
-    String(payload.transactionKey || '').trim(),
-    isDefault ? 1 : 0,
-    normalizePaymentStatus(payload.status, 'Active'),
-    clampInteger(payload.allowedRetries, 3, 0, 999),
-    clampInteger(payload.retryFrequencyDays, 7, 1, 365),
-    JSON.stringify(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
-    now,
-    now,
-  ]);
-  const [rows] = await db.query('SELECT * FROM payment_merchants WHERE id = ? AND owner_key = ?', [result.insertId, ownerKey]);
-  const row = rows?.[0] || null;
-  return formatMerchantRow(row);
+  if (isDefault) await surql(`UPDATE merchants SET is_default = false, updated_at = "${now}" WHERE owner_key = "${sEsc(ownerKey)}"`).catch(() => {});
+  const numId = surrealRandIntId();
+  await surqlRestPut('merchants', String(numId), {
+    owner_key: ownerKey, merchant_name: merchantName, gateway,
+    api_id: String(payload.apiId || '').trim(), transaction_key: String(payload.transactionKey || '').trim(),
+    is_default: isDefault, status: normalizePaymentStatus(payload.status, 'Active'),
+    allowed_retries: clampInteger(payload.allowedRetries, 3, 0, 999),
+    retry_frequency_days: clampInteger(payload.retryFrequencyDays, 7, 1, 365),
+    metadata_json: JSON.stringify(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    created_at: now, updated_at: now,
+  });
+  const rows = await surql(`SELECT * FROM merchants:${numId}`);
+  return formatMerchantRow(_surrealNormMerchant(rows[0] ?? { id: numId }));
 };
 
 const updatePaymentMerchant = async (ownerKey, merchantId, payload = {}) => {
-  const db = await getReportsDb();
-  const [existingRows] = await db.query('SELECT * FROM payment_merchants WHERE id = ? AND owner_key = ?', [merchantId, ownerKey]);
-  const row = existingRows?.[0] || null;
-  if (!row) {
-    throw new Error('Merchant not found.');
-  }
+  const existing = await surql(`SELECT * FROM merchants WHERE id = merchants:${merchantId} AND owner_key = "${sEsc(ownerKey)}" LIMIT 1`);
+  const row = existing[0] ?? null;
+  if (!row) throw new Error('Merchant not found.');
   const now = new Date().toISOString();
   const merchantName = String(payload.merchantName ?? row.merchant_name ?? '').trim();
-  if (!merchantName) {
-    throw new Error('Merchant name is required.');
-  }
+  if (!merchantName) throw new Error('Merchant name is required.');
   const gateway = String(payload.gateway ?? row.gateway ?? '').trim();
-  if (!gateway) {
-    throw new Error('Gateway is required.');
-  }
-  const nextIsDefault = payload.isDefault === undefined
-    ? Number(row.is_default || 0) === 1
-    : payload.isDefault === true || payload.isDefault === 'true';
-  if (nextIsDefault) {
-    await db.query('UPDATE payment_merchants SET is_default = 0, updated_at = ? WHERE owner_key = ?', [now, ownerKey]);
-  }
-  await db.query(`
-    UPDATE payment_merchants
-    SET merchant_name = ?,
-        gateway = ?,
-        api_id = ?,
-        transaction_key = ?,
-        is_default = ?,
-        status = ?,
-        allowed_retries = ?,
-        retry_frequency_days = ?,
-        metadata_json = ?,
-        updated_at = ?
-    WHERE id = ? AND owner_key = ?
-  `, [
-    merchantName,
-    gateway,
-    String(payload.apiId ?? row.api_id ?? '').trim(),
-    String(payload.transactionKey ?? row.transaction_key ?? '').trim(),
-    nextIsDefault ? 1 : 0,
-    normalizePaymentStatus(payload.status ?? row.status, 'Active'),
-    clampInteger(payload.allowedRetries ?? row.allowed_retries, 3, 0, 999),
-    clampInteger(payload.retryFrequencyDays ?? row.retry_frequency_days, 7, 1, 365),
-    JSON.stringify(payload.metadata && typeof payload.metadata === 'object'
-      ? payload.metadata
-      : parseJsonField(row.metadata_json, {})),
-    now,
-    merchantId,
-    ownerKey,
-  ]);
-  const [updatedRows] = await db.query('SELECT * FROM payment_merchants WHERE id = ? AND owner_key = ?', [merchantId, ownerKey]);
-  const updated = updatedRows?.[0] || null;
-  return formatMerchantRow(updated);
+  if (!gateway) throw new Error('Gateway is required.');
+  const nextIsDefault = payload.isDefault === undefined ? !!row.is_default : payload.isDefault === true || payload.isDefault === 'true';
+  if (nextIsDefault) await surql(`UPDATE merchants SET is_default = false, updated_at = "${now}" WHERE owner_key = "${sEsc(ownerKey)}"`).catch(() => {});
+  await surqlRestPut('merchants', String(merchantId), {
+    ...row, merchant_name: merchantName, gateway,
+    api_id: String(payload.apiId ?? row.api_id ?? '').trim(),
+    transaction_key: String(payload.transactionKey ?? row.transaction_key ?? '').trim(),
+    is_default: nextIsDefault, status: normalizePaymentStatus(payload.status ?? row.status, 'Active'),
+    allowed_retries: clampInteger(payload.allowedRetries ?? row.allowed_retries, 3, 0, 999),
+    retry_frequency_days: clampInteger(payload.retryFrequencyDays ?? row.retry_frequency_days, 7, 1, 365),
+    metadata_json: JSON.stringify(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : parseJsonField(row.metadata_json, {})),
+    updated_at: now,
+  });
+  const updated = await surql(`SELECT * FROM merchants:${merchantId}`);
+  return formatMerchantRow(_surrealNormMerchant(updated[0] ?? { id: merchantId }));
 };
 
 const deletePaymentMerchant = async (ownerKey, merchantId) => {
-  const db = await getReportsDb();
-  await db.query('UPDATE payment_autopay SET merchant_id = NULL, updated_at = ? WHERE owner_key = ? AND merchant_id = ?',
-    [new Date().toISOString(), ownerKey, merchantId]);
-  const [result] = await db.query('DELETE FROM payment_merchants WHERE id = ? AND owner_key = ?', [merchantId, ownerKey]);
-  return Number(result?.affectedRows || 0) > 0;
+  const now = new Date().toISOString();
+  await surql(`UPDATE autopay SET merchant_id = NONE, updated_at = "${now}" WHERE owner_key = "${sEsc(ownerKey)}" AND merchant_id = ${merchantId}`).catch(() => {});
+  await surql(`DELETE merchants:${merchantId} WHERE owner_key = "${sEsc(ownerKey)}"`).catch(() => {});
+  return true;
 };
 
 const formatProductRow = (row = {}) => ({
@@ -6311,91 +5853,56 @@ const formatProductRow = (row = {}) => ({
   updatedAt: String(row.updated_at || ''),
 });
 
+const _surrealNormProduct = (row) => ({ ...row, id: surrealExtractNumId(row.id) });
+
 const listPaymentProducts = async (ownerKey) => {
-  const db = await getReportsDb();
-  const [rows] = await db.query(`
-    SELECT *
-    FROM payment_products
-    WHERE owner_key = ?
-    ORDER BY product_name ASC
-  `, [ownerKey]);
-  return rows.map(formatProductRow);
+  const rows = await surql(`SELECT * FROM products WHERE owner_key = "${sEsc(ownerKey)}" ORDER BY product_name ASC`);
+  return rows.map(_surrealNormProduct).map(formatProductRow);
 };
 
 const createPaymentProduct = async (ownerKey, payload = {}) => {
-  const db = await getReportsDb();
   const now = new Date().toISOString();
   const productName = String(payload.productName || '').trim();
-  if (!productName) {
-    throw new Error('Product name is required.');
-  }
-  const [result] = await db.query(`
-    INSERT INTO payment_products (
-      owner_key, product_name, product_type, price_cents, billing_frequency,
-      status, metadata_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    ownerKey,
-    productName,
-    String(payload.productType || 'Service').trim() || 'Service',
-    parseMoneyToCents(payload.price, 0),
-    normalizeFrequencyType(payload.billingFrequency, 'monthly'),
-    normalizePaymentStatus(payload.status, 'Active'),
-    JSON.stringify(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
-    now,
-    now,
-  ]);
-  const [rows] = await db.query('SELECT * FROM payment_products WHERE id = ? AND owner_key = ?', [result.insertId, ownerKey]);
-  const row = rows?.[0] || null;
-  return formatProductRow(row);
+  if (!productName) throw new Error('Product name is required.');
+  const numId = surrealRandIntId();
+  await surqlRestPut('products', String(numId), {
+    owner_key: ownerKey, product_name: productName,
+    product_type: String(payload.productType || 'Service').trim() || 'Service',
+    price_cents: parseMoneyToCents(payload.price, 0),
+    billing_frequency: normalizeFrequencyType(payload.billingFrequency, 'monthly'),
+    status: normalizePaymentStatus(payload.status, 'Active'),
+    metadata_json: JSON.stringify(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    created_at: now, updated_at: now,
+  });
+  const rows = await surql(`SELECT * FROM products:${numId}`);
+  return formatProductRow(_surrealNormProduct(rows[0] ?? { id: numId }));
 };
 
 const updatePaymentProduct = async (ownerKey, productId, payload = {}) => {
-  const db = await getReportsDb();
-  const [existingRows] = await db.query('SELECT * FROM payment_products WHERE id = ? AND owner_key = ?', [productId, ownerKey]);
-  const row = existingRows?.[0] || null;
-  if (!row) {
-    throw new Error('Product not found.');
-  }
+  const existing = await surql(`SELECT * FROM products WHERE id = products:${productId} AND owner_key = "${sEsc(ownerKey)}" LIMIT 1`);
+  const row = existing[0] ?? null;
+  if (!row) throw new Error('Product not found.');
   const now = new Date().toISOString();
   const productName = String(payload.productName ?? row.product_name ?? '').trim();
-  if (!productName) {
-    throw new Error('Product name is required.');
-  }
-  await db.query(`
-    UPDATE payment_products
-    SET product_name = ?,
-        product_type = ?,
-        price_cents = ?,
-        billing_frequency = ?,
-        status = ?,
-        metadata_json = ?,
-        updated_at = ?
-    WHERE id = ? AND owner_key = ?
-  `, [
-    productName,
-    String(payload.productType ?? row.product_type ?? 'Service').trim() || 'Service',
-    payload.price !== undefined ? parseMoneyToCents(payload.price, Number(row.price_cents || 0)) : Number(row.price_cents || 0),
-    normalizeFrequencyType(payload.billingFrequency ?? row.billing_frequency, 'monthly'),
-    normalizePaymentStatus(payload.status ?? row.status, 'Active'),
-    JSON.stringify(payload.metadata && typeof payload.metadata === 'object'
-      ? payload.metadata
-      : parseJsonField(row.metadata_json, {})),
-    now,
-    productId,
-    ownerKey,
-  ]);
-  const [updatedRows] = await db.query('SELECT * FROM payment_products WHERE id = ? AND owner_key = ?', [productId, ownerKey]);
-  const updated = updatedRows?.[0] || null;
-  return formatProductRow(updated);
+  if (!productName) throw new Error('Product name is required.');
+  await surqlRestPut('products', String(productId), {
+    ...row, product_name: productName,
+    product_type: String(payload.productType ?? row.product_type ?? 'Service').trim() || 'Service',
+    price_cents: payload.price !== undefined ? parseMoneyToCents(payload.price, Number(row.price_cents || 0)) : Number(row.price_cents || 0),
+    billing_frequency: normalizeFrequencyType(payload.billingFrequency ?? row.billing_frequency, 'monthly'),
+    status: normalizePaymentStatus(payload.status ?? row.status, 'Active'),
+    metadata_json: JSON.stringify(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : parseJsonField(row.metadata_json, {})),
+    updated_at: now,
+  });
+  const updated = await surql(`SELECT * FROM products:${productId}`);
+  return formatProductRow(_surrealNormProduct(updated[0] ?? { id: productId }));
 };
 
 const deletePaymentProduct = async (ownerKey, productId) => {
-  const db = await getReportsDb();
-  await db.query('UPDATE payment_autopay SET product_id = NULL, updated_at = ? WHERE owner_key = ? AND product_id = ?',
-    [new Date().toISOString(), ownerKey, productId]);
-  const [result] = await db.query('DELETE FROM payment_products WHERE id = ? AND owner_key = ?', [productId, ownerKey]);
-  return Number(result?.affectedRows || 0) > 0;
+  const now = new Date().toISOString();
+  await surql(`UPDATE autopay SET product_id = NONE, updated_at = "${now}" WHERE owner_key = "${sEsc(ownerKey)}" AND product_id = ${productId}`).catch(() => {});
+  await surql(`DELETE products:${productId} WHERE owner_key = "${sEsc(ownerKey)}"`).catch(() => {});
+  return true;
 };
 
 const formatAutopayRow = (row = {}) => ({
@@ -6418,109 +5925,81 @@ const formatAutopayRow = (row = {}) => ({
   updatedAt: String(row.updated_at || ''),
 });
 
+const _surrealNormAutopay = (row) => ({ ...row, id: surrealExtractNumId(row.id) });
+
 const listPaymentAutopay = async (ownerKey) => {
-  const db = await getReportsDb();
-  const [rows] = await db.query(`
-    SELECT *
-    FROM payment_autopay
-    WHERE owner_key = ?
-    ORDER BY
-      CASE WHEN next_charge_at IS NULL OR next_charge_at = '' THEN 1 ELSE 0 END ASC,
-      next_charge_at ASC,
-      id DESC
-  `, [ownerKey]);
-  return rows.map(formatAutopayRow);
+  const rows = await surql(`SELECT * FROM autopay WHERE owner_key = "${sEsc(ownerKey)}"`);
+  const mapped = rows.map(_surrealNormAutopay).map(formatAutopayRow);
+  return mapped.sort((a, b) => {
+    const aEmpty = !a.nextChargeAt ? 1 : 0;
+    const bEmpty = !b.nextChargeAt ? 1 : 0;
+    if (aEmpty !== bEmpty) return aEmpty - bEmpty;
+    if (a.nextChargeAt < b.nextChargeAt) return -1;
+    if (a.nextChargeAt > b.nextChargeAt) return 1;
+    return b.id - a.id;
+  });
 };
 
 const createPaymentAutopay = async (ownerKey, payload = {}) => {
-  const db = await getReportsDb();
   const now = new Date().toISOString();
-  const [result] = await db.query(`
-    INSERT INTO payment_autopay (
-      owner_key, client_id, merchant_id, product_id, amount_cents, frequency_type,
-      frequency_interval, next_charge_at, status, retry_limit, retry_frequency_days,
-      failure_count, last_error, last_charge_at, metadata_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    ownerKey,
-    String(payload.clientId || '').trim(),
-    payload.merchantId ? Number(payload.merchantId) : null,
-    payload.productId ? Number(payload.productId) : null,
-    parseMoneyToCents(payload.amount, 0),
-    normalizeFrequencyType(payload.frequencyType, 'monthly'),
-    clampInteger(payload.frequencyInterval, 1, 1, 365),
-    normalizeNextChargeAt(payload.nextChargeAt),
-    normalizePaymentStatus(payload.status, 'Active'),
-    clampInteger(payload.retryLimit, 3, 0, 999),
-    clampInteger(payload.retryFrequencyDays, 7, 1, 365),
-    clampInteger(payload.failureCount, 0, 0, 999999),
-    String(payload.lastError || '').trim(),
-    normalizeNextChargeAt(payload.lastChargeAt),
-    JSON.stringify(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
-    now,
-    now,
-  ]);
-  const [rows] = await db.query('SELECT * FROM payment_autopay WHERE id = ? AND owner_key = ?', [result.insertId, ownerKey]);
-  const row = rows?.[0] || null;
-  return formatAutopayRow(row);
+  const numId = surrealRandIntId();
+  await surqlRestPut('autopay', String(numId), {
+    owner_key: ownerKey,
+    client_id: String(payload.clientId || '').trim(),
+    merchant_id: payload.merchantId ? Number(payload.merchantId) : null,
+    product_id: payload.productId ? Number(payload.productId) : null,
+    amount_cents: parseMoneyToCents(payload.amount, 0),
+    frequency_type: normalizeFrequencyType(payload.frequencyType, 'monthly'),
+    frequency_interval: clampInteger(payload.frequencyInterval, 1, 1, 365),
+    next_charge_at: normalizeNextChargeAt(payload.nextChargeAt),
+    status: normalizePaymentStatus(payload.status, 'Active'),
+    retry_limit: clampInteger(payload.retryLimit, 3, 0, 999),
+    retry_frequency_days: clampInteger(payload.retryFrequencyDays, 7, 1, 365),
+    failure_count: clampInteger(payload.failureCount, 0, 0, 999999),
+    last_error: String(payload.lastError || '').trim(),
+    last_charge_at: normalizeNextChargeAt(payload.lastChargeAt),
+    metadata_json: JSON.stringify(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    created_at: now,
+    updated_at: now,
+  });
+  const rows = await surql(`SELECT * FROM autopay:${numId}`);
+  return formatAutopayRow(_surrealNormAutopay(rows[0] ?? { id: numId }));
 };
 
 const updatePaymentAutopay = async (ownerKey, autopayId, payload = {}) => {
-  const db = await getReportsDb();
-  const [existingRows] = await db.query('SELECT * FROM payment_autopay WHERE id = ? AND owner_key = ?', [autopayId, ownerKey]);
-  const row = existingRows?.[0] || null;
-  if (!row) {
-    throw new Error('Autopay row not found.');
-  }
+  const existing = await surql(`SELECT * FROM autopay WHERE id = autopay:${autopayId} AND owner_key = "${sEsc(ownerKey)}" LIMIT 1`);
+  const row = existing[0] || null;
+  if (!row) throw new Error('Autopay row not found.');
   const now = new Date().toISOString();
-  await db.query(`
-    UPDATE payment_autopay
-    SET client_id = ?,
-        merchant_id = ?,
-        product_id = ?,
-        amount_cents = ?,
-        frequency_type = ?,
-        frequency_interval = ?,
-        next_charge_at = ?,
-        status = ?,
-        retry_limit = ?,
-        retry_frequency_days = ?,
-        failure_count = ?,
-        last_error = ?,
-        last_charge_at = ?,
-        metadata_json = ?,
-        updated_at = ?
-    WHERE id = ? AND owner_key = ?
-  `, [
-    String(payload.clientId ?? row.client_id ?? '').trim(),
-    payload.merchantId !== undefined ? (payload.merchantId ? Number(payload.merchantId) : null) : row.merchant_id,
-    payload.productId !== undefined ? (payload.productId ? Number(payload.productId) : null) : row.product_id,
-    payload.amount !== undefined ? parseMoneyToCents(payload.amount, Number(row.amount_cents || 0)) : Number(row.amount_cents || 0),
-    normalizeFrequencyType(payload.frequencyType ?? row.frequency_type, 'monthly'),
-    clampInteger(payload.frequencyInterval ?? row.frequency_interval, 1, 1, 365),
-    payload.nextChargeAt !== undefined ? normalizeNextChargeAt(payload.nextChargeAt) : String(row.next_charge_at || ''),
-    normalizePaymentStatus(payload.status ?? row.status, 'Active'),
-    clampInteger(payload.retryLimit ?? row.retry_limit, 3, 0, 999),
-    clampInteger(payload.retryFrequencyDays ?? row.retry_frequency_days, 7, 1, 365),
-    clampInteger(payload.failureCount ?? row.failure_count, 0, 0, 999999),
-    String(payload.lastError ?? row.last_error ?? '').trim(),
-    payload.lastChargeAt !== undefined ? normalizeNextChargeAt(payload.lastChargeAt) : String(row.last_charge_at || ''),
-    JSON.stringify(payload.metadata && typeof payload.metadata === 'object'
+  await surqlRestPut('autopay', String(autopayId), {
+    ...row,
+    client_id: String(payload.clientId ?? row.client_id ?? '').trim(),
+    merchant_id: payload.merchantId !== undefined ? (payload.merchantId ? Number(payload.merchantId) : null) : row.merchant_id,
+    product_id: payload.productId !== undefined ? (payload.productId ? Number(payload.productId) : null) : row.product_id,
+    amount_cents: payload.amount !== undefined ? parseMoneyToCents(payload.amount, Number(row.amount_cents || 0)) : Number(row.amount_cents || 0),
+    frequency_type: normalizeFrequencyType(payload.frequencyType ?? row.frequency_type, 'monthly'),
+    frequency_interval: clampInteger(payload.frequencyInterval ?? row.frequency_interval, 1, 1, 365),
+    next_charge_at: payload.nextChargeAt !== undefined ? normalizeNextChargeAt(payload.nextChargeAt) : String(row.next_charge_at || ''),
+    status: normalizePaymentStatus(payload.status ?? row.status, 'Active'),
+    retry_limit: clampInteger(payload.retryLimit ?? row.retry_limit, 3, 0, 999),
+    retry_frequency_days: clampInteger(payload.retryFrequencyDays ?? row.retry_frequency_days, 7, 1, 365),
+    failure_count: clampInteger(payload.failureCount ?? row.failure_count, 0, 0, 999999),
+    last_error: String(payload.lastError ?? row.last_error ?? '').trim(),
+    last_charge_at: payload.lastChargeAt !== undefined ? normalizeNextChargeAt(payload.lastChargeAt) : String(row.last_charge_at || ''),
+    metadata_json: JSON.stringify(payload.metadata && typeof payload.metadata === 'object'
       ? payload.metadata
       : parseJsonField(row.metadata_json, {})),
-    now,
-    autopayId,
-    ownerKey,
-  ]);
-  const [updatedRows] = await db.query('SELECT * FROM payment_autopay WHERE id = ? AND owner_key = ?', [autopayId, ownerKey]);
-  const updated = updatedRows?.[0] || null;
-  return formatAutopayRow(updated);
+    updated_at: now,
+  });
+  const updated = await surql(`SELECT * FROM autopay:${autopayId}`);
+  return formatAutopayRow(_surrealNormAutopay(updated[0] ?? { id: autopayId }));
 };
 
 const deletePaymentAutopay = async (ownerKey, autopayId) => {
-  const db = await getReportsDb();
-  const [result] = await db.query('DELETE FROM payment_autopay WHERE id = ? AND owner_key = ?', [autopayId, ownerKey]);
-  return Number(result?.affectedRows || 0) > 0;
+  const existing = await surql(`SELECT id FROM autopay WHERE id = autopay:${autopayId} AND owner_key = "${sEsc(ownerKey)}" LIMIT 1`);
+  if (!existing.length) return false;
+  await surql(`DELETE autopay:${autopayId}`);
+  return true;
 };
 
 const listPaymentClients = async () => {
@@ -6811,156 +6290,108 @@ const formatFailedPaymentEventRow = (row = {}) => ({
   lastSeenAt: String(row.last_seen_at || '').trim(),
 });
 
-const calculateFailedPaymentOccurrenceCount = async (db, ownerKey, row = {}) => {
-  const baseSql = 'SELECT COUNT(*) AS total FROM failed_payment_events WHERE owner_key = ?';
-  const id = Number(row.id || 0);
-  const email = String(row.email || '').trim();
+const calculateFailedPaymentOccurrenceCount = async (ownerKey, row = {}) => {
+  const email = String(row.email || '').trim().toLowerCase();
   const customerId = String(row.customer_id || '').trim();
-  const name = normalizeFailedPaymentName(row.client_name || '');
-
+  const name = normalizeFailedPaymentName(row.client_name || '').toLowerCase();
+  const all = await surql(`SELECT email, customer_id, client_name FROM payment_events WHERE owner_key = "${sEsc(ownerKey)}"`);
   if (email) {
-    const [rows] = await db.query(`${baseSql} AND id != ? AND LOWER(COALESCE(email, '')) = LOWER(?)`, [ownerKey, id, email]);
-    return Number(rows?.[0]?.total || 0) + 1;
+    return Math.max(all.filter(r => String(r.email || '').trim().toLowerCase() === email).length, 1);
   }
   if (customerId) {
-    const [rows] = await db.query(`${baseSql} AND id != ? AND customer_id = ?`, [ownerKey, id, customerId]);
-    return Number(rows?.[0]?.total || 0) + 1;
+    return Math.max(all.filter(r => String(r.customer_id || '').trim() === customerId).length, 1);
   }
   if (name) {
-    const [rows] = await db.query(`${baseSql} AND id != ? AND LOWER(COALESCE(client_name, '')) = LOWER(?)`, [ownerKey, id, name]);
-    return Number(rows?.[0]?.total || 0) + 1;
+    return Math.max(all.filter(r => normalizeFailedPaymentName(r.client_name || '').toLowerCase() === name).length, 1);
   }
   return 1;
 };
 
+const paymentEventRecordId = (ownerKey, transactionId) =>
+  `${String(ownerKey)}_${String(transactionId)}`.replace(/[^a-zA-Z0-9_]/g, '_');
+
 const upsertFailedPaymentEvent = async (ownerKey, event = {}) => {
   const normalizedOwnerKey = normalizeOwnerKey(ownerKey);
-  const db = await getReportsDb();
   const next = normalizeFailedPaymentEventInput(event);
   if (!next.transactionId) {
     return { upserted: false, reason: 'missing-transaction-id', row: null };
   }
 
-  await db.query(`
-    INSERT INTO failed_payment_events (
-      owner_key, transaction_id, event_at, client_name, email, phone, amount_cents, card_last4,
-      payment_method, failure_reason, retry_label, notes, status, next_action, completed,
-      processor, customer_id, retry_eligible, occurrence_count, raw_json,
-      webhook_synced_at, webhook_last_status, created_at, updated_at, last_seen_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      event_at = VALUES(event_at),
-      client_name = VALUES(client_name),
-      email = VALUES(email),
-      phone = VALUES(phone),
-      amount_cents = VALUES(amount_cents),
-      card_last4 = VALUES(card_last4),
-      payment_method = VALUES(payment_method),
-      failure_reason = VALUES(failure_reason),
-      retry_label = VALUES(retry_label),
-      notes = VALUES(notes),
-      status = VALUES(status),
-      next_action = VALUES(next_action),
-      completed = VALUES(completed),
-      processor = VALUES(processor),
-      customer_id = VALUES(customer_id),
-      retry_eligible = VALUES(retry_eligible),
-      raw_json = VALUES(raw_json),
-      updated_at = VALUES(updated_at),
-      last_seen_at = VALUES(last_seen_at)
-  `, [
-    normalizedOwnerKey,
-    next.transactionId,
-    next.eventAt,
-    next.clientName,
-    next.email,
-    next.phone,
-    next.amountCents,
-    next.cardLast4,
-    next.paymentMethod,
-    next.failureReason,
-    next.retryLabel,
-    next.notes,
-    next.status,
-    next.nextAction,
-    next.completed,
-    next.processor,
-    next.customerId,
-    next.retryEligible ? 1 : 0,
-    1,
-    JSON.stringify(next.rawJson),
-    next.createdAt,
-    next.updatedAt,
-    next.lastSeenAt,
-  ]);
+  const recordId = paymentEventRecordId(normalizedOwnerKey, next.transactionId);
+  const existingRows = await surql(`SELECT * FROM payment_events WHERE id = payment_events:${recordId} LIMIT 1`);
+  const prev = existingRows[0] || null;
+  const now = new Date().toISOString();
 
-  const [rows] = await db.query(`
-    SELECT *
-    FROM failed_payment_events
-    WHERE owner_key = ? AND transaction_id = ?
-  `, [normalizedOwnerKey, next.transactionId]);
-  const row = rows?.[0] || null;
+  const record = {
+    owner_key: normalizedOwnerKey,
+    transaction_id: next.transactionId,
+    event_at: next.eventAt,
+    client_name: next.clientName,
+    email: next.email,
+    phone: next.phone,
+    amount_cents: next.amountCents,
+    card_last4: next.cardLast4,
+    payment_method: next.paymentMethod,
+    failure_reason: next.failureReason,
+    retry_label: next.retryLabel,
+    notes: next.notes,
+    status: next.status,
+    next_action: next.nextAction,
+    completed: next.completed,
+    processor: next.processor,
+    customer_id: next.customerId,
+    retry_eligible: next.retryEligible ? 1 : 0,
+    occurrence_count: prev?.occurrence_count || 1,
+    webhook_synced_at: prev?.webhook_synced_at || null,
+    webhook_last_status: prev?.webhook_last_status ?? null,
+    created_at: prev?.created_at || next.createdAt,
+    updated_at: now,
+    last_seen_at: next.lastSeenAt,
+  };
 
-  if (!row) {
-    return { upserted: false, reason: 'not-found-after-upsert', row: null };
-  }
+  await surqlRestPut('payment_events', recordId, record);
 
-  const occurrenceCount = await calculateFailedPaymentOccurrenceCount(db, normalizedOwnerKey, row);
+  const savedRows = await surql(`SELECT * FROM payment_events WHERE id = payment_events:${recordId} LIMIT 1`);
+  const row = savedRows[0] || null;
+  if (!row) return { upserted: false, reason: 'not-found-after-upsert', row: null };
+
+  const occurrenceCount = await calculateFailedPaymentOccurrenceCount(normalizedOwnerKey, row);
   const statusLabel = toFailedStatusLabel(occurrenceCount);
-  await db.query(`
-    UPDATE failed_payment_events
-    SET occurrence_count = ?, status = ?, retry_eligible = ?, next_action = ?, updated_at = ?
-    WHERE id = ?
-  `, [
-    occurrenceCount,
-    statusLabel,
-    next.retryEligible ? 1 : 0,
-    next.nextAction,
-    new Date().toISOString(),
-    row.id,
-  ]);
 
-  const [updatedRows] = await db.query('SELECT * FROM failed_payment_events WHERE id = ?', [row.id]);
-  const updatedRow = updatedRows?.[0] || null;
-  return { upserted: true, reason: 'ok', row: formatFailedPaymentEventRow(updatedRow) };
+  await surqlRestPut('payment_events', recordId, {
+    ...record,
+    occurrence_count: occurrenceCount,
+    status: statusLabel,
+    retry_eligible: next.retryEligible ? 1 : 0,
+    next_action: next.nextAction,
+    updated_at: new Date().toISOString(),
+  });
+
+  const finalRows = await surql(`SELECT * FROM payment_events WHERE id = payment_events:${recordId} LIMIT 1`);
+  const finalRow = finalRows[0] || null;
+  return { upserted: true, reason: 'ok', row: finalRow ? formatFailedPaymentEventRow({ ...finalRow, id: recordId }) : null };
 };
 
 const listFailedPaymentEvents = async (ownerKey, options = {}) => {
   const normalizedOwnerKey = normalizeOwnerKey(ownerKey);
-  const db = await getReportsDb();
   const query = String(options.query || '').trim().toLowerCase();
   const limit = clampInteger(options.limit, 500, 1, 2000);
 
-  if (!query) {
-    const [rows] = await db.query(`
-      SELECT *
-      FROM failed_payment_events
-      WHERE owner_key = ?
-      ORDER BY event_at DESC, id DESC
-      LIMIT ?
-    `, [normalizedOwnerKey, limit]);
-    return rows.map(formatFailedPaymentEventRow);
-  }
+  const rows = await surql(`SELECT * FROM payment_events WHERE owner_key = "${sEsc(normalizedOwnerKey)}" ORDER BY event_at DESC LIMIT ${limit}`);
+  const formatted = rows.map(r => formatFailedPaymentEventRow({ ...r, id: String(r.id || '') }));
 
-  const like = `%${query}%`;
-  const [rows] = await db.query(`
-    SELECT *
-    FROM failed_payment_events
-    WHERE owner_key = ?
-      AND (
-        LOWER(COALESCE(transaction_id, '')) LIKE ?
-        OR LOWER(COALESCE(client_name, '')) LIKE ?
-        OR LOWER(COALESCE(email, '')) LIKE ?
-        OR LOWER(COALESCE(phone, '')) LIKE ?
-        OR LOWER(COALESCE(failure_reason, '')) LIKE ?
-        OR LOWER(COALESCE(status, '')) LIKE ?
-        OR LOWER(COALESCE(processor, '')) LIKE ?
-        OR LOWER(COALESCE(notes, '')) LIKE ?
-      )
-    ORDER BY event_at DESC, id DESC
-    LIMIT ?
-  `, [normalizedOwnerKey, like, like, like, like, like, like, like, like, limit]);
-  return rows.map(formatFailedPaymentEventRow);
+  if (!query) return formatted;
+
+  return formatted.filter(event =>
+    String(event.transactionId || '').toLowerCase().includes(query) ||
+    String(event.clientName || '').toLowerCase().includes(query) ||
+    String(event.email || '').toLowerCase().includes(query) ||
+    String(event.phone || '').toLowerCase().includes(query) ||
+    String(event.failureReason || '').toLowerCase().includes(query) ||
+    String(event.status || '').toLowerCase().includes(query) ||
+    String(event.processor || '').toLowerCase().includes(query) ||
+    String(event.notes || '').toLowerCase().includes(query)
+  );
 };
 
 const buildFailedPaymentPayloadFromEvent = (event = {}, options = {}) => ({
@@ -8856,7 +8287,6 @@ const syncConsumerDirectReportToClient = async ({
 };
 
 const seedReportHistory = async (store) => {
-  await getReportsDb();
   for (const client of store.clients) {
     if (!hasMeaningfulReportData(client)) {
       continue;
@@ -8920,27 +8350,21 @@ const writeStore = async (store, ownerKey = getCurrentOwnerKey()) => {
 };
 
 const listReportHistory = async (clientId) => {
-  const db = await getReportsDb();
-  const [rows] = await db.query(`
-    SELECT
-      id,
-      client_id AS clientId,
-      source,
-      monitoring_agency AS monitoringAgency,
-      report_date AS reportDate,
-      report_file_name AS reportFileName,
-      response_url AS responseUrl,
-      created_at AS createdAt
-    FROM report_history
-    WHERE client_id = ?
-    ORDER BY created_at DESC, id DESC
-  `, [clientId]);
-  return rows;
+  const rows = await surql(`SELECT id, client_id, source, monitoring_agency, report_date, report_file_name, response_url, created_at FROM reports WHERE client_id = "${sEsc(String(clientId))}" AND source_db = "ninjatools" ORDER BY created_at DESC`);
+  return rows.map(row => ({
+    id: String(row.id || ''),
+    clientId: String(row.client_id || ''),
+    source: String(row.source || ''),
+    monitoringAgency: String(row.monitoring_agency || ''),
+    reportDate: String(row.report_date || ''),
+    reportFileName: String(row.report_file_name || ''),
+    responseUrl: String(row.response_url || ''),
+    createdAt: String(row.created_at || ''),
+  }));
 };
 
 const deleteReportHistory = async (clientId) => {
-  const db = await getReportsDb();
-  await db.query('DELETE FROM report_history WHERE client_id = ?', [clientId]);
+  await surql(`DELETE reports WHERE client_id = "${sEsc(String(clientId))}" AND source_db = "ninjatools"`);
 };
 
 const findClientForSync = (clients, criteria) => {
@@ -9952,7 +9376,6 @@ const server = createServer((req, res) => {
           return;
         }
 
-        const db = await getReportsDb();
         const ownerEvents = await listFailedPaymentEvents(ownerKey, { limit: maxRows });
         for (const event of ownerEvents) {
           if (event.webhookSyncedAt) continue;
@@ -9965,17 +9388,17 @@ const server = createServer((req, res) => {
               status: hookResult.status,
               responseBody: String(hookResult.body || '').slice(0, 500),
             });
-            await db.query(`
-              UPDATE failed_payment_events
-              SET webhook_synced_at = ?, webhook_last_status = ?, updated_at = ?
-              WHERE owner_key = ? AND transaction_id = ?
-            `, [
-              hookResult.ok ? new Date().toISOString() : null,
-              Number(hookResult.status || 0),
-              new Date().toISOString(),
-              normalizeOwnerKey(ownerKey),
-              event.transactionId,
-            ]);
+            const evtRecordId = paymentEventRecordId(normalizeOwnerKey(ownerKey), event.transactionId);
+            const evtRows = await surql(`SELECT * FROM payment_events WHERE id = payment_events:${evtRecordId} LIMIT 1`);
+            const evtRow = evtRows[0];
+            if (evtRow) {
+              await surqlRestPut('payment_events', evtRecordId, {
+                ...evtRow,
+                webhook_synced_at: hookResult.ok ? new Date().toISOString() : null,
+                webhook_last_status: Number(hookResult.status || 0),
+                updated_at: new Date().toISOString(),
+              });
+            }
           } catch (error) {
             webhookResults.push({
               transactionId: event.transactionId,
