@@ -125,13 +125,7 @@
     window.location.href = '/';
   });
 
-  const getNinjaCookie = () => {
-    const m = ('; ' + document.cookie).split('; ninja_token=');
-    return m.length === 2 ? m.pop().split(';')[0] : null;
-  };
-
-  const trySSOLogin = async () => {
-    const token = getNinjaCookie();
+  const trySSOLogin = async (token) => {
     if (!token) return false;
     try {
       const res = await fetch('/api/auth/sso-login', {
@@ -143,15 +137,23 @@
         const data = await res.json().catch(() => ({}));
         if (data?.authenticated) return true;
       }
-    } catch {
-      // SSO unavailable, fall through to normal login
-    }
+    } catch {}
     return false;
   };
 
-  showLogin();
+  const getUrlSsoToken = () => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('sso_token') || null;
+  };
+
+  const getNinjaCookie = () => {
+    const m = ('; ' + document.cookie).split('; ninja_token=');
+    return m.length === 2 ? m.pop().split(';')[0] : null;
+  };
+
+  // Never show login page — stay hidden until we know the auth state.
   (async () => {
-    // Check existing txn session first — avoids SSO entirely for already-authenticated users.
+    // 1. Check existing txn session (fastest path).
     try {
       const response = await fetch('/api/auth/status');
       const payload = await response.json().catch(() => ({}));
@@ -160,10 +162,25 @@
         return;
       }
     } catch {}
-    // No valid session — try SSO via ninja_token cookie from auth.ninjadispute.com.
-    if (await trySSOLogin()) {
-      showApp();
+
+    // 2. URL token passed by api.ninjadispute.com redirect — clean the URL immediately.
+    const urlToken = getUrlSsoToken();
+    if (urlToken) {
+      const clean = window.location.pathname + window.location.hash;
+      history.replaceState(null, '', clean);
+      if (await trySSOLogin(urlToken)) {
+        showApp();
+        return;
+      }
     }
-    // If both fail, login form remains visible.
+
+    // 3. ninja_token cookie fallback.
+    if (await trySSOLogin(getNinjaCookie())) {
+      showApp();
+      return;
+    }
+
+    // 4. Nothing worked — show login form.
+    showLogin();
   })();
 })();
