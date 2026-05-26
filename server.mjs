@@ -396,6 +396,27 @@ const isValidAppCredential = (username = '', password = '') => {
 
 const normalizeUsername = (value = '') => String(value || '').trim().toLowerCase();
 
+// Verify a HS256 JWT signed by api.ninjadispute.com.
+// Returns the decoded payload or null if invalid/expired.
+const API_JWT_SECRET = process.env.API_JWT_SECRET || 'mad4srsZIISQ0G1MJPoQIeq3PVf25EaR';
+const verifyApiJWT = (token) => {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, sigB64] = parts;
+    const expected = createHmac('sha256', API_JWT_SECRET)
+      .update(`${headerB64}.${payloadB64}`)
+      .digest('base64url');
+    if (expected !== sigB64) return null;
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+};
+
 const hashUserPassword = (password = '', salt = '') => createHash('sha256')
   .update(`${salt}::${String(password || '')}`)
   .digest('hex');
@@ -9189,21 +9210,31 @@ const server = createServer((req, res) => {
         send(res, 401, { error: 'No SSO token present.' });
         return;
       }
-      const verifyRes = await fetch('https://auth.ninjadispute.com/verify', {
-        headers: { Authorization: `Bearer ${ninjaToken}` },
-      });
-      if (!verifyRes.ok) {
-        send(res, 401, { error: 'SSO token invalid.' });
-        return;
-      }
-      const verifyData = await verifyRes.json().catch(() => ({}));
-      if (!verifyData?.authenticated) {
-        send(res, 401, { error: 'SSO token not authenticated.' });
-        return;
-      }
-      const ssoUsername = normalizeUsername(verifyData.username || verifyData.email || '');
+      let ssoUsername = '';
+
+      // Try EdDSA verification via auth.ninjadispute.com first (OAuth users).
+      try {
+        const verifyRes = await fetch('https://auth.ninjadispute.com/verify', {
+          headers: { Authorization: `Bearer ${ninjaToken}` },
+        });
+        if (verifyRes.ok) {
+          const verifyData = await verifyRes.json().catch(() => ({}));
+          if (verifyData?.authenticated) {
+            ssoUsername = normalizeUsername(verifyData.username || verifyData.email || '');
+          }
+        }
+      } catch {}
+
+      // Fallback: HS256 token issued by api.ninjadispute.com (direct-login users).
       if (!ssoUsername) {
-        send(res, 401, { error: 'SSO token missing username.' });
+        const apiPayload = verifyApiJWT(ninjaToken);
+        if (apiPayload) {
+          ssoUsername = normalizeUsername(apiPayload.username || apiPayload.email || '');
+        }
+      }
+
+      if (!ssoUsername) {
+        send(res, 401, { error: 'SSO token invalid or unrecognized.' });
         return;
       }
       dynamicUsernames.add(ssoUsername);

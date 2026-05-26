@@ -2654,8 +2654,7 @@ nav.tab.client-hub-switch[data-selected="3"] .middle .circle {
   inset: 0 0 auto 0;
   height: 34rem;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.44) 76%, rgba(255, 255, 255, 0.92) 100%),
-    url("/assets/ninjadisputebackground.webp") center top / cover no-repeat;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.44) 76%, rgba(255, 255, 255, 0.92) 100%);
   pointer-events: none;
   z-index: 0;
 }
@@ -4504,8 +4503,7 @@ button {
   transform: skew(-10deg);
   text-decoration: none;
   background:
-    linear-gradient(95deg, rgba(9, 18, 43, 0.54), rgba(24, 44, 94, 0.46), rgba(77, 112, 192, 0.42)),
-    url("/assets/ninjadisputebackground.webp") center / cover no-repeat;
+    linear-gradient(95deg, rgba(9, 18, 43, 0.54), rgba(24, 44, 94, 0.46), rgba(77, 112, 192, 0.42));
   border: 1px solid rgba(255, 255, 255, 0.22);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
