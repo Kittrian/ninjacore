@@ -154,6 +154,34 @@ const surqlMultiResult = async (query) => {
   return d.map((r) => Array.isArray(r?.result) ? r.result : []);
 };
 
+// Upsert a row via the /rpc endpoint with bound parameters. Use this instead
+// of /key/ when the payload may exceed ~256KB (REST /key/ caps there).
+// Every field is cast to <string> in the MERGE because Surreal will otherwise
+// auto-coerce ISO-date-looking strings to datetime, mismatching string schemas.
+const SURREAL_RPC = String(process.env.SURREAL_RPC || `${SURREAL_REST}/rpc`);
+const surqlUpsert = async (table, id, data) => {
+  const recordId = String(id).replace(/⟨|⟩/g, '');
+  const fields = Object.keys(data || {});
+  if (!fields.length) throw new Error('surqlUpsert: empty payload');
+  const setClause = fields.map((f) => `${f}: <string>$data.${f}`).join(', ');
+  const query = `UPSERT type::record($tb, $id) MERGE { ${setClause} } RETURN id`;
+  const stringifiedData = {};
+  for (const f of fields) stringifiedData[f] = data[f] == null ? '' : String(data[f]);
+  const rpc = { method: 'query', params: [query, { tb: table, id: recordId, data: stringifiedData }] };
+  const res = await fetch(SURREAL_RPC, {
+    method: 'POST',
+    headers: { ...SURREAL_HEADERS, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(rpc),
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(`SurrealDB RPC ${res.status}: ${t.slice(0, 300)}`); }
+  const d = await res.json();
+  if (d?.error) throw new Error(`SurrealDB RPC ${d.error.code}: ${d.error.message || JSON.stringify(d.error).slice(0, 300)}`);
+  const inner = Array.isArray(d?.result) ? d.result : [];
+  const errs = inner.filter((r) => r?.status === 'ERR');
+  if (errs.length) throw new Error(`SurrealDB UPSERT ERR: ${JSON.stringify(errs[0]).slice(0, 300)}`);
+  return inner[0]?.result;
+};
+
 const surqlRestPut = async (table, id, data) => {
   const res = await fetch(`${SURREAL_REST}/key/${table}/${encodeURIComponent(id)}`, {
     method: 'PUT',
@@ -5348,21 +5376,31 @@ const insertReportSnapshot = async (client, payload = {}) => {
   const snapshotChecksum = buildSnapshotChecksum({ clientId: client.id, source, reportDate, reportFileName, reportHtml, reportJson });
   const recordId = `${String(client.id)}_${snapshotChecksum}`;
 
-  // Use REST PUT to handle large HTML payloads
-  await surqlRestPut('reports', recordId, {
-    client_id: String(client.id),
-    source,
-    monitoring_agency: monitoringAgency,
-    report_date: reportDate,
-    report_file_name: reportFileName,
-    report_html: reportHtml,
-    report_json: reportJson,
-    response_url: responseUrl,
-    snapshot_checksum: snapshotChecksum,
-    metadata_json: metadataJson,
-    created_at: createdAt,
-    source_db: 'ninjatools',
-  }).catch(() => {});
+  // Use SQL UPSERT (not REST /key/) — /key/ caps body at ~256KB and credit
+  // reports routinely exceed that. Schema requires non-null report_id, so
+  // mirror recordId there. Surface failures instead of swallowing.
+  try {
+    await surqlUpsert('reports', recordId, {
+      report_id: recordId,
+      client_id: String(client.id),
+      source,
+      report_type: source,
+      monitoring_agency: monitoringAgency,
+      report_date: reportDate,
+      report_file_name: reportFileName,
+      report_html: reportHtml,
+      report_json: reportJson,
+      response_url: responseUrl,
+      snapshot_checksum: snapshotChecksum,
+      metadata_json: metadataJson,
+      created_at: createdAt,
+      source_db: 'ninjatools',
+    });
+    console.log(`[reports] snapshot saved to SurrealDB: reports:${recordId} (${reportJson.length} bytes JSON, ${reportHtml.length} bytes HTML)`);
+  } catch (error) {
+    console.warn(`[reports] insertReportSnapshot UPSERT failed for ${recordId}: ${error.message}`);
+    return null;
+  }
 
   const rows = await surql(`SELECT id, client_id AS clientId, source, report_date AS reportDate, report_file_name AS reportFileName, created_at AS createdAt FROM reports WHERE client_id = "${sEsc(String(client.id))}" AND snapshot_checksum = "${sEsc(snapshotChecksum)}" LIMIT 1`);
   const snapshot = rows[0] ?? null;
