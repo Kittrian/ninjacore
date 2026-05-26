@@ -8551,11 +8551,12 @@ const writeStore = async (store, ownerKey = getCurrentOwnerKey(), options = {}) 
   const normalizedOwner = normalizeOwnerKey(ownerKey);
   const targetDataFile = getOwnerDataFile(normalizedOwner);
   const normalized = normalizeStore(store);
-  await writeJsonFileAtomic(targetDataFile, JSON.stringify(normalized, null, 2));
+  const serialized = JSON.stringify(normalized);
+  await writeJsonFileAtomic(targetDataFile, serialized);
   await syncClientProfilesToDb(normalized.clients, normalizedOwner, {
     onlyClientIds: options.syncClientIds,
   });
-  void mirrorBusinessBlobToS3(normalizedOwner, 'store/store.json', JSON.stringify(normalized, null, 2)).catch((error) => {
+  void mirrorBusinessBlobToS3(normalizedOwner, 'store/store.json', serialized).catch((error) => {
     console.warn(`[S3 Mirror] store export failed: ${error.message}`);
   });
   void mirrorBusinessControlPlaneToS3(normalizedOwner).catch((error) => {
