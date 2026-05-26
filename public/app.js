@@ -1042,17 +1042,46 @@ const buildDefaultClientDocuments = () => fixedClientDocumentTypes.map((type, in
   isCustom: false,
 }));
 
+const inferFileTypeFromName = (name = '') => {
+  const ext = String(name || '').toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || '';
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'heic', 'heif', 'tif', 'tiff'].includes(ext)) return 'image';
+  if (ext === 'pdf') return 'pdf';
+  return '';
+};
+
+// Existing client docs are stored in Contabo S3 and fronted by /api/documents/proxy.
+// For previews we hit the cheaper /api/documents/thumb?key=... endpoint which
+// returns a 400px WebP (or PDF placeholder). Fresh in-browser uploads (data: URLs)
+// render the data URL directly so the user sees the file before they save.
 const buildDocumentPreviewMarkup = (entry = {}) => {
   const fileName = String(entry.fileName || '').trim();
   const fileType = String(entry.fileType || '').trim().toLowerCase();
   const fileDataUrl = String(entry.fileDataUrl || '').trim();
+  const storageKey = String(entry.storageKey || '').trim();
 
-  if (fileDataUrl && fileType.startsWith('image/')) {
-    return `<img class="client-doc-preview-image" src="${escapeHtml(fileDataUrl)}" alt="${escapeHtml(fileName || 'Document preview')}" />`;
+  const looksLikeProxy = fileDataUrl.startsWith('/api/documents/proxy?key=');
+  const looksLikeData = fileDataUrl.startsWith('data:');
+  const inferred = inferFileTypeFromName(fileName);
+  const isImage = fileType.startsWith('image/') || inferred === 'image';
+  const isPdf = fileType.includes('pdf') || inferred === 'pdf';
+
+  // Fresh upload (data URL) — render inline
+  if (looksLikeData && isImage) {
+    return `<img class="client-doc-preview-image" src="${escapeHtml(fileDataUrl)}" alt="${escapeHtml(fileName || 'Document preview')}" loading="lazy" />`;
   }
-  if (fileDataUrl && fileType.includes('pdf')) {
+  if (looksLikeData && isPdf) {
     return `<iframe class="client-doc-preview-pdf" src="${escapeHtml(fileDataUrl)}#toolbar=0&navpanes=0&scrollbar=0" title="${escapeHtml(fileName || 'PDF preview')}"></iframe>`;
   }
+
+  // Stored document — derive a thumbnail URL from the storage key or proxy URL
+  const keyForThumb = storageKey
+    || (looksLikeProxy ? decodeURIComponent(fileDataUrl.split('key=')[1] || '') : '');
+  if (keyForThumb && (isImage || isPdf)) {
+    const thumbUrl = `/api/documents/thumb?key=${encodeURIComponent(keyForThumb)}`;
+    const fullUrl = fileDataUrl || `/api/documents/proxy?key=${encodeURIComponent(keyForThumb)}`;
+    return `<a class="client-doc-preview-link" href="${escapeHtml(fullUrl)}" target="_blank" rel="noopener" title="${escapeHtml(fileName || 'Open document')}"><img class="client-doc-preview-image" src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(fileName || 'Document preview')}" loading="lazy" /></a>`;
+  }
+
   if (fileName) {
     return `<div class="client-doc-preview-placeholder">${escapeHtml(fileName)}</div>`;
   }
@@ -1381,7 +1410,7 @@ const populateAddClientFormFromClient = (client) => {
   form.monitoringUsername.value = client.monitoringUsername || '';
   form.monitoringPassword.value = client.monitoringPassword || '';
   form.secretKey.value = client.secretKey || '';
-  form.monitoringToken.value = client.monitoringToken || '';
+  form.tokenId.value = client.tokenId || '';
   form.portalPassword.value = client.portalPassword || '';
   form.language.value = client.language || 'English';
   if (form.ninjaAssigned) {
@@ -3072,7 +3101,7 @@ const getMonitoringLinkStatus = (client, agency) => {
   }
 
   if (normalizedAgency.includes('myscore')) {
-    const tokenValue = String(client.monitoringToken || '').trim();
+    const tokenValue = String(client.tokenId || '').trim();
     const linked = Boolean(tokenValue && reportSyncHealthy);
     return {
       visible: true,
@@ -3091,7 +3120,7 @@ const getMonitoringLinkStatus = (client, agency) => {
   }
 
   const integration = state.integrations[integrationKey] || {};
-  const tokenValue = String(client.monitoringToken || '').trim();
+  const tokenValue = String(client.tokenId || '').trim();
   const credsReady = Boolean(String(integration.tokenId || '').trim() && String(integration.apiSecret || '').trim());
   const linked = Boolean(tokenValue && credsReady && reportSyncHealthy);
 
@@ -4639,7 +4668,7 @@ const renderClientDetail = (client) => {
   const monitoringLinkText = node.querySelector('.monitoring-link-text');
   const securityValues = {
     identityiq: client.secretKey || '',
-    token: client.monitoringToken || '',
+    token: client.tokenId || '',
   };
   let lastLinkedCredentialSignature = '';
   const getActiveAgencyValue = () => (
@@ -4657,7 +4686,7 @@ const renderClientDetail = (client) => {
       monitoringUsername: String(node.querySelector('.monitoring-username-input')?.value || '').trim(),
       monitoringPassword: String(node.querySelector('.monitoring-password-input')?.value || '').trim(),
       secretKey: tokenAgency ? '' : securityValue,
-      monitoringToken: tokenAgency ? securityValue : '',
+      tokenId: tokenAgency ? securityValue : '',
     };
   };
   const updateMonitoringLinkIndicator = (selectedAgency) => {
@@ -4667,7 +4696,7 @@ const renderClientDetail = (client) => {
       monitoringAgency: liveDraft.monitoringAgency,
       monitoringUsername: liveDraft.monitoringUsername,
       monitoringPassword: liveDraft.monitoringPassword,
-      monitoringToken: liveDraft.monitoringToken,
+      tokenId: liveDraft.tokenId,
     }, selectedAgency || liveDraft.monitoringAgency);
     monitoringLinkIndicator.hidden = !linkStatus.visible;
     monitoringLinkIcon.classList.toggle('is-linked', linkStatus.linked);
@@ -5412,7 +5441,7 @@ const renderClientDetail = (client) => {
           monitoringUsername: node.querySelector('.monitoring-username-input').value,
           monitoringPassword: node.querySelector('.monitoring-password-input').value,
           secretKey: securityValues.identityiq,
-          monitoringToken: securityValues.token,
+          tokenId: securityValues.token,
           goal: goalSelect.value,
           notes: notesInput.value,
         }),
@@ -5469,7 +5498,7 @@ const renderClientDetail = (client) => {
       liveDraft.monitoringUsername,
       liveDraft.monitoringPassword,
       liveDraft.secretKey,
-      liveDraft.monitoringToken,
+      liveDraft.tokenId,
     ].join('|');
     if (signature === lastLinkedCredentialSignature) {
       return;
@@ -5832,7 +5861,7 @@ const renderDashboard = () => {
   const monitoringLinked = countWith((client) => (
     String(client.monitoringUsername || '').trim()
     || String(client.monitoringPassword || '').trim()
-    || String(client.monitoringToken || '').trim()
+    || String(client.tokenId || '').trim()
   ));
   const activeNinjaMembers = countWith((client) => (
     String(client.status || '').trim().toLowerCase() === 'client'
@@ -6187,13 +6216,31 @@ const pollReportRun = async (runId, clientId, initialLogCount = 0) => {
         if (successHint) {
           const updatedClient = await syncSelectedClientFromServer(clientId).catch(() => null);
           if (updatedClient) {
+            // Only treat the early fetch as authoritative if the bureau
+            // scores actually landed. The script logs "Tools Ninja sync
+            // complete" the moment it sends the PUT, but the API server
+            // still has to write store.json + sync to SurrealDB before
+            // the parser pulls the new credit scores. Without this check
+            // we render the old (empty) client and never refetch, which
+            // is why the cards stayed at "-- --" after a successful run.
+            const hasFreshScores = !!(
+              updatedClient.creditScores
+              && (updatedClient.creditScores.transunion
+                  || updatedClient.creditScores.experian
+                  || updatedClient.creditScores.equifax)
+            );
             updatedClient.lastReportRunStatus = 'success';
             renderClients();
             if (state.selectedClientId === updatedClient.id) {
               renderClientDetail(updatedClient);
               setWidgetRefreshHeader(updatedClient);
             }
-            earlyHydrated = true;
+            // Only stop polling for fresh data once the scores are visible.
+            // Otherwise let the next poll iteration retry — the `completed`
+            // branch below will always run at least once more.
+            if (hasFreshScores) {
+              earlyHydrated = true;
+            }
           }
         }
       }
@@ -6244,7 +6291,7 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
     const monitoringAgency = normalizeMonitoringAgency(activeMonitoringAgency);
     const hasMonitoringUsername = Boolean(String(selectedClient?.monitoringUsername || '').trim());
     const hasMonitoringPassword = Boolean(String(selectedClient?.monitoringPassword || '').trim());
-    const hasMonitoringToken = Boolean(String(selectedClient?.monitoringToken || '').trim());
+    const hasMonitoringToken = Boolean(String(selectedClient?.tokenId || '').trim());
     const isMyFreeScoreNow = monitoringAgency.includes('myfree');
     const isMyFreeScoreNowTokenFlow = isMyFreeScoreNow && hasMonitoringToken;
 
@@ -6508,7 +6555,6 @@ const loadIntegrations = async () => {
     || state.integrations.smartcredit
     || { tokenId: '', apiSecret: '' };
   applyIntegrationValues('smartCreditIntegrationForm', smartCreditDefault);
-  applyIntegrationValues('myFreeScoreIntegrationForm', state.integrations.myfreescorenow);
   if (state.selectedClientId) {
     const selectedClient = state.clients.find((client) => client.id === state.selectedClientId);
     if (selectedClient) {
@@ -6881,6 +6927,22 @@ const bindEvents = () => {
       closeEditDialog();
     }
   });
+  // Generic reveal/hide for any field with a sibling [data-toggle-target] button.
+  // Used for the Edit Client SSN field (and any future masked field that opts in).
+  // Auth is already enforced by the route — this is purely a shoulder-surf guard.
+  byId('clientEditDialog')?.addEventListener('click', (event) => {
+    const btn = event.target.closest?.('.password-toggle-button[data-toggle-target]');
+    if (!btn) return;
+    const wrap = btn.closest('.password-field-wrap');
+    const input = wrap?.querySelector(`[name="${btn.dataset.toggleTarget}"]`);
+    if (!input) return;
+    const nextVisible = input.type === 'password';
+    input.type = nextVisible ? 'text' : 'password';
+    btn.setAttribute('aria-pressed', nextVisible ? 'true' : 'false');
+    btn.setAttribute('aria-label', nextVisible ? 'Hide value' : 'Reveal value');
+    btn.textContent = nextVisible ? '◑' : '◐';
+  });
+
   quickSaveClientIdentityController = createQuickSaveClientIdentityController();
   byId('clientEditForm')?.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -6958,7 +7020,7 @@ const bindEvents = () => {
         monitoringUsername: String(formData.get('monitoringUsername') || '').trim(),
         monitoringPassword: String(formData.get('monitoringPassword') || '').trim(),
         secretKey: String(formData.get('secretKey') || '').trim(),
-        monitoringToken: String(formData.get('monitoringToken') || '').trim(),
+        tokenId: String(formData.get('tokenId') || '').trim(),
         portalPassword: String(formData.get('portalPassword') || '').trim(),
         portalEnabled: String(formData.get('portalEnabled') || 'on').trim(),
         language: String(formData.get('language') || 'English').trim(),
@@ -7067,28 +7129,6 @@ const bindEvents = () => {
       state.integrations.smartcredit35540 = payload.integration;
       applyIntegrationValues('smartCreditIntegrationForm', payload.integration);
       setIntegrationMessage('SmartCredit integration saved.');
-    } catch (error) {
-      setIntegrationMessage(error.message, true);
-    }
-  });
-
-  byId('myFreeScoreIntegrationForm')?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    setIntegrationMessage('');
-
-    try {
-      const form = event.currentTarget;
-      const payload = await request('/api/integrations/myfreescorenow', {
-        method: 'PUT',
-        body: JSON.stringify({
-          pid: form.pid?.value || '',
-          tokenId: form.tokenId.value,
-          apiSecret: form.apiSecret.value,
-        }),
-      });
-      state.integrations.myfreescorenow = payload.integration;
-      applyIntegrationValues('myFreeScoreIntegrationForm', payload.integration);
-      setIntegrationMessage('MyFreeScoreNow integration saved.');
     } catch (error) {
       setIntegrationMessage(error.message, true);
     }
