@@ -8828,6 +8828,8 @@ const findClientForSync = (clients, criteria) => {
   return matches[0] || null;
 };
 
+const distDir = path.join(__dirname, 'dist');
+
 const serveStatic = async (res, pathname) => {
   let requested = pathname === '/' ? '/index.html' : pathname;
   if (pathname === '/billing') {
@@ -8851,15 +8853,18 @@ const serveStatic = async (res, pathname) => {
   if (pathname === '/learning' || pathname === '/Learning') {
     requested = '/learning.html';
   }
-  const filePath = path.join(publicDir, requested);
 
-  if (!filePath.startsWith(publicDir)) {
+  const ext = path.extname(requested);
+  const isAsset = ['.js', '.css', '.map'].includes(ext);
+  const baseDir = isAsset ? distDir : publicDir;
+  const filePath = path.join(baseDir, requested);
+
+  if (!filePath.startsWith(baseDir)) {
     notFound(res);
     return;
   }
 
   try {
-    const ext = path.extname(filePath);
     const file = await fs.readFile(filePath);
     send(res, 200, file, contentTypes[ext] ?? 'application/octet-stream');
   } catch {
