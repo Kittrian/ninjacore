@@ -191,7 +191,7 @@ async fn list_payment_clients(state: &AppState) -> AppResult<Vec<PaymentClient>>
     }
     let mut resp = state
         .db
-        .query("SELECT id, first_name, last_name FROM clients WHERE string::lowercase(status) = 'client' ORDER BY last_name, first_name")
+        .query("SELECT id, first_name, last_name FROM clients WHERE status = 'Client' ORDER BY last_name, first_name")
         .await?;
     let rows: Vec<Row> = crate::db::take_many(&mut resp, 0)?;
     Ok(rows
@@ -517,7 +517,7 @@ pub async fn test_square(
         .format(&time::format_description::well_known::Rfc3339)
         .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
 
-    let client = reqwest::Client::new();
+    let client = crate::http::shared();
     let resp = client
         .get("https://connect.squareup.com/v2/payments")
         .query(&[("begin_time", begin_time.as_str()), ("sort_order", "DESC"), ("limit", "25")])

@@ -502,7 +502,7 @@ async fn find_client_for_sync(
     if !fn_val.is_empty() && !ln_val.is_empty() {
         let mut __resp = state
             .db
-            .query("SELECT * FROM clients WHERE string::lowercase(first_name) = $fn AND string::lowercase(last_name) = $ln LIMIT 1")
+            .query("SELECT * FROM clients WHERE first_name_lc = $fn AND last_name_lc = $ln LIMIT 1")
             .bind(("fn", fn_val.clone()))
             .bind(("ln", ln_val.clone()))
             .await?;
@@ -514,7 +514,7 @@ async fn find_client_for_sync(
     if !em_val.is_empty() {
         let mut __resp = state
             .db
-            .query("SELECT * FROM clients WHERE string::lowercase(email) = $e LIMIT 1")
+            .query("SELECT * FROM clients WHERE email_lc = $e LIMIT 1")
             .bind(("e", em_val))
             .await?;
         if let Ok(Some(client)) = crate::db::take_one::<serde_json::Value>(&mut __resp, 0) {
@@ -675,13 +675,21 @@ pub async fn report_sync_iiq(
              WHERE id = $cid",
         )
         .bind(("rd", report_date.clone()))
-        .bind(("mag", monitoring_agency))
+        .bind(("mag", monitoring_agency.clone()))
         .bind(("mu", body.monitoring_username.unwrap_or_default()))
         .bind(("lsa", now))
         .bind(("risd", report_date))
         .bind(("ph", advance_client_phase(&client_phase)))
         .bind(("cid", client_id_str.clone()))
         .await?;
+
+    // Bridge: mirror this report into Flow 1 storage on api.ninjadispute.com so
+    // the Vue letter generator sees the latest report immediately. Fire-and-forget.
+    tokio::spawn(forward_report_to_flow1_api(
+        client_id_str.clone(),
+        monitoring_agency,
+        report_json.clone(),
+    ));
 
     let history = list_report_history(&state, &client_id_str).await?;
 
@@ -789,7 +797,7 @@ pub async fn report_sync_sc(
         .bind(("mag", monitoring_agency.clone()))
         .bind(("rd", report_date.clone()))
         .bind(("rfn", report_file_name))
-        .bind(("rj", report_json))
+        .bind(("rj", report_json.clone()))
         .bind(("rurl", body.response_url.unwrap_or_default()))
         .bind(("ca", now.clone()))
         .await?;
@@ -805,13 +813,20 @@ pub async fn report_sync_sc(
              WHERE id = $cid",
         )
         .bind(("rd", report_date.clone()))
-        .bind(("mag", monitoring_agency))
+        .bind(("mag", monitoring_agency.clone()))
         .bind(("mu", body.monitoring_username.unwrap_or_default()))
         .bind(("lsa", now))
         .bind(("risd", report_date))
         .bind(("ph", advance_client_phase(&client_phase)))
         .bind(("cid", client_id_str.clone()))
         .await?;
+
+    // Bridge: mirror this report into Flow 1 storage on api.ninjadispute.com.
+    tokio::spawn(forward_report_to_flow1_api(
+        client_id_str.clone(),
+        monitoring_agency,
+        report_json,
+    ));
 
     let history = list_report_history(&state, &client_id_str).await?;
 
@@ -828,4 +843,87 @@ pub async fn report_sync_sc(
         "client": updated_client,
         "history": history,
     })))
+}
+
+// ─── Flow 1 bridge — forward refresh-report results to api.ninjadispute.com ───
+//
+// After ninjacore writes its own Flow 2 snapshot row, this helper POSTs the
+// same parsed report (as a JSON array of bureau payloads) to the Express API
+// on Contabo so all Flow 1 stores (Surreal reports:{cid}, report_data_entries,
+// disk JSONL, R2 mirror) get updated too. The Vue SPA's letter generator
+// reads from Flow 1, so this keeps both UIs in sync.
+//
+// Fire-and-forget: failures are logged, never propagated to the user-facing
+// HTTP response. The Flow 2 snapshot row stays even if this fails.
+pub async fn forward_report_to_flow1_api(
+    client_id_full: String,
+    monitoring_agency: String,
+    report_json_str: String,
+) {
+    // Strip the "clients:" prefix — Express expects numeric clientId.
+    let cid_numeric = client_id_full
+        .split(':')
+        .next_back()
+        .unwrap_or(&client_id_full)
+        .to_string();
+
+    let api_base = std::env::var("API_INTERNAL_BASE")
+        .unwrap_or_else(|_| "http://100.79.226.47:3003".to_string());
+    let token = match std::env::var("INTERNAL_SYNC_TOKEN") {
+        Ok(t) if !t.trim().is_empty() => t,
+        _ => {
+            tracing::warn!("Flow 1 bridge skipped for client {}: INTERNAL_SYNC_TOKEN unset", cid_numeric);
+            return;
+        }
+    };
+
+    // Parse the report JSON string back into a Value so the api receives
+    // structured data, not a string.
+    let report_json: serde_json::Value = match serde_json::from_str(&report_json_str) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!("Flow 1 bridge for client {} skipped — unparseable report JSON: {}", cid_numeric, e);
+            return;
+        }
+    };
+
+    let body = json!({
+        "clientId": cid_numeric,
+        "monitoringAgency": monitoring_agency,
+        "reportJson": report_json,
+    });
+
+    let url = format!("{}/internal/report-sync", api_base.trim_end_matches('/'));
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("Flow 1 bridge: reqwest builder failed for client {}: {}", cid_numeric, e);
+            return;
+        }
+    };
+
+    match client
+        .post(&url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            let status = resp.status();
+            let txt = resp.text().await.unwrap_or_default();
+            if status.is_success() {
+                tracing::info!("Flow 1 bridge ok for client {}: {}", cid_numeric, txt);
+            } else {
+                tracing::warn!("Flow 1 bridge non-200 for client {}: HTTP {} {}", cid_numeric, status, txt);
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Flow 1 bridge send failed for client {}: {}", cid_numeric, e);
+        }
+    }
 }

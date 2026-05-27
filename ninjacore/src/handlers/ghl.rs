@@ -85,7 +85,7 @@ pub async fn webhook(
 
     if !ghl_id_n.is_empty() {
         existing = state.db
-            .query("SELECT * FROM clients WHERE string::lowercase(external_client_id) = $v LIMIT 1")
+            .query("SELECT * FROM clients WHERE external_client_id_lc = $v LIMIT 1")
             .bind(("v", ghl_id_n.clone()))
             .await?
             .take(0)?;
@@ -93,7 +93,7 @@ pub async fn webhook(
     }
     if existing.is_none() && !email_n.is_empty() {
         existing = state.db
-            .query("SELECT * FROM clients WHERE string::lowercase(email) = $v LIMIT 1")
+            .query("SELECT * FROM clients WHERE email_lc = $v LIMIT 1")
             .bind(("v", email_n.clone()))
             .await?
             .take(0)?;
@@ -114,9 +114,9 @@ pub async fn webhook(
         if !fn_n.is_empty() && !ln_n.is_empty() {
             existing = state.db
                 .query("SELECT * FROM clients WHERE \
-                        string::lowercase(first_name) = $fn AND \
-                        string::lowercase(last_name) = $ln AND \
-                        (string::lowercase(email) = $em OR string::replace(phone, /[^0-9]/, '') = $ph) \
+                        first_name_lc = $fn AND \
+                        last_name_lc = $ln AND \
+                        (email_lc = $em OR string::replace(phone, /[^0-9]/, '') = $ph) \
                         LIMIT 1")
                 .bind(("fn", fn_n))
                 .bind(("ln", ln_n))

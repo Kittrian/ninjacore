@@ -1,6 +1,6 @@
 {
   "name": "tools-ninja",
-  "version": "1.0.24",
+  "version": "1.0.25",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -9,6 +9,7 @@
     "ai": "^6.0.182",
     "dotenv": "^17.4.2",
     "playwright": "1.59.1",
+    "sharp": "^0.34.5",
     "socket.io": "^4.8.3"
   },
   "scripts": {

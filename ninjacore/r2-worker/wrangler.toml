@@ -1,0 +1,36 @@
+name = "ninjacore-r2"
+main = "src/index.ts"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# One Worker, three buckets (matches reference-cloudflare memory).
+# Route by URL prefix: /clients-docs/*, /credit-reports/*, /letter-assets/*.
+[[r2_buckets]]
+binding = "CLIENTS_DOCS"
+bucket_name = "clients-docs"
+
+[[r2_buckets]]
+binding = "CREDIT_REPORTS"
+bucket_name = "credit-reports"
+
+[[r2_buckets]]
+binding = "LETTER_ASSETS"
+bucket_name = "letter-assets"
+
+# Routing — bind to r2.ninjadispute.com (or whatever subdomain you wire up).
+# [[routes]]
+# pattern = "r2.ninjadispute.com/*"
+# zone_name = "ninjadispute.com"
+
+[observability]
+enabled = true
+
+[vars]
+# Public buckets (letter-assets) skip auth; others require Bearer.
+PUBLIC_PREFIXES = "letter-assets/"
+
+# Set via `wrangler secret put R2_BEARER` — must match ninjacore's R2_BEARER env.
+# R2_BEARER = "..."
+
+[placement]
+mode = "smart"

@@ -1,0 +1,105 @@
+// ── Thumbnail route: /thumb/public/{filename} ────────────────────────────────
+// Generates and caches WebP thumbnails for client documents in R2.
+//   - Images: sharp resize → WebP
+//   - PDFs: ghostscript renders page 1 → png → sharp → WebP
+//   - Cached at R2 key documents/thumbs/{name}.webp for subsequent requests
+//   - Falls through to next() when source is missing or thumb fails
+app.use(/^\/thumb\/public\//, async (req: Request, res: Response, next: NextFunction) => {
+  const filename = decodeURIComponent(
+    req.path.replace(/^\/thumb\/public\//, "")
+  );
+  if (!filename || filename.includes("..")) return next();
+
+  const ext = path.extname(filename).toLowerCase();
+  const base = filename.slice(0, filename.length - ext.length);
+  const cacheKey = `documents/thumbs/${base}.webp`;
+
+  const sendBuf = (buf: Buffer) => {
+    res.set("Content-Type", "image/webp");
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.set("Cross-Origin-Resource-Policy", "cross-origin");
+    res.send(buf);
+  };
+
+  // 1. Try R2 cache
+  try {
+    const cached = await getClientDocStream(cacheKey);
+    res.set("Content-Type", "image/webp");
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.set("Cross-Origin-Resource-Policy", "cross-origin");
+    cached.pipe(res);
+    return;
+  } catch { /* cache miss, generate */ }
+
+  // 2. Fetch original
+  let originalBuf: Buffer | null = null;
+  for (const key of [`documents/${filename}`, filename]) {
+    try {
+      const stream = await getClientDocStream(key);
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+      originalBuf = Buffer.concat(chunks);
+      break;
+    } catch { /* try next */ }
+  }
+  if (!originalBuf) return next();
+
+  // 3. Generate thumb
+  let sharp: any;
+  try { sharp = require("sharp"); }
+  catch { return next(); }
+
+  let thumb: Buffer | null = null;
+  try {
+    if (ext === ".pdf") {
+      // Render PDF page 1 → PNG via ghostscript, then sharp → WebP
+      const { spawn } = require("child_process");
+      const { writeFileSync, readFileSync, unlinkSync, mkdtempSync } = require("fs");
+      const os = require("os");
+      const tmpDir = mkdtempSync(`${os.tmpdir()}/pdfthumb-`);
+      const inPath = `${tmpDir}/in.pdf`;
+      const outPath = `${tmpDir}/page.png`;
+      writeFileSync(inPath, originalBuf);
+      await new Promise<void>((resolve, reject) => {
+        const gs = spawn("gs", [
+          "-dQUIET", "-dNOPAUSE", "-dBATCH", "-dSAFER",
+          "-sDEVICE=png16m", "-r100",
+          "-dFirstPage=1", "-dLastPage=1",
+          `-sOutputFile=${outPath}`, inPath,
+        ]);
+        gs.on("error", reject);
+        gs.on("exit", (code: number) => code === 0 ? resolve() : reject(new Error(`gs exit ${code}`)));
+      });
+      const png = readFileSync(outPath);
+      try { unlinkSync(inPath); unlinkSync(outPath); } catch {}
+      thumb = await sharp(png)
+        .resize({ width: 400, withoutEnlargement: true })
+        .webp({ quality: 78 })
+        .toBuffer();
+    } else {
+      // Image
+      thumb = await sharp(originalBuf)
+        .rotate() // honour EXIF orientation
+        .resize({ width: 400, withoutEnlargement: true })
+        .webp({ quality: 78 })
+        .toBuffer();
+    }
+  } catch (err: any) {
+    logger.warn(`thumb generation failed for ${filename}: ${err.message}`);
+    return next();
+  }
+  if (!thumb) return next();
+
+  // 4. Cache to R2 (fire-and-forget) and serve
+  const cacheBuf = thumb;
+  void (async () => {
+    try {
+      const { uploadClientDoc } = require("./lib/R2ClientDocStorage");
+      await uploadClientDoc(cacheKey, cacheBuf, "image/webp");
+    } catch (err: any) {
+      logger.warn(`thumb cache write failed for ${cacheKey}: ${err.message}`);
+    }
+  })();
+  sendBuf(cacheBuf);
+});
+

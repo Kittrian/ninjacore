@@ -1,0 +1,114 @@
+# ninjacore — Caddy reverse proxy (Hetzner)
+#
+# Drop-in replacement for the current Axum + Caddy setup, tuned for pure
+# speed. Key wins vs a default Caddyfile:
+#
+#   • Unix socket upstream (no TCP roundtrip Caddy ↔ ninjacore)
+#   • Brotli + zstd + gzip negotiation
+#   • `flush_interval -1` — disables response buffering so streamed
+#     PDF/credit-report responses start arriving at the browser
+#     immediately (huge perceived speed win on large files)
+#   • HTTP/2 + HTTP/3 (QUIC) enabled by default
+#   • Long-lived upstream connection pool (`keepalive`)
+#   • Real client IP forwarded (Cloudflare-aware)
+#
+# Replace `api.ninjadispute.com` with your actual host.
+
+{
+	# Global options
+	# Caddy auto-provisions an origin cert via Let's Encrypt. With Cloudflare
+	# in front in "Full (Strict)" mode you can instead use a Cloudflare Origin
+	# CA cert and reference it with `tls /path/to/cert /path/to/key` below.
+	email ops@ninjadispute.com
+
+	servers {
+		# Listen on h2c too so Cloudflare → origin can speak HTTP/2 cleartext
+		# (if you ever terminate TLS at Cloudflare and proxy plain to Hetzner).
+		protocols h1 h2 h2c h3
+	}
+}
+
+api.ninjadispute.com {
+	# ── Compression ─────────────────────────────────────────────────────────
+	# Brotli first (best ratio for text), then zstd, then gzip. Caddy picks
+	# the best one the client advertises in Accept-Encoding.
+	encode {
+		zstd
+		gzip 6
+	}
+	# Brotli requires the `caddy-brotli` plugin; if not installed, the line
+	# above (zstd + gzip) is still a solid baseline. To add brotli:
+	#   xcaddy build --with github.com/ueffel/caddy-brotli
+	# then add `brotli 6` inside the encode block.
+
+	# ── Real client IP from Cloudflare ──────────────────────────────────────
+	# Requires the `trusted_proxies` directive in newer Caddy. Cloudflare IP
+	# ranges from https://www.cloudflare.com/ips/ — refresh periodically.
+	# Without this, ninjacore sees Cloudflare's IPs, not the real visitor.
+	@cloudflare {
+		header CF-Connecting-IP *
+	}
+	header @cloudflare X-Real-IP {http.request.header.CF-Connecting-IP}
+
+	# ── Reverse proxy → ninjacore over Unix socket ──────────────────────────
+	reverse_proxy unix//run/ninjacore/ninjacore.sock {
+		# `-1` disables buffering — bytes flow Caddy → client as fast as
+		# ninjacore emits them. Critical for streamed R2/PDF responses
+		# (otherwise Caddy buffers up to flush_interval / response size).
+		flush_interval -1
+
+		# Reuse upstream connections. Without this Caddy opens a new socket
+		# per request even on the unix transport.
+		transport http {
+			keepalive 60s
+			keepalive_idle_conns 64
+			# Talk HTTP/1.1 to ninjacore over the socket — h2c upstream is
+			# possible but adds complexity for zero perceptible gain at
+			# in-host latency. Keep it simple.
+			versions 1.1
+			# Don't compress upstream — ninjacore returns raw bytes;
+			# Caddy compresses once on the way out.
+			compression off
+		}
+
+		# Forward useful headers ninjacore can log.
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+		header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+
+		# Long timeout for browser-runner endpoints that wait on Puppeteer.
+		# Tune down per-route with `@long` matcher if you want stricter
+		# defaults globally.
+	}
+
+	# ── Static asset hints ──────────────────────────────────────────────────
+	# Tell Cloudflare and the browser these are immutable. ninjacore already
+	# sets Cache-Control on R2 proxy responses; this just covers /public.
+	@static path *.css *.js *.woff2 *.png *.jpg *.svg *.webp *.ico
+	header @static Cache-Control "public, max-age=2592000, immutable"
+
+	# ── Security headers ────────────────────────────────────────────────────
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Permissions-Policy minimal — extend as the frontend needs.
+		Permissions-Policy "interest-cohort=()"
+		# Drop the auto-added Server header value.
+		-Server
+	}
+
+	# ── Logging ─────────────────────────────────────────────────────────────
+	log {
+		output file /var/log/caddy/ninjacore.access.log {
+			roll_size 50mb
+			roll_keep 10
+		}
+		format json
+	}
+}
+
+# ── Health endpoint on plain HTTP (for Hetzner internal checks) ────────────
+:8081 {
+	respond /healthz "ok" 200
+}

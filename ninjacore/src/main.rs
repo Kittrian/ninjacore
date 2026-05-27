@@ -105,6 +105,42 @@ async fn main() -> anyhow::Result<()> {
         .route("/affiliate-links", get(handlers::affiliate::list_links))
         .route("/affiliate-links/credit-builder", put(handlers::affiliate::put_builder))
         .route("/affiliate-links/credit-monitoring", put(handlers::affiliate::put_monitoring))
+        // Letter templates
+        .route(
+            "/templates",
+            get(handlers::letters::list_templates).post(handlers::letters::create_template),
+        )
+        .route(
+            "/templates/:id",
+            put(handlers::letters::update_template).delete(handlers::letters::delete_template),
+        )
+        // Reusable paragraphs
+        .route(
+            "/paragraphs",
+            get(handlers::letters::list_paragraphs).post(handlers::letters::create_paragraph),
+        )
+        .route(
+            "/paragraphs/:id",
+            put(handlers::letters::update_paragraph).delete(handlers::letters::delete_paragraph),
+        )
+        // Alternate letters
+        .route(
+            "/alternate",
+            get(handlers::alternate::list_alternate).post(handlers::alternate::create_alternate),
+        )
+        .route(
+            "/alternate/:id",
+            put(handlers::alternate::update_alternate).delete(handlers::alternate::delete_alternate),
+        )
+        // Creditor contacts
+        .route(
+            "/creditor-contacts",
+            get(handlers::alternate::list_creditors).post(handlers::alternate::create_creditor),
+        )
+        .route(
+            "/creditor-contacts/:id",
+            put(handlers::alternate::update_creditor).delete(handlers::alternate::delete_creditor),
+        )
         // Taxonomy
         .route("/client-statuses", post(handlers::misc::add_status))
         .route("/client-phases", post(handlers::misc::add_phase))

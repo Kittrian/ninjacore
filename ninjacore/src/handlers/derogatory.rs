@@ -176,7 +176,7 @@ async fn pull_from_ninjadispute(
 ) -> anyhow::Result<RemoteResult> {
     let base = integ.base_url.trim_end_matches('/').to_string();
     let token = resolve_bearer(integ).await?;
-    let client = reqwest::Client::new();
+    let client = crate::http::shared();
 
     // Compose distinct search terms.
     let mut terms: Vec<String> = Vec::new();
@@ -186,17 +186,30 @@ async fn pull_from_ninjadispute(
     let phone_digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
     if !phone_digits.is_empty() { terms.push(phone_digits.clone()); }
 
+    // Issue every term search concurrently — they hit the same upstream but
+    // are independent reads, so Tokio can overlap their RTTs.
+    let search_futs = terms.iter().map(|t| {
+        let client = client.clone();
+        let token = token.clone();
+        let base = base.to_string();
+        let term = t.clone();
+        async move {
+            let resp = client
+                .get(format!("{base}/clients"))
+                .bearer_auth(&token)
+                .query(&[("search", term.as_str())])
+                .send()
+                .await
+                .ok()?;
+            if !resp.status().is_success() { return None; }
+            resp.json::<Value>().await.ok()
+        }
+    });
+    let term_responses = futures_util::future::join_all(search_futs).await;
+
     let mut seen: HashSet<String> = HashSet::new();
     let mut candidates: Vec<Value> = Vec::new();
-    for t in &terms {
-        let resp = client
-            .get(format!("{base}/clients"))
-            .bearer_auth(&token)
-            .query(&[("search", t.as_str())])
-            .send()
-            .await?;
-        if !resp.status().is_success() { continue; }
-        let v: Value = resp.json().await.unwrap_or(json!({}));
+    for v in term_responses.into_iter().flatten() {
         let empty: Vec<Value> = Vec::new();
         let rows = v.get("clients").and_then(|x| x.as_array())
             .or_else(|| v.get("data").and_then(|x| x.as_array()))
@@ -233,7 +246,7 @@ async fn resolve_bearer(integ: &NinjaDisputeIntegration) -> anyhow::Result<Strin
     if !integ.api_token.trim().is_empty() {
         return Ok(integ.api_token.trim().to_string());
     }
-    let client = reqwest::Client::new();
+    let client = crate::http::shared();
     let base = integ.base_url.trim_end_matches('/');
     let resp = client
         .post(format!("{base}/auth/login"))

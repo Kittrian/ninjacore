@@ -72,7 +72,7 @@ pub fn agency_runner_type(agency: &str) -> Option<&'static str> {
     let n = agency.trim().to_lowercase();
     if n.contains("identity") || n.contains("iiq") {
         Some("identityiq")
-    } else if n.contains("smart") {
+    } else if n.contains("smart") || n.contains("myfree") || n.contains("freescorenow") {
         Some("smartcredit")
     } else {
         None
@@ -114,7 +114,7 @@ pub async fn start_browser_report_run(
         .unwrap_or("");
     let runner = agency_runner_type(agency_raw).ok_or_else(|| {
         AppError::BadRequest(
-            "This client is not set to an IdentityIQ or SmartCredit browser-run service.".into(),
+            "This client is not set to an IdentityIQ, SmartCredit, or MyFreeScoreNow browser-run service.".into(),
         )
     })?;
 
@@ -131,10 +131,15 @@ pub async fn start_browser_report_run(
         .unwrap_or("")
         .trim();
     if username.is_empty() || password.is_empty() {
-        return Err(AppError::BadRequest(
-            "This client needs monitoring username and password before running a browser report refresh."
-                .into(),
-        ));
+        let missing = match (username.is_empty(), password.is_empty()) {
+            (true, true) => "username and password",
+            (true, false) => "username",
+            (false, true) => "password",
+            (false, false) => unreachable!(),
+        };
+        return Err(AppError::BadRequest(format!(
+            "Missing monitoring {missing} for this client — fill it in on the client detail panel and try again."
+        )));
     }
 
     // Dedup: if an existing run for this client is queued/running, return it.

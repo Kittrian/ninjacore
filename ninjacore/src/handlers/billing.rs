@@ -75,36 +75,53 @@ pub async fn safe_query(
         }
 
         let owner_events = list_failed_events(&state, max_rows, "").await?;
-        for event in owner_events {
-            if !event.webhook_synced_at.is_empty() {
-                continue;
+        let pending: Vec<_> = owner_events
+            .into_iter()
+            .filter(|e| e.webhook_synced_at.is_empty())
+            .collect();
+
+        // Fan out webhook posts concurrently with a cap so we don't blow up
+        // the downstream — 8 in flight is a safe default. Each task also
+        // writes back its sync marker.
+        use futures_util::stream::{FuturesUnordered, StreamExt};
+        let mut in_flight = FuturesUnordered::new();
+        let billing_ref = &billing;
+        let state_ref = &state;
+        for event in pending {
+            in_flight.push(async move {
+                let outcome = match send_failed_payment_webhook(&event, billing_ref).await {
+                    Ok(o) => o,
+                    Err(e) => WebhookOutcome {
+                        transaction_id: event.transaction_id.clone(),
+                        name: event.client_name.clone(),
+                        ok: false,
+                        status: 0,
+                        response_body: None,
+                        error: Some(e.to_string()),
+                    },
+                };
+                let rec_id = payment_event_record_id(OWNER, &event.transaction_id);
+                let synced_at = if outcome.ok { Some(now_rfc3339()) } else { None };
+                let _ = state_ref
+                    .db
+                    .query(
+                        "UPDATE type::thing('payment_events', $rid) SET \
+                         webhook_synced_at = $sa, webhook_last_status = $st, updated_at = time::now()",
+                    )
+                    .bind(("rid", rec_id))
+                    .bind(("sa", synced_at))
+                    .bind(("st", outcome.status as i64))
+                    .await;
+                outcome
+            });
+            if in_flight.len() >= 8 {
+                if let Some(o) = in_flight.next().await {
+                    webhook_results.push(o);
+                }
             }
-            let outcome = match send_failed_payment_webhook(&event, &billing).await {
-                Ok(o) => o,
-                Err(e) => WebhookOutcome {
-                    transaction_id: event.transaction_id.clone(),
-                    name: event.client_name.clone(),
-                    ok: false,
-                    status: 0,
-                    response_body: None,
-                    error: Some(e.to_string()),
-                },
-            };
-
-            // Mark webhook_synced_at on success.
-            let rec_id = payment_event_record_id(OWNER, &event.transaction_id);
-            let synced_at = if outcome.ok {
-                Some(now_rfc3339())
-            } else { None };
-            let _ = state.db
-                .query("UPDATE type::thing('payment_events', $rid) SET \
-                        webhook_synced_at = $sa, webhook_last_status = $st, updated_at = time::now()")
-                .bind(("rid", rec_id))
-                .bind(("sa", synced_at))
-                .bind(("st", outcome.status as i64))
-                .await;
-
-            webhook_results.push(outcome);
+        }
+        while let Some(o) = in_flight.next().await {
+            webhook_results.push(o);
         }
     }
 
@@ -324,17 +341,24 @@ async fn run_failed_payment_pull(
     days_back: i64,
 ) -> AppResult<PullResult> {
     let merchants = list_active_failed_merchants(state).await?;
-    let mut merchant_results: Vec<Value> = Vec::new();
-    let mut pulled: Vec<NormalizedEvent> = Vec::new();
 
-    for m in &merchants {
+    // Fan out per-merchant gateway pulls concurrently — each is an independent
+    // outbound HTTP roundtrip.
+    let pulls = merchants.iter().map(|m| async move {
         let gateway = normalize_failed_gateway(&m.gateway);
-        let pulled_result = if gateway == "square" {
+        let res = if gateway == "square" {
             pull_square(m, days_back).await
         } else {
             pull_nmi_like(m, days_back).await
         };
-        match pulled_result {
+        (m, res)
+    });
+    let pulled_per_merchant = futures_util::future::join_all(pulls).await;
+
+    let mut merchant_results: Vec<Value> = Vec::with_capacity(pulled_per_merchant.len());
+    let mut pulled: Vec<NormalizedEvent> = Vec::new();
+    for (m, res) in pulled_per_merchant {
+        match res {
             Ok(events) => {
                 merchant_results.push(json!({
                     "merchantId": m.id,
@@ -391,12 +415,13 @@ async fn run_failed_payment_pull(
         });
     }
 
-    let mut upserted = 0;
-    for ev in &unique {
-        if upsert_event(state, ev).await.is_ok() {
-            upserted += 1;
-        }
-    }
+    // Run upserts concurrently — SurrealDB queries are independent per
+    // transactionId and the connection multiplexes async writes.
+    let upsert_results = futures_util::future::join_all(
+        unique.iter().map(|ev| upsert_event(state, ev)),
+    )
+    .await;
+    let upserted = upsert_results.iter().filter(|r| r.is_ok()).count() as i64;
     Ok(PullResult {
         merchants_scanned: merchants.len() as i64,
         merchant_results,
@@ -490,7 +515,7 @@ async fn pull_square(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normalize
     let begin = (time::OffsetDateTime::now_utc() - time::Duration::days(lookback))
         .format(&time::format_description::well_known::Rfc3339)
         .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
-    let client = reqwest::Client::new();
+    let client = crate::http::shared();
     let mut cursor: Option<String> = None;
     let mut events: Vec<NormalizedEvent> = Vec::new();
     let retry_label = retry_label_for(m);
@@ -580,7 +605,7 @@ async fn pull_nmi_like(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normali
         "security_key={}&condition=failed&report_type=transaction&start_date={}&end_date={}&result_limit=500",
         urlencode(key), fmt_nmi(&start), fmt_nmi(&now),
     );
-    let client = reqwest::Client::new();
+    let client = crate::http::shared();
     let resp = client
         .post("https://secure.nmi.com/api/query.php")
         .header("content-type", "application/x-www-form-urlencoded")
@@ -682,7 +707,7 @@ async fn send_failed_payment_webhook(
         "occurrence_count": event.occurrence_count,
         "notes": event.notes,
     });
-    let mut req = reqwest::Client::new()
+    let mut req = crate::http::shared()
         .post(&billing.failed_payments_webhook_url)
         .header("accept", "application/json")
         .header("content-type", "application/json");

@@ -1125,10 +1125,18 @@ const main = async () => {
   console.log(`Username: ${username}`);
   console.log(`Password: ${password ? '********' : '[empty]'}`);
   console.log(`Secret Key: ${getSecretKey(client) || '[empty]'}`);
+  const tokenId = String(client.tokenId || '').trim();
+  const useScriptB = agencyLower.includes('smart')
+    || agencyLower.includes('myfree')
+    || agencyLower.includes('freescorenow');
   if (agencyLower.includes('identity') || agencyLower.includes('iiq')) {
     console.log('Agency match confirmed: IdentityIQ -> Script A');
-  } else if (agencyLower.includes('smart')) {
-    console.log('Agency match confirmed: SmartCredit -> Script B');
+  } else if (useScriptB) {
+    if (!tokenId) {
+      console.log(`Agency match confirmed: ${monitoringAgency} (no token; using password) -> Script B`);
+    } else {
+      console.log(`Agency match confirmed: ${monitoringAgency} -> Script B`);
+    }
   }
 
   const runProfileDir = await mkdtemp(path.join(tmpdir(), 'tools-ninja-iso-'));
@@ -1165,7 +1173,7 @@ const main = async () => {
 
     if (agencyLower.includes('identity') || agencyLower.includes('iiq')) {
       await runIdentityIq(context, client, apiBase);
-    } else if (agencyLower.includes('smart')) {
+    } else if (useScriptB) {
       await runSmartCredit(context, client, apiBase);
     } else {
       throw new Error(`Unsupported monitoring agency for browser runner: ${monitoringAgency}`);

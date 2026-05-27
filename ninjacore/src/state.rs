@@ -28,12 +28,17 @@ pub struct AppState {
     pub paseto_key: Arc<PasetoSymmetricKey<V4, Local>>,
     /// In-memory store of in-flight / recently-completed browser report runs.
     pub report_runs: ReportRunStore,
+    /// Process-wide HTTP client with a warm connection pool + HTTP/2 ALPN.
+    /// Reused for R2 / Cloudflare Worker fetches and any other outbound calls
+    /// so we keep TCP+TLS sessions open across requests.
+    pub http: reqwest::Client,
 }
 
 impl AppState {
     pub fn new(cfg: Config, db: Db) -> anyhow::Result<Self> {
         let key_bytes = hex_decode_32(&cfg.paseto_key_hex)?;
         let paseto_key = PasetoSymmetricKey::<V4, Local>::from(Key::from(key_bytes));
+        let http = crate::http::shared();
         Ok(Self {
             cfg: Arc::new(cfg),
             db,
@@ -41,6 +46,7 @@ impl AppState {
             chunks: Arc::new(DashMap::new()),
             paseto_key: Arc::new(paseto_key),
             report_runs: Arc::new(DashMap::new()),
+            http,
         })
     }
 }

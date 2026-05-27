@@ -1,0 +1,41 @@
+Archived `Arsenal` login source reference
+=========================================
+
+Server source:
+- /home/api/app/public/spa/_nuxt/CgnwmWJ6.js
+- /home/api/app/public/spa/_nuxt/entry.Dnn0cx-2.css
+- /home/api/app/public/spa/_nuxt/index.I-q3iZHX.css
+
+Original compiled login component snippet
+-----------------------------------------
+const N={class:"min-h-[80vh] flex items-center justify-center px-4 bg-dots-pattern"},
+$={class:"text-center py-4"},
+C={class:"text-center text-sm text-gray-500"},
+j={__name:"login",setup(z){const{loading:c,login:u,user:a}=g(),p=async()=>{await u()};return(A,e)=>{const _=k,i=v,d=U,m=h,f=V,x=B;return y(),w("div",N,[o(x,{class:"w-full max-w-md shadow-2xl"},{header:t(()=>[s("div",$,[o(_,{name:"i-heroicons-lock-closed-20-solid",class:"w-10 h-10 text-primary mx-auto mb-2"}),e[2]||(e[2]=s("h2",{class:"text-2xl font-bold tracking-tight"},"Access Your Arsenal",-1)),e[3]||(e[3]=s("p",{class:"text-sm text-gray-500"}," Enter your credentials to manage your disputes. ",-1))])]),footer:t(()=>[s("p",C,[e[6]||(e[6]=r(" New to the Dojo? ",-1)),o(m,{to:"/register",class:"text-primary font-bold hover:underline"},{default:t(()=>[...e[5]||(e[5]=[r("Create an Account",-1)])]),_:1})])]),default:t(()=>[s("form",{onSubmit:b(p,["prevent"]),class:"space-y-6 px-4 py-2"},[o(d,{label:"Business Email",required:""},{default:t(()=>[o(i,{modelValue:n(a).email,"onUpdate:modelValue":e[0]||(e[0]=l=>n(a).email=l),size:"lg",placeholder:"ceo@company.com",icon:"i-heroicons-envelope",class:"w-full"},null,8,["modelValue"])]),_:1}),o(d,{label:"Secure Password",required:""},{hint:t(()=>[o(m,{to:"#",class:"text-xs text-primary hover:underline"},{default:t(()=>[...e[4]||(e[4]=[r("Forgot password?",-1)])]),_:1})]),default:t(()=>[o(i,{size:"lg",modelValue:n(a).password,"onUpdate:modelValue":e[1]||(e[1]=l=>n(a).password=l),type:"password",icon:"i-heroicons-key",class:"w-full"},null,8,["modelValue"])]),_:1}),o(f,{type:"submit",block:"",size:"lg",color:"primary",label:"Log In to Dashboard",loading:n(c)},null,8,["loading"])],32)]),_:1})])}}};export{j as default};
+
+Original archived CSS tokens
+----------------------------
+_nuxt/entry.Dnn0cx-2.css
+- --color-green-400:#00dc82
+- --color-green-500:#00c16a
+- --color-green-600:#00a155
+- --color-green-700:#007f45
+- --color-green-800:#016538
+- --color-green-900:#0a5331
+- !text-emerald-300
+- .bg-zinc
+
+_nuxt/index.I-q3iZHX.css
+- --color-green-400:#00dc82
+- --color-green-500:#00c16a
+- --color-green-600:#00a155
+- --color-green-700:#007f45
+- --color-green-800:#016538
+- --color-green-900:#0a5331
+- !text-emerald-300[data-v-7fd04487]
+- .bg-zinc[data-v-7fd04487]
+
+Local reconstruction files
+--------------------------
+- /Users/drewdrew/NinjaTools/public/archive-green-login.html
+- /Users/drewdrew/NinjaTools/public/archive-green-login.css

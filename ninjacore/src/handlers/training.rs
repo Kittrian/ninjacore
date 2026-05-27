@@ -276,7 +276,7 @@ fn build_rewrite_prompt(level: &str, selected: &str, ctx: Option<&Value>, custom
 async fn call_groq(prompt: &str) -> AppResult<String> {
     let key = std::env::var("GROQ_API_KEY")
         .map_err(|_| AppError::BadRequest("GROQ_API_KEY not configured on server.".into()))?;
-    let client = reqwest::Client::new();
+    let client = crate::http::shared();
     let model = std::env::var("GROQ_MODEL").unwrap_or_else(|_| "llama-3.3-70b-versatile".into());
     let resp = client
         .post("https://api.groq.com/openai/v1/chat/completions")
@@ -297,7 +297,7 @@ async fn call_anthropic(prompt: &str) -> AppResult<String> {
     let key = std::env::var("ANTHROPIC_API_KEY")
         .map_err(|_| AppError::BadRequest("ANTHROPIC_API_KEY not configured on server.".into()))?;
     let model = std::env::var("ANTHROPIC_MODEL").unwrap_or_else(|_| "claude-sonnet-4-6".into());
-    let client = reqwest::Client::new();
+    let client = crate::http::shared();
     let resp = client
         .post("https://api.anthropic.com/v1/messages")
         .header("x-api-key", key)

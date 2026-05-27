@@ -1,0 +1,112 @@
+// ── Thumbnail route: /thumb/{any-doc-path} ───────────────────────────────────
+// Generates and caches WebP thumbnails for client documents in R2.
+// Accepts any document URL the frontend already knows about:
+//   - /thumb/public/DL_xxx.png                          (new uploads)
+//   - /thumb/api-app-public-fullcopy-2026-05-14/DL.png  (legacy migrated)
+// Image source → sharp → 400px WebP. PDF source → ghostscript → sharp → WebP.
+// Generated thumbs cached at R2 key documents/thumbs/{flatname}.webp.
+app.use(/^\/thumb\//, async (req: Request, res: Response, next: NextFunction) => {
+  const docPath = decodeURIComponent(req.path.replace(/^\/thumb\//, ""));
+  if (!docPath || docPath.includes("..")) return next();
+
+  const ext = path.extname(docPath).toLowerCase();
+  // Flatten path → cacheable filename, e.g.
+  //   "api-app-public-fullcopy-2026-05-14/DL_xxx.png" → "api-app-public-fullcopy-2026-05-14_DL_xxx.webp"
+  const flat = docPath.replace(/\//g, "_");
+  const flatNoExt = flat.slice(0, flat.length - ext.length);
+  const cacheKey = `documents/thumbs/${flatNoExt}.webp`;
+
+  // 1. Try R2 cache
+  try {
+    const cached = await getClientDocStream(cacheKey);
+    res.set("Content-Type", "image/webp");
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.set("Cross-Origin-Resource-Policy", "cross-origin");
+    cached.pipe(res);
+    return;
+  } catch { /* cache miss */ }
+
+  // 2. Resolve original — try several R2 key candidates
+  const basename = docPath.split("/").pop() || docPath;
+  const candidates: string[] = [];
+  if (docPath.startsWith("public/")) {
+    const f = docPath.slice("public/".length);
+    candidates.push(`documents/${f}`, f);
+  } else if (docPath.startsWith("api-app-public-fullcopy-")) {
+    candidates.push(docPath);
+  } else {
+    candidates.push(`documents/${basename}`, docPath, basename);
+  }
+
+  let originalBuf: Buffer | null = null;
+  for (const key of candidates) {
+    try {
+      const stream = await getClientDocStream(key);
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+      originalBuf = Buffer.concat(chunks);
+      break;
+    } catch { /* try next */ }
+  }
+  if (!originalBuf) return next();
+
+  // 3. Generate thumb
+  let sharp: any;
+  try { sharp = require("sharp"); }
+  catch { return next(); }
+
+  let thumb: Buffer | null = null;
+  try {
+    if (ext === ".pdf") {
+      const { spawn } = require("child_process");
+      const { writeFileSync, readFileSync, unlinkSync, mkdtempSync } = require("fs");
+      const os = require("os");
+      const tmpDir = mkdtempSync(`${os.tmpdir()}/pdfthumb-`);
+      const inPath = `${tmpDir}/in.pdf`;
+      const outPath = `${tmpDir}/page.png`;
+      writeFileSync(inPath, originalBuf);
+      await new Promise<void>((resolve, reject) => {
+        const gs = spawn("gs", [
+          "-dQUIET", "-dNOPAUSE", "-dBATCH", "-dSAFER",
+          "-sDEVICE=png16m", "-r100",
+          "-dFirstPage=1", "-dLastPage=1",
+          `-sOutputFile=${outPath}`, inPath,
+        ]);
+        gs.on("error", reject);
+        gs.on("exit", (code: number) => code === 0 ? resolve() : reject(new Error(`gs exit ${code}`)));
+      });
+      const png = readFileSync(outPath);
+      try { unlinkSync(inPath); unlinkSync(outPath); } catch {}
+      thumb = await sharp(png)
+        .resize({ width: 400, withoutEnlargement: true })
+        .webp({ quality: 78 })
+        .toBuffer();
+    } else {
+      thumb = await sharp(originalBuf)
+        .rotate()
+        .resize({ width: 400, withoutEnlargement: true })
+        .webp({ quality: 78 })
+        .toBuffer();
+    }
+  } catch (err: any) {
+    logger.warn(`thumb generation failed for ${docPath}: ${err.message}`);
+    return next();
+  }
+  if (!thumb) return next();
+
+  // 4. Cache to R2 (fire-and-forget) and serve
+  const cacheBuf = thumb;
+  void (async () => {
+    try {
+      const { uploadClientDoc } = require("./lib/R2ClientDocStorage");
+      await uploadClientDoc(cacheKey, cacheBuf, "image/webp");
+    } catch (err: any) {
+      logger.warn(`thumb cache write failed for ${cacheKey}: ${err.message}`);
+    }
+  })();
+  res.set("Content-Type", "image/webp");
+  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.set("Cross-Origin-Resource-Policy", "cross-origin");
+  res.send(cacheBuf);
+});
+

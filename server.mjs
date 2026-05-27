@@ -1057,7 +1057,7 @@ const getBrowserRunnerTypeForAgency = (agency = '') => {
   if (normalized.includes('identity') || normalized.includes('iiq')) {
     return 'identityiq';
   }
-  if (normalized.includes('smart')) {
+  if (normalized.includes('smart') || normalized.includes('myfree') || normalized.includes('freescorenow')) {
     return 'smartcredit';
   }
   return '';
@@ -1127,8 +1127,11 @@ const chooseReportRefreshMode = (client = {}) => {
         token: monitoringToken,
       }
       : {
-        mode: 'none',
-        runnerType: '',
+        // No token → fall back to Script B (browser + password) just like
+        // SmartCredit. The runner script routes MyFreeScoreNow through the
+        // same Script B path.
+        mode: 'browser',
+        runnerType: 'smartcredit',
         integrationKey: '',
         token: '',
       };
@@ -1303,6 +1306,7 @@ const startBrowserReportRun = async (client, options = {}) => {
         monitoringUsername: client.monitoringUsername,
         monitoringPassword: client.monitoringPassword,
         secretKey: client.secretKey,
+        tokenId: client.monitoringToken,
       }),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -5090,21 +5094,49 @@ const calculateMonthlyDebtTotals = (accounts) => ({
 
 const toSafeClient = (client) => {
   const jsonReport = parseJsonValue(client.creditReportJson) || parseJsonValue(client.creditReportHtml);
-  const jsonScores = jsonReport ? parseCreditScoresFromJson(jsonReport) : null;
+  
+  let jsonScores = null;
+  let jsonAccounts = [];
+  let bureauHardInquiries = {};
+  let reportDate = client.reportDate;
+  
+  if (jsonReport) {
+    try {
+      jsonScores = parseCreditScoresFromJson(jsonReport);
+    } catch (err) {
+      jsonScores = null;
+    }
+    try {
+      jsonAccounts = parseOpenAccountsFromJson(jsonReport);
+    } catch (err) {
+      jsonAccounts = [];
+    }
+    try {
+      bureauHardInquiries = parseBureauHardInquiriesFromJson(jsonReport);
+    } catch (err) {
+      bureauHardInquiries = { transunion: 0, experian: 0, equifax: 0 };
+    }
+    try {
+      if (!reportDate) {
+        reportDate = parseReportDateFromJson(jsonReport);
+      }
+    } catch (err) {
+      // fallback to other date sources below
+    }
+  }
+  
   const htmlScores = parseCreditScores(client.creditReportHtml);
   const parsed = jsonScores && Object.values(jsonScores.scores || {}).some(Boolean)
     ? jsonScores
     : htmlScores;
-  const jsonAccounts = jsonReport ? parseOpenAccountsFromJson(jsonReport) : [];
   const htmlAccounts = parseOpenAccounts(client.creditReportHtml);
   const openAccounts = jsonAccounts.length > 0 ? jsonAccounts : htmlAccounts;
-  const reportDate = client.reportDate
-    || (jsonReport ? parseReportDateFromJson(jsonReport) : '')
+  reportDate = reportDate
     || parseReportDateFromHtml(client.creditReportHtml)
     || parseReportDateFromFilename(client.creditReportFileName);
-  const bureauHardInquiries = jsonReport
-    ? parseBureauHardInquiriesFromJson(jsonReport)
-    : parseBureauHardInquiriesFromHtml(client.creditReportHtml);
+  if (!bureauHardInquiries || !bureauHardInquiries.transunion) {
+    bureauHardInquiries = parseBureauHardInquiriesFromHtml(client.creditReportHtml);
+  }
   const nextImport = calculateNextImportForClient({
     ...client,
     reportDate,
@@ -5358,6 +5390,60 @@ const mirrorCreditReportToS3 = async (ownerKey, client, snapshot = {}, reportJso
   );
 };
 
+// Flow 2 → Flow 1 bridge: POST a parsed report to api.ninjadispute.com so the
+// Express api mirrors it into Flow 1 storage (reports row + report_data_entries
+// + disk JSONL + R2 mirror). Express also does the content-addressed R2 upload
+// so identical bytes from any source land at the same R2 key.
+const forwardReportToFlow1Api = async ({
+  clientId,
+  monitoringAgency,
+  monitoringUsername = '',
+  reportJson,
+  reportFileName = '',
+  responseUrl = '',
+}) => {
+  const apiBase = String(process.env.API_INTERNAL_BASE || 'http://100.79.226.47:3003').trim().replace(/\/+$/g, '');
+  const token = String(process.env.INTERNAL_SYNC_TOKEN || '').trim();
+  if (!token) {
+    console.warn(`[flow1-bridge] skipped for client ${clientId}: INTERNAL_SYNC_TOKEN unset`);
+    return;
+  }
+  // Strip surreal record prefix ("clients:17079358_ninjatools" → "17079358_ninjatools" → "17079358").
+  const cidStr = String(clientId ?? '').trim();
+  const cidNumeric = cidStr.split(':').pop().split('_')[0];
+  if (!cidNumeric || !/^\d+$/.test(cidNumeric)) {
+    console.warn(`[flow1-bridge] skipped: could not derive numeric clientId from "${clientId}"`);
+    return;
+  }
+  // reportJson is a serialized string here; parse so Express receives structured data.
+  let parsed;
+  try {
+    parsed = JSON.parse(reportJson);
+  } catch (error) {
+    console.warn(`[flow1-bridge] skipped for client ${cidNumeric}: unparseable reportJson: ${error.message}`);
+    return;
+  }
+  const body = {
+    clientId: cidNumeric,
+    monitoringAgency,
+    monitoringUsername,
+    reportJson: parsed,
+    reportFileName,
+    responseUrl,
+  };
+  const res = await fetch(`${apiBase}/internal/report-sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const txt = await res.text().catch(() => '');
+  if (!res.ok) {
+    console.warn(`[flow1-bridge] HTTP ${res.status} for client ${cidNumeric}: ${txt.slice(0, 300)}`);
+  } else {
+    console.log(`[flow1-bridge] ok for client ${cidNumeric}: ${txt.slice(0, 200)}`);
+  }
+};
+
 const insertReportSnapshot = async (client, payload = {}) => {
   if (!hasMeaningfulReportData({
     creditReportHtml: payload.reportHtml || client.creditReportHtml,
@@ -5401,6 +5487,20 @@ const insertReportSnapshot = async (client, payload = {}) => {
     console.warn(`[reports] insertReportSnapshot UPSERT failed for ${recordId}: ${error.message}`);
     return null;
   }
+
+  // Flow 2 → Flow 1 bridge: mirror this report into api.ninjadispute.com's
+  // storage so the Vue letter generator sees the latest report immediately.
+  // Fire-and-forget — failures are logged, never fail the user-facing refresh.
+  void forwardReportToFlow1Api({
+    clientId: client.id,
+    monitoringAgency,
+    monitoringUsername: payload.monitoringUsername || client.monitoringUsername || '',
+    reportJson,
+    reportFileName,
+    responseUrl,
+  }).catch((error) => {
+    console.warn(`[flow1-bridge] forward failed for ${client.id}: ${error.message}`);
+  });
 
   const rows = await surql(`SELECT id, client_id AS clientId, source, report_date AS reportDate, report_file_name AS reportFileName, created_at AS createdAt FROM reports WHERE client_id = "${sEsc(String(client.id))}" AND snapshot_checksum = "${sEsc(snapshotChecksum)}" LIMIT 1`);
   const snapshot = rows[0] ?? null;
@@ -10541,7 +10641,16 @@ const server = createServer((req, res) => {
       client.monitoringAgency = readOptionalStringField(body, 'monitoringAgency', client.monitoringAgency || '');
       client.monitoringUsername = readOptionalStringField(body, 'monitoringUsername', client.monitoringUsername || '');
       client.monitoringPassword = readOptionalStringField(body, 'monitoringPassword', client.monitoringPassword || '');
-      client.monitoringToken = readOptionalStringField(body, 'monitoringToken', client.monitoringToken || '');
+      // Accept both `monitoringToken` and frontend's `tokenId` so the live form
+      // value (including an explicit blank) reaches the refresh-mode chooser.
+      const refreshTokenSource = hasOwnField(body, 'monitoringToken')
+        ? 'monitoringToken'
+        : hasOwnField(body, 'tokenId')
+          ? 'tokenId'
+          : '';
+      if (refreshTokenSource) {
+        client.monitoringToken = String(body[refreshTokenSource] || '').trim();
+      }
       const refreshSecret = readOptionalStringField(body, 'secretKey', client.secretKey || '');
       client.secretKey = refreshSecret || getLastFourDigits(client.ssn || '');
 
@@ -10593,7 +10702,33 @@ const server = createServer((req, res) => {
         ? 'smartcredit35540'
         : integrationKey;
       const integration = integrations[resolvedIntegrationKey];
+
+      const canFallbackToBrowser = (integrationKey === 'smartcredit' || integrationKey === 'myfreescorenow')
+        && Boolean(getBrowserRunnerTypeForAgency(client.monitoringAgency) || String(client.monitoringAgency || '').toLowerCase().includes('myfree'))
+        && String(client.monitoringUsername || '').trim()
+        && String(client.monitoringPassword || '').trim();
+
       if (!integration || !integration.tokenId || !integration.apiSecret) {
+        // Token-based integration credentials missing. If we have a username +
+        // password on the client, fall through to Script B (browser flow)
+        // instead of failing with "integration not configured."
+        if (canFallbackToBrowser) {
+          const run = await startBrowserReportRun(client, {
+            initialLogs: [
+              `Integration ${resolvedIntegrationKey} not configured; falling back to browser/password (Script B).`,
+            ],
+          });
+          send(res, 202, {
+            ok: true,
+            started: true,
+            runId: run.id,
+            runnerType: 'smartcredit',
+            refreshMode: 'browser-fallback',
+            status: run.status,
+            logs: run.logs,
+          });
+          return;
+        }
         if (resolvedIntegrationKey === 'smartcredit35540' || resolvedIntegrationKey === 'smartcredit68951') {
           send(res, 400, { error: 'The SmartCredit integration is not configured yet.' });
           return;
@@ -10601,11 +10736,6 @@ const server = createServer((req, res) => {
         send(res, 400, { error: `The ${integrationKey} integration is not configured yet.` });
         return;
       }
-
-      const canFallbackToBrowser = integrationKey === 'smartcredit'
-        && Boolean(getBrowserRunnerTypeForAgency(client.monitoringAgency))
-        && String(client.monitoringUsername || '').trim()
-        && String(client.monitoringPassword || '').trim();
 
       if (resolvedIntegrationKey === 'myfreescorenow') {
         const debugSteps = [];
@@ -11332,6 +11462,159 @@ const server = createServer((req, res) => {
     }
 
     send(res, 200, buildPlaceholderCreditReportHtml(client.firstName || 'Client', client.lastName || ''), 'text/html; charset=utf-8');
+    return;
+  }
+
+  // ── Letter Templates ───────────────────────────────────────────────────────
+  if (pathname === '/api/templates' && req.method === 'GET') {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    try {
+      const rows = await surql(`SELECT * FROM templates WHERE owner = "${sEsc(owner)}" ORDER BY createdAt DESC`);
+      send(res, 200, { templates: rows.map((r) => ({ id: surrealExtractNumId(r.id), title: String(r.title || ''), content: String(r.content || ''), type: String(r.type || 'all'), createdAt: String(r.createdAt || '') })) });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  if (pathname === '/api/templates' && req.method === 'POST') {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    try {
+      const { title = '', content = '', type = 'all' } = await readBody(req);
+      if (!String(title).trim()) { send(res, 400, { error: 'Title required.' }); return; }
+      const id = surrealRandIntId();
+      await surqlUpsert('templates', id, { title: String(title).trim(), content: String(content), type: String(type), owner, createdAt: new Date().toISOString() });
+      send(res, 201, { ok: true, id });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  const ntTplId = pathname.match(/^\/api\/templates\/(\d+)$/);
+  if (ntTplId && (req.method === 'PUT' || req.method === 'DELETE')) {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    if (req.method === 'DELETE') {
+      try { await surql(`DELETE templates:${ntTplId[1]} WHERE owner = "${sEsc(owner)}"`); send(res, 200, { ok: true }); } catch (err) { send(res, 500, { error: err.message }); }
+      return;
+    }
+    try {
+      const { title = '', content = '', type = 'all' } = await readBody(req);
+      if (!String(title).trim()) { send(res, 400, { error: 'Title required.' }); return; }
+      await surqlUpsert('templates', ntTplId[1], { title: String(title).trim(), content: String(content), type: String(type), owner, updatedAt: new Date().toISOString() });
+      send(res, 200, { ok: true });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  // ── Letter Paragraphs ──────────────────────────────────────────────────────
+  if (pathname === '/api/paragraphs' && req.method === 'GET') {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    try {
+      const rows = await surql(`SELECT * FROM paragraphs WHERE owner = "${sEsc(owner)}" ORDER BY createdAt DESC`);
+      send(res, 200, { paragraphs: rows.map((r) => ({ id: surrealExtractNumId(r.id), title: String(r.title || ''), body: String(r.body || ''), category: String(r.category || ''), createdAt: String(r.createdAt || '') })) });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  if (pathname === '/api/paragraphs' && req.method === 'POST') {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    try {
+      const { title = '', body = '', category = '' } = await readBody(req);
+      if (!String(title).trim()) { send(res, 400, { error: 'Title required.' }); return; }
+      const id = surrealRandIntId();
+      await surqlUpsert('paragraphs', id, { title: String(title).trim(), body: String(body), category: String(category), owner, createdAt: new Date().toISOString() });
+      send(res, 201, { ok: true, id });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  const ntParId = pathname.match(/^\/api\/paragraphs\/(\d+)$/);
+  if (ntParId && (req.method === 'PUT' || req.method === 'DELETE')) {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    if (req.method === 'DELETE') {
+      try { await surql(`DELETE paragraphs:${ntParId[1]} WHERE owner = "${sEsc(owner)}"`); send(res, 200, { ok: true }); } catch (err) { send(res, 500, { error: err.message }); }
+      return;
+    }
+    try {
+      const { title = '', body = '', category = '' } = await readBody(req);
+      if (!String(title).trim()) { send(res, 400, { error: 'Title required.' }); return; }
+      await surqlUpsert('paragraphs', ntParId[1], { title: String(title).trim(), body: String(body), category: String(category), owner, updatedAt: new Date().toISOString() });
+      send(res, 200, { ok: true });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  // ── Alternate Letters ──────────────────────────────────────────────────────
+  if (pathname === '/api/alternate' && req.method === 'GET') {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    try {
+      const rows = await surql(`SELECT * FROM alternate_letters WHERE owner = "${sEsc(owner)}" ORDER BY createdAt DESC`);
+      send(res, 200, { items: rows.map((r) => ({ id: surrealExtractNumId(r.id), title: String(r.title || ''), content: String(r.content || ''), bureau: String(r.bureau || 'all'), createdAt: String(r.createdAt || '') })) });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  if (pathname === '/api/alternate' && req.method === 'POST') {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    try {
+      const { title = '', content = '', bureau = 'all' } = await readBody(req);
+      if (!String(title).trim()) { send(res, 400, { error: 'Title required.' }); return; }
+      const id = surrealRandIntId();
+      await surqlUpsert('alternate_letters', id, { title: String(title).trim(), content: String(content), bureau: String(bureau), owner, createdAt: new Date().toISOString() });
+      send(res, 201, { ok: true, id });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  const ntAltId = pathname.match(/^\/api\/alternate\/(\d+)$/);
+  if (ntAltId && (req.method === 'PUT' || req.method === 'DELETE')) {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    if (req.method === 'DELETE') {
+      try { await surql(`DELETE alternate_letters:${ntAltId[1]} WHERE owner = "${sEsc(owner)}"`); send(res, 200, { ok: true }); } catch (err) { send(res, 500, { error: err.message }); }
+      return;
+    }
+    try {
+      const { title = '', content = '', bureau = 'all' } = await readBody(req);
+      if (!String(title).trim()) { send(res, 400, { error: 'Title required.' }); return; }
+      await surqlUpsert('alternate_letters', ntAltId[1], { title: String(title).trim(), content: String(content), bureau: String(bureau), owner, updatedAt: new Date().toISOString() });
+      send(res, 200, { ok: true });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  // ── Creditor Contacts ──────────────────────────────────────────────────────
+  if (pathname === '/api/creditor-contacts' && req.method === 'GET') {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    try {
+      const rows = await surql(`SELECT * FROM creditor_contacts WHERE owner = "${sEsc(owner)}" ORDER BY name ASC`);
+      send(res, 200, { contacts: rows.map((r) => ({ id: surrealExtractNumId(r.id), name: String(r.name || ''), address: String(r.address || ''), phone: String(r.phone || ''), createdAt: String(r.createdAt || '') })) });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  if (pathname === '/api/creditor-contacts' && req.method === 'POST') {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    try {
+      const { name = '', address = '', phone = '' } = await readBody(req);
+      if (!String(name).trim()) { send(res, 400, { error: 'Name required.' }); return; }
+      const id = surrealRandIntId();
+      await surqlUpsert('creditor_contacts', id, { name: String(name).trim(), address: String(address), phone: String(phone), owner, createdAt: new Date().toISOString() });
+      send(res, 201, { ok: true, id });
+    } catch (err) { send(res, 500, { error: err.message }); }
+    return;
+  }
+  const ntCcId = pathname.match(/^\/api\/creditor-contacts\/(\d+)$/);
+  if (ntCcId && (req.method === 'PUT' || req.method === 'DELETE')) {
+    if (!requireAppAuth(req, res)) return;
+    const owner = getAuthenticatedUsername(req);
+    if (req.method === 'DELETE') {
+      try { await surql(`DELETE creditor_contacts:${ntCcId[1]} WHERE owner = "${sEsc(owner)}"`); send(res, 200, { ok: true }); } catch (err) { send(res, 500, { error: err.message }); }
+      return;
+    }
+    try {
+      const { name = '', address = '', phone = '' } = await readBody(req);
+      if (!String(name).trim()) { send(res, 400, { error: 'Name required.' }); return; }
+      await surqlUpsert('creditor_contacts', ntCcId[1], { name: String(name).trim(), address: String(address), phone: String(phone), owner, updatedAt: new Date().toISOString() });
+      send(res, 200, { ok: true });
+    } catch (err) { send(res, 500, { error: err.message }); }
     return;
   }
 

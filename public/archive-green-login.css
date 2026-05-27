@@ -1,0 +1,296 @@
+:root {
+  --green-400: #00dc82;
+  --green-500: #00c16a;
+  --green-600: #00a155;
+  --green-700: #007f45;
+  --green-800: #016538;
+  --green-900: #0a5331;
+  --emerald-300: #6ee7b7;
+  --zinc-950: #09090b;
+  --zinc-900: #111827;
+  --zinc-800: #18181b;
+  --zinc-700: #27272a;
+  --zinc-500: #71717a;
+  --zinc-300: #d4d4d8;
+  --white: #fafafa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body.archive-green-login {
+  min-height: 100vh;
+  font-family: "Montserrat", "Segoe UI", sans-serif;
+  color: var(--white);
+  background:
+    radial-gradient(circle at 50% 15%, rgba(0, 220, 130, 0.15), transparent 28%),
+    radial-gradient(circle at 15% 25%, rgba(0, 193, 106, 0.18), transparent 24%),
+    radial-gradient(circle at 85% 20%, rgba(110, 231, 183, 0.14), transparent 20%),
+    linear-gradient(180deg, rgba(9, 9, 11, 0.94), rgba(9, 9, 11, 0.98)),
+    url("/assets/ninjadisputebackground.webp") center/cover no-repeat fixed;
+}
+
+.archive-green-login__grid {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.archive-green-login__grid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 220, 130, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 220, 130, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(circle at center, black 45%, transparent 95%);
+  pointer-events: none;
+}
+
+.archive-green-login__shell {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(320px, 1.2fr) minmax(320px, 520px);
+  gap: 48px;
+  align-items: center;
+  padding: 48px;
+}
+
+.archive-green-login__hero {
+  max-width: 720px;
+}
+
+.archive-green-login__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  color: var(--emerald-300);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.archive-green-login__eyebrow::before {
+  content: "";
+  width: 56px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--green-400));
+}
+
+.archive-green-login__hero h1 {
+  margin: 0 0 18px;
+  font-size: clamp(3rem, 7vw, 5.8rem);
+  line-height: 0.96;
+  letter-spacing: -0.05em;
+}
+
+.archive-green-login__hero h1 span {
+  color: var(--green-400);
+  text-shadow: 0 0 22px rgba(0, 220, 130, 0.25);
+}
+
+.archive-green-login__hero p {
+  max-width: 560px;
+  margin: 0 0 28px;
+  color: rgba(212, 212, 216, 0.92);
+  font-size: 1.02rem;
+  line-height: 1.7;
+}
+
+.archive-green-login__pillrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.archive-green-login__pill {
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 220, 130, 0.3);
+  background: rgba(9, 9, 11, 0.55);
+  color: var(--emerald-300);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.archive-green-login__card {
+  position: relative;
+  border: 1px solid rgba(0, 220, 130, 0.2);
+  border-radius: 28px;
+  padding: 28px;
+  background:
+    linear-gradient(180deg, rgba(24, 24, 27, 0.96), rgba(9, 9, 11, 0.96));
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(0, 220, 130, 0.05) inset;
+}
+
+.archive-green-login__card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 28px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(0, 220, 130, 0.4), transparent 32%, rgba(0, 220, 130, 0.18));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.archive-green-login__lock {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  margin-bottom: 18px;
+  background: linear-gradient(180deg, rgba(0, 220, 130, 0.18), rgba(0, 220, 130, 0.08));
+  color: var(--green-400);
+  font-size: 1.6rem;
+  box-shadow: 0 0 28px rgba(0, 220, 130, 0.16);
+}
+
+.archive-green-login__card h2 {
+  margin: 0 0 8px;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.archive-green-login__card p {
+  margin: 0 0 24px;
+  color: rgba(212, 212, 216, 0.82);
+  line-height: 1.6;
+}
+
+.archive-green-login__form {
+  display: grid;
+  gap: 16px;
+}
+
+.archive-green-login__label {
+  display: grid;
+  gap: 8px;
+}
+
+.archive-green-login__label span {
+  color: var(--emerald-300);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.archive-green-login__field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 0 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 220, 130, 0.18);
+  background: rgba(9, 9, 11, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.archive-green-login__field svg {
+  flex: 0 0 auto;
+  width: 19px;
+  height: 19px;
+  color: var(--green-400);
+}
+
+.archive-green-login__field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--white);
+  font: inherit;
+  outline: none;
+}
+
+.archive-green-login__field input::placeholder {
+  color: rgba(212, 212, 216, 0.38);
+}
+
+.archive-green-login__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding-top: 2px;
+  font-size: 0.82rem;
+}
+
+.archive-green-login__meta a,
+.archive-green-login__footer a {
+  color: var(--green-400);
+  text-decoration: none;
+}
+
+.archive-green-login__meta a:hover,
+.archive-green-login__footer a:hover {
+  text-decoration: underline;
+}
+
+.archive-green-login__cta {
+  min-height: 58px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--green-700), var(--green-400));
+  color: #03130b;
+  font: inherit;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 14px 40px rgba(0, 220, 130, 0.22);
+}
+
+.archive-green-login__cta:hover {
+  filter: brightness(1.04);
+}
+
+.archive-green-login__footer {
+  margin-top: 18px;
+  color: rgba(212, 212, 216, 0.76);
+  text-align: center;
+  font-size: 0.88rem;
+}
+
+.archive-green-login__source {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(0, 220, 130, 0.12);
+  color: rgba(161, 161, 170, 0.86);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 980px) {
+  .archive-green-login__shell {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 28px 20px 40px;
+  }
+
+  .archive-green-login__hero {
+    max-width: none;
+  }
+}

@@ -42,7 +42,7 @@ pub async fn sso_login(
         return Err(AppError::Unauthorized);
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::http::shared();
     let resp = client
         .get("https://auth.ninjadispute.com/verify")
         .bearer_auth(token)
