@@ -1251,6 +1251,26 @@
       </form>
     </dialog>
 
+    <dialog id="deleteClientDialog" class="client-edit-dialog">
+      <form id="deleteClientForm" class="client-edit-form" method="dialog">
+        <div class="client-edit-header">
+          <div>
+            <p class="eyebrow">Confirm Deletion</p>
+            <h3 id="deleteClientName">Delete Client?</h3>
+          </div>
+          <button class="client-edit-close" type="button" id="deleteClientClose" aria-label="Close delete dialog">X</button>
+        </div>
+        <div class="client-edit-grid">
+          <p id="deleteClientMessage" style="margin: 0;"></p>
+        </div>
+        <div class="client-edit-actions">
+          <button class="client-edit-cancel" type="button" id="deleteClientCancel">Cancel</button>
+          <button type="submit" class="client-edit-delete-confirm" style="background-color: #a33333; color: white;">Delete</button>
+        </div>
+      </form>
+    </dialog>
+
+
     <dialog id="imageCropDialog" class="image-crop-dialog">
       <div id="imageCropVueApp" class="image-crop-shell">
         <div class="image-crop-head">
@@ -1323,6 +1343,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
-    <script type="module" src="/app.js?v=20260527-07"></script>
+    <script type="module" src="/app.js?v=20260527-08"></script>
   </body>
 </html>

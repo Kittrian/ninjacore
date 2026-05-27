@@ -4268,7 +4268,15 @@ const bindClientTableRowInteractionListeners = (list) => {
       if (!row?.dataset.clientId) {
         return;
       }
-      void deleteClient(row.dataset.clientId);
+      const dialog = byId('deleteClientDialog');
+      const client = state.clients.find((entry) => entry.id === row.dataset.clientId);
+      if (!client) {
+        return;
+      }
+      byId('deleteClientName').textContent = `Delete ${client.firstName} ${client.lastName}?`;
+      byId('deleteClientMessage').textContent = `Are you sure you want to delete ${client.firstName} ${client.lastName}? This action cannot be undone.`;
+      dialog.dataset.clientId = row.dataset.clientId;
+      dialog.showModal();
     });
   });
 
@@ -4419,6 +4427,40 @@ const bindClientTableRowInteractionListeners = (list) => {
       daysLeftDialog?.showModal();
     });
   });
+
+  const deleteClientDialog = byId('deleteClientDialog');
+  const deleteClientForm = byId('deleteClientForm');
+  const deleteClientClose = byId('deleteClientClose');
+  const deleteClientCancel = byId('deleteClientCancel');
+
+  if (deleteClientClose) {
+    deleteClientClose.addEventListener('click', () => {
+      deleteClientDialog?.close();
+    });
+  }
+
+  if (deleteClientCancel) {
+    deleteClientCancel.addEventListener('click', () => {
+      deleteClientDialog?.close();
+    });
+  }
+
+  if (deleteClientForm) {
+    deleteClientForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const clientId = deleteClientDialog?.dataset.clientId;
+      if (!clientId) {
+        return;
+      }
+      try {
+        await deleteClient(clientId);
+        deleteClientDialog?.close();
+      } catch (error) {
+        setFormMessage(error.message, true);
+      }
+    });
+  }
+
 
   list.querySelectorAll('[data-action="status"]').forEach((select) => {
     select.addEventListener('change', async (event) => {
@@ -5851,11 +5893,6 @@ const loadClientDetail = async (clientId) => {
 const deleteClient = async (clientId) => {
   const client = state.clients.find((entry) => entry.id === clientId);
   if (!client) {
-    return;
-  }
-
-  const confirmed = window.confirm(`Delete ${client.firstName} ${client.lastName}?`);
-  if (!confirmed) {
     return;
   }
 
