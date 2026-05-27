@@ -53,7 +53,7 @@ body {
 }
 
 .page-shell {
-  width: min(1380px, calc(100% - 2rem));
+  width: min(1700px, calc(100% - 1rem));
   margin: 0 auto;
   padding: 2rem 0 4rem;
 }
@@ -7731,3 +7731,422 @@ button {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(-360deg); }
 }
+
+/* ── Page Nav ─────────────────────────────────────────────────────────────── */
+.nt-page-nav {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.55rem 0.75rem;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(95, 121, 170, 0.18);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.nt-page-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0.45rem 1.05rem;
+  border-radius: 999px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #4a5f80;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nt-page-nav-link:hover {
+  background: rgba(95, 121, 170, 0.1);
+  color: #1b3a6b;
+}
+
+.nt-page-nav-link.is-active {
+  background: #1b3a6b;
+  color: #ffffff;
+}
+
+.nt-page-nav-link svg {
+  flex-shrink: 0;
+}
+
+/* ── Page Panes ───────────────────────────────────────────────────────────── */
+.nt-page-pane {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 24px rgba(21, 34, 62, 0.08);
+  min-height: 60vh;
+}
+
+.nt-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.1rem;
+  gap: 1rem;
+}
+
+.nt-pane-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #17325f;
+  margin: 0;
+}
+
+.nt-pane-tabs {
+  display: flex;
+  gap: 0.25rem;
+  background: rgba(95, 121, 170, 0.08);
+  padding: 0.25rem;
+  border-radius: 10px;
+}
+
+.nt-pane-tab {
+  padding: 0.38rem 1rem;
+  border: none;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: transparent;
+  color: #5a6f90;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nt-pane-tab.is-active {
+  background: #ffffff;
+  color: #17325f;
+  box-shadow: 0 1px 4px rgba(21, 34, 62, 0.1);
+}
+
+.nt-pane-add-btn {
+  padding: 0.45rem 1.1rem;
+  border-radius: 8px;
+  border: none;
+  background: #1b3a6b;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.nt-pane-add-btn:hover { background: #142d55; }
+
+/* ── Records Table ─────────────────────────────────────────────────────────── */
+.nt-records-table-wrap {
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(95, 121, 170, 0.18);
+}
+
+.nt-records-table-scroll {
+  overflow-x: auto;
+}
+
+.nt-records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.nt-records-table th {
+  background: rgba(27, 58, 107, 0.05);
+  color: #4a5f80;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.65rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(95, 121, 170, 0.15);
+}
+
+.nt-records-table td {
+  padding: 0.72rem 1rem;
+  color: #1e3055;
+  border-bottom: 1px solid rgba(95, 121, 170, 0.08);
+  vertical-align: middle;
+}
+
+.nt-records-table tbody tr:last-child td { border-bottom: none; }
+
+.nt-records-table tbody tr:hover td { background: rgba(95, 121, 170, 0.04); }
+
+.nt-empty-cell {
+  text-align: center;
+  color: #8095b4;
+  padding: 2.5rem 1rem !important;
+  font-style: italic;
+}
+
+.nt-row-actions {
+  display: flex;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.nt-btn-row-edit,
+.nt-btn-row-del {
+  padding: 0.28rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.nt-btn-row-edit {
+  background: rgba(27, 58, 107, 0.08);
+  color: #1b3a6b;
+  border-color: rgba(27, 58, 107, 0.15);
+}
+.nt-btn-row-edit:hover { background: rgba(27, 58, 107, 0.15); }
+
+.nt-btn-row-del {
+  background: rgba(220, 53, 69, 0.07);
+  color: #c0392b;
+  border-color: rgba(220, 53, 69, 0.15);
+}
+.nt-btn-row-del:hover { background: rgba(220, 53, 69, 0.15); }
+
+.nt-badge {
+  display: inline-block;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  background: rgba(27, 58, 107, 0.1);
+  color: #1b3a6b;
+}
+
+.nt-days-urgent { color: #c0392b; font-weight: 700; }
+
+.nt-loading,
+.nt-error {
+  padding: 2rem 1rem;
+  text-align: center;
+  font-style: italic;
+  color: #8095b4;
+}
+.nt-error { color: #c0392b; }
+
+/* ── Record Dialog ─────────────────────────────────────────────────────────── */
+.nt-record-dialog {
+  border: none;
+  border-radius: 16px;
+  padding: 0;
+  box-shadow: 0 20px 60px rgba(21, 34, 62, 0.22);
+  max-width: 540px;
+  width: 92vw;
+}
+
+.nt-record-dialog::backdrop {
+  background: rgba(10, 20, 40, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+.nt-record-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.8rem;
+}
+
+.nt-record-form h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #17325f;
+}
+
+.nt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.nt-field span {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #4a5f80;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nt-field input,
+.nt-field select,
+.nt-field textarea {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(95, 121, 170, 0.3);
+  border-radius: 8px;
+  font-size: 0.88rem;
+  color: #17325f;
+  background: #fafbfd;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.nt-field input:focus,
+.nt-field select:focus,
+.nt-field textarea:focus {
+  outline: none;
+  border-color: #1b3a6b;
+  box-shadow: 0 0 0 3px rgba(27, 58, 107, 0.12);
+}
+
+.nt-record-form-msg {
+  font-size: 0.82rem;
+  color: #c0392b;
+  min-height: 1.2em;
+  margin: 0;
+}
+
+.nt-record-form-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+
+.nt-btn-ghost {
+  padding: 0.5rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(95, 121, 170, 0.25);
+  background: transparent;
+  color: #5a6f90;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.nt-btn-ghost:hover { background: rgba(95, 121, 170, 0.08); }
+
+.nt-btn-primary {
+  padding: 0.5rem 1.3rem;
+  border-radius: 8px;
+  border: none;
+  background: #1b3a6b;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.nt-btn-primary:hover { background: #142d55; }
+
+/* ── NinjaDispute API dispute detail ──────────────────────────── */
+
+.nd-dispute-detail {
+  padding: 0 0 2rem;
+}
+.nd-detail-topbar {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(95, 121, 170, 0.12);
+}
+.nd-back-btn {
+  font-size: 0.82rem;
+}
+.nd-client-info-bar {
+  padding: 1rem 1.25rem;
+  background: rgba(27, 58, 107, 0.04);
+  border-bottom: 1px solid rgba(95, 121, 170, 0.12);
+}
+.nd-client-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1b2f4e;
+  margin: 0 0 0.4rem;
+}
+.nd-client-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.4rem;
+  font-size: 0.82rem;
+  color: #5a6f90;
+}
+.nd-client-meta strong { color: #1b2f4e; }
+
+.nd-scores-bar {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  flex-wrap: wrap;
+}
+.nd-score-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.6rem 1.5rem;
+  border-radius: 10px;
+  background: #f0f4fb;
+  border: 1px solid rgba(95, 121, 170, 0.2);
+  min-width: 100px;
+}
+.nd-score-label { font-size: 0.72rem; font-weight: 600; color: #5a6f90; text-transform: uppercase; letter-spacing: 0.03em; }
+.nd-score-value { font-size: 1.7rem; font-weight: 800; color: #1b2f4e; line-height: 1; }
+.nd-score-good .nd-score-value { color: #22863a; }
+.nd-score-fair .nd-score-value { color: #b08800; }
+.nd-score-poor .nd-score-value { color: #c9562f; }
+.nd-score-bad .nd-score-value { color: #c0392b; }
+.nd-score-good { background: #f0fff4; border-color: rgba(34,134,58,0.2); }
+.nd-score-fair { background: #fffbf0; border-color: rgba(176,136,0,0.2); }
+.nd-score-poor { background: #fff4f0; border-color: rgba(201,86,47,0.25); }
+.nd-score-bad  { background: #fff0f0; border-color: rgba(192,57,43,0.25); }
+
+.nd-section {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid rgba(95, 121, 170, 0.1);
+}
+.nd-section-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1b2f4e;
+  margin: 0 0 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.nd-derog-table-wrap { overflow-x: auto; }
+.nd-derog-table .nd-account-name strong { font-size: 0.88rem; color: #1b2f4e; }
+.nd-bureau-th { text-align: center; }
+.nd-tu-th { color: #1a6fb3; }
+.nd-ex-th { color: #c0392b; }
+.nd-eq-th { color: #e07b00; }
+.nd-bureau-derog { background: rgba(192, 57, 43, 0.04); color: #7a2215; }
+.nd-bureau-derog .nd-bureau-type { font-weight: 600; font-size: 0.78rem; color: #a0300f; }
+.nd-bureau-ok { color: #1b5e20; }
+.nd-bureau-absent { color: #aaa; text-align: center; }
+.nd-bureau-absent, .nd-bureau-derog, .nd-bureau-ok { font-size: 0.82rem; padding: 0.45rem 0.6rem !important; vertical-align: top; }
+
+.nd-letter-cell { text-align: center; }
+.nd-letter-badge { background: #1b3a6b; color: #fff; font-size: 0.72rem; }
+
+.nd-clean { background: #f0fff4; }
+.nd-clean-msg { color: #22863a; font-weight: 600; font-size: 0.88rem; margin: 0; }
+
+.nd-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.nd-chip {
+  padding: 0.28rem 0.7rem;
+  background: rgba(27, 58, 107, 0.07);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: #1b2f4e;
+  max-width: 100%;
+  word-break: break-word;
+}
+.nd-chip-addr { border-radius: 6px; }
+
+.nd-empty { padding: 2rem; text-align: center; color: #5a6f90; font-size: 0.88rem; }
+.nd-no-report { background: #fafbfc; }
+.nd-clients-list-wrap .nd-client-row:hover td { background: rgba(27, 58, 107, 0.04); cursor: pointer; }
+#ntDisputesList { overflow-x: auto; }
+
+.nd-section-collapsed summary { cursor: pointer; list-style: none; }
+.nd-section-collapsed summary::-webkit-details-marker { display: none; }
+.nd-section-collapsed summary::before { content: '▶ '; font-size: 0.72rem; }
+.nd-section-collapsed details[open] summary::before { content: '▼ '; }

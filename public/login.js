@@ -114,12 +114,13 @@
   });
 
   logoutButton?.addEventListener('click', async () => {
-    try {
-      await fetch('/api/logout', { method: 'POST' });
-    } catch {
-      // Fallback local clear if server call fails.
-      document.cookie = 'txn=; Path=/; Max-Age=0; SameSite=Lax';
-    }
+    // Clear both the ninjacore session and the domain-wide ninja_token / ninja_session
+    await Promise.allSettled([
+      fetch('/api/logout', { method: 'POST' }).catch(() => {
+        document.cookie = 'txn=; Path=/; Max-Age=0; SameSite=Lax';
+      }),
+      fetch('https://auth.ninjadispute.com/logout', { method: 'POST', credentials: 'include' }).catch(() => {}),
+    ]);
     showMessage('');
     showLogin();
     window.location.href = '/';

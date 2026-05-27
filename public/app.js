@@ -107,6 +107,8 @@ const setBootLoadingOverlay = (isActive, message = '') => {
   }
 };
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
+const ND_API = 'https://api.ninjadispute.com';
+const ndFetch = (path, opts = {}) => fetch(`${ND_API}${path}`, { credentials: 'include', ...opts });
 const APP_SCRIPT_VERSION = 'v3.02 loaded';
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
@@ -4344,6 +4346,61 @@ const bindClientTableRowInteractionListeners = (list) => {
     });
   });
 
+  let pendingDaysLeftClientId = null;
+  const daysLeftDialog = byId('daysLeftDialog');
+  const daysLeftForm = byId('daysLeftForm');
+  const daysLeftInput = byId('daysLeftInput');
+  const daysLeftClose = byId('daysLeftClose');
+  const daysLeftCancel = byId('daysLeftCancel');
+
+  if (daysLeftClose) {
+    daysLeftClose.addEventListener('click', () => {
+      daysLeftDialog?.close();
+    });
+  }
+
+  if (daysLeftCancel) {
+    daysLeftCancel.addEventListener('click', () => {
+      daysLeftDialog?.close();
+    });
+  }
+
+  if (daysLeftForm) {
+    daysLeftForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!pendingDaysLeftClientId) {
+        return;
+      }
+
+      const input = String(daysLeftInput?.value || '').trim();
+      const parsedDays = Number.parseInt(input, 10);
+      if (!Number.isFinite(parsedDays)) {
+        setFormMessage('Please enter a valid number of days.', true);
+        return;
+      }
+
+      try {
+        const payload = await request(`/api/clients/${pendingDaysLeftClientId}/next-import`, {
+          method: 'PATCH',
+          body: JSON.stringify({ days: parsedDays }),
+        });
+        const target = state.clients.find((client) => client.id === pendingDaysLeftClientId);
+        if (target && payload.client) {
+          Object.assign(target, payload.client);
+        }
+        renderClients();
+        if (state.selectedClientId === pendingDaysLeftClientId) {
+          await loadClientDetail(pendingDaysLeftClientId);
+        }
+        setFormMessage(`Next Import updated to ${parsedDays} day${Math.abs(parsedDays) === 1 ? '' : 's'}.`);
+        daysLeftDialog?.close();
+        pendingDaysLeftClientId = null;
+      } catch (error) {
+        setFormMessage(error.message, true);
+      }
+    });
+  }
+
   list.querySelectorAll('[data-action="next-import"]').forEach((button) => {
     button.addEventListener('click', async (event) => {
       const row = event.currentTarget.closest('tr');
@@ -4353,35 +4410,13 @@ const bindClientTableRowInteractionListeners = (list) => {
       }
 
       const currentDays = Number.parseInt(event.currentTarget.dataset.nextImportDays || '', 10);
-      const promptValue = Number.isFinite(currentDays) ? String(currentDays) : '';
-      const input = window.prompt('Set Next Import days for this client', promptValue);
-      if (input === null) {
-        return;
-      }
+      const inputValue = Number.isFinite(currentDays) ? String(currentDays) : '';
 
-      const parsedDays = Number.parseInt(String(input).trim(), 10);
-      if (!Number.isFinite(parsedDays)) {
-        setFormMessage('Please enter a valid number of days.', true);
-        return;
+      pendingDaysLeftClientId = clientId;
+      if (daysLeftInput) {
+        daysLeftInput.value = inputValue;
       }
-
-      try {
-        const payload = await request(`/api/clients/${clientId}/next-import`, {
-          method: 'PATCH',
-          body: JSON.stringify({ days: parsedDays }),
-        });
-        const target = state.clients.find((client) => client.id === clientId);
-        if (target && payload.client) {
-          Object.assign(target, payload.client);
-        }
-        renderClients();
-        if (state.selectedClientId === clientId) {
-          await loadClientDetail(clientId);
-        }
-        setFormMessage(`Next Import updated to ${parsedDays} day${Math.abs(parsedDays) === 1 ? '' : 's'}.`);
-      } catch (error) {
-        setFormMessage(error.message, true);
-      }
+      daysLeftDialog?.showModal();
     });
   });
 
@@ -5482,6 +5517,7 @@ const renderClientDetail = (client) => {
 
   let saveProfileTimer;
   let credentialSaveTimer;
+  let pendingPersistPromise = null;
   const persistProfile = async () => {
     try {
       const payload = await request(`/api/clients/${client.id}/profile`, {
@@ -5520,25 +5556,49 @@ const renderClientDetail = (client) => {
     }
   };
 
+  const runPersistAndTrack = () => {
+    const promise = persistProfile().finally(() => {
+      if (pendingPersistPromise === promise) {
+        pendingPersistPromise = null;
+      }
+    });
+    pendingPersistPromise = promise;
+    return promise;
+  };
+
   const queueProfileSave = () => {
     window.clearTimeout(saveProfileTimer);
     saveProfileTimer = window.setTimeout(() => {
-      void persistProfile();
+      void runPersistAndTrack();
     }, 350);
   };
 
+  // Credentials & agency toggles must reach the server before the operator
+  // can click Refresh Report. Use a very short debounce so the latest
+  // keystroke wins without firing one request per character.
   const queueCredentialSave = () => {
     window.clearTimeout(credentialSaveTimer);
-    // Credentials should not auto-save aggressively while typing.
     credentialSaveTimer = window.setTimeout(() => {
-      void persistProfile();
-    }, 1800);
+      void runPersistAndTrack();
+    }, 150);
   };
 
   const flushProfileSave = () => {
     window.clearTimeout(saveProfileTimer);
     window.clearTimeout(credentialSaveTimer);
-    void persistProfile();
+    return runPersistAndTrack();
+  };
+
+  // Expose a way for the global Refresh handler to await any pending save
+  // before firing the refresh-report request.
+  state.activeDetailFlushSave = async () => {
+    if (saveProfileTimer || credentialSaveTimer) {
+      return flushProfileSave();
+    }
+    if (pendingPersistPromise) {
+      return pendingPersistPromise;
+    }
+    return undefined;
   };
   const maybePersistLinkedCredentials = () => {
     const { linkStatus, liveDraft } = updateMonitoringLinkIndicator(getActiveAgencyValue());
@@ -5616,7 +5676,9 @@ const renderClientDetail = (client) => {
         securityValues.token = securityCodeInput.value;
       }
       setAgencyButtons(button.dataset.agency);
-      queueProfileSave();
+      // Agency toggle persists instantly (no debounce). Operator may click
+      // Refresh Report immediately after sliding the switch.
+      void flushProfileSave();
       maybePersistLinkedCredentials();
     });
   });
@@ -6336,6 +6398,14 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
     setWidgetConsoleMessage('Choose a client first.', true);
     window.alert('Choose a client first.');
     return;
+  }
+
+  // Flush any pending agency-toggle / credential edits to the server BEFORE
+  // we ask it to refresh — guarantees the run sees the freshest values.
+  try {
+    await state.activeDetailFlushSave?.();
+  } catch {
+    // Swallow — the persist endpoint surfaces its own errors via setFormMessage.
   }
 
   let refreshRunRequested = false;
@@ -7401,6 +7471,7 @@ const bootstrapApp = () => {
   initSetupAiPromptsButton();
   initDeferredSkeletonImages();
   bindEvents();
+  initHashRouter();
   setClientFormMode('add');
   setBootLoadingOverlay(true, 'Loading Ninja Tools...');
   loadClients({ showSkeleton: true })
@@ -7429,6 +7500,707 @@ const bootstrapApp = () => {
   if (window.location.protocol === 'file:') {
     setFormMessage('Connected to the local CRM server at http://127.0.0.1:3017.');
   }
+};
+
+// ── Hash Router ────────────────────────────────────────────────────────────
+
+const NT_ROUTES = ['clients', 'letters', 'disputes', 'alternate'];
+
+const ntCurrentRoute = () => {
+  const m = window.location.hash.match(/^#\/([a-z-]+)/);
+  return m && NT_ROUTES.includes(m[1]) ? m[1] : 'clients';
+};
+
+const ntCrm = () => {
+  const ids = ['clientHubHomePane', 'clientHubAddPane', 'clientHubClientsPane'];
+  return ids.map((id) => byId(id)).filter(Boolean);
+};
+
+const ntApplyRoute = (route) => {
+  const newPanes = ['ntLettersPane', 'ntDisputesPane', 'ntAlternatePane'];
+  const nav = byId('ntPageNav');
+  if (nav) nav.hidden = false;
+
+  // Mission Control dashboard has no id — reference by class.
+  const dashPanel = document.querySelector('.dashboard-panel');
+
+  if (route === 'clients') {
+    newPanes.forEach((id) => { const el = byId(id); if (el) el.hidden = true; });
+    if (dashPanel) dashPanel.hidden = false;   // restore dashboard when back on clients
+    if (ntLastRoute !== 'clients') {
+      setHubMode(state.hubMode || 'clients');
+    }
+  } else {
+    ntCrm().forEach((el) => { if (el) el.hidden = true; });
+    if (dashPanel) dashPanel.hidden = true;    // hide dashboard on new-route panes
+    newPanes.forEach((id) => {
+      const el = byId(id);
+      const targetId = `nt${route.charAt(0).toUpperCase() + route.slice(1)}Pane`;
+      if (el) el.hidden = id !== targetId;
+    });
+    if (route === 'letters') ntLoadLetters();
+    else if (route === 'disputes') ntLoadDisputes();
+    else if (route === 'alternate') ntLoadAlternate();
+  }
+
+  ntLastRoute = route;
+
+  document.querySelectorAll('.nt-page-nav-link').forEach((a) => {
+    const active = a.dataset.route === route;
+    a.classList.toggle('is-active', active);
+    a.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+};
+
+// ── Shared helpers ──────────────────────────────────────────────────────────
+
+const ND_API = 'https://api.ninjadispute.com';
+
+// Called whenever any api.ninjadispute.com request returns 401 — token expired.
+// Clears both the ninjacore session and the domain-wide ninja_token, then boots
+// the user to the login screen so they know exactly why they're logged out.
+let _ndExpiryHandled = false;
+const ndHandleExpiry = async () => {
+  if (_ndExpiryHandled) return;
+  _ndExpiryHandled = true;
+  // Clear both sessions in parallel
+  await Promise.allSettled([
+    fetch('/api/logout', { method: 'POST' }),
+    fetch('https://auth.ninjadispute.com/logout', { method: 'POST', credentials: 'include' }),
+  ]);
+  // Show the login form with a clear expiry message
+  const pageShell = document.querySelector('.page-shell');
+  const loginForm = document.querySelector('.login-form');
+  if (pageShell) pageShell.style.display = 'none';
+  if (loginForm) loginForm.style.display = 'block';
+  const msg = document.getElementById('authMessage');
+  if (msg) {
+    msg.textContent = 'Your session expired (12-hour limit). Please log in again.';
+    msg.style.color = '#ee3b6c';
+  }
+};
+
+const ndFetch = async (path, opts = {}) => {
+  const res = await fetch(`${ND_API}${path}`, { credentials: 'include', ...opts });
+  if (res.status === 401) {
+    ndHandleExpiry();
+    throw new Error('Session expired — please log in again.');
+  }
+  return res;
+};
+const ndJson = (path, opts = {}) => ndFetch(path, opts).then((r) => r.json());
+
+const ntEsc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const ntFmt = (iso) => {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString(); } catch { return '—'; }
+};
+
+const ntEmptyRow = (cols, msg) =>
+  `<tr><td colspan="${cols}" class="nt-empty-cell">${ntEsc(msg)}</td></tr>`;
+
+const ntTableShell = (thead, tbody) =>
+  `<div class="nt-records-table-scroll"><table class="nt-records-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div>`;
+
+// ── Letters view ────────────────────────────────────────────────────────────
+
+let ntLastRoute = 'clients';
+let ntLettersActiveTab = 'templates';
+let ntTemplatesCache = [];
+let ntParagraphsCache = [];
+
+const ntLettersTabEl = () => byId('ntLettersPane')?.querySelectorAll('.nt-pane-tab') ?? [];
+
+const ntBindLettersTabs = () => {
+  if (ntLettersTabsBound) return;
+  ntLettersTabsBound = true;
+  byId('ntLettersPane')?.querySelectorAll('.nt-pane-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      ntLettersActiveTab = btn.dataset.tab;
+      byId('ntLettersPane')?.querySelectorAll('.nt-pane-tab').forEach((b) => {
+        b.classList.toggle('is-active', b.dataset.tab === ntLettersActiveTab);
+        b.setAttribute('aria-selected', b.dataset.tab === ntLettersActiveTab ? 'true' : 'false');
+      });
+      const tplPanel = byId('ntTemplatesPanel');
+      const parPanel = byId('ntParagraphsPanel');
+      if (tplPanel) tplPanel.hidden = ntLettersActiveTab !== 'templates';
+      if (parPanel) parPanel.hidden = ntLettersActiveTab !== 'paragraphs';
+      const addBtn = byId('ntLettersAddBtn');
+      if (addBtn) addBtn.textContent = ntLettersActiveTab === 'templates' ? '+ New Template' : '+ New Paragraph';
+    });
+  });
+  const addBtn = byId('ntLettersAddBtn');
+  if (addBtn) {
+    addBtn.textContent = '+ New Template';
+    addBtn.addEventListener('click', () => {
+      if (ntLettersActiveTab === 'templates') ntOpenTemplateDialog();
+      else ntOpenParagraphDialog();
+    });
+  }
+};
+
+const ntRenderTemplates = (items) => {
+  const thead = `<tr><th>Name</th><th>File</th><th></th></tr>`;
+  const tbody = items.length
+    ? items.map((t) => `<tr>
+        <td>${ntEsc(t.name || t.title || '')}</td>
+        <td><span class="nt-badge">${ntEsc(t.file_name || '')}</span></td>
+        <td class="nt-row-actions">
+          <button class="nt-btn-row-edit" data-id="${t.id}" type="button">Edit</button>
+          <button class="nt-btn-row-del" data-id="${t.id}" type="button">Delete</button>
+        </td></tr>`).join('')
+    : ntEmptyRow(3, 'No templates yet. Click "+ New Template" to add one.');
+  const el = byId('ntTemplatesList');
+  if (el) el.innerHTML = ntTableShell(thead, tbody);
+  el?.querySelectorAll('.nt-btn-row-edit').forEach((btn) => {
+    btn.addEventListener('click', () => ntOpenTemplateDialog(ntTemplatesCache.find((t) => String(t.id) === btn.dataset.id)));
+  });
+  el?.querySelectorAll('.nt-btn-row-del').forEach((btn) => {
+    btn.addEventListener('click', () => ntDeleteTemplate(btn.dataset.id));
+  });
+};
+
+const ntRenderParagraphs = (items) => {
+  const thead = `<tr><th>Key</th><th>Value</th><th></th></tr>`;
+  const tbody = items.length
+    ? items.map((p) => {
+        const val = String(p.value || p.body || '');
+        const preview = val.length > 80 ? val.slice(0, 80) + '…' : val;
+        return `<tr>
+        <td>${ntEsc(p.key || p.title || '')}</td>
+        <td class="nt-para-value-cell">${ntEsc(preview)}</td>
+        <td class="nt-row-actions">
+          <button class="nt-btn-row-edit" data-id="${p.id}" type="button">Edit</button>
+          <button class="nt-btn-row-del" data-id="${p.id}" type="button">Delete</button>
+        </td></tr>`;
+      }).join('')
+    : ntEmptyRow(3, 'No paragraphs yet. Click "+ New Paragraph" to add one.');
+  const el = byId('ntParagraphsList');
+  if (el) el.innerHTML = ntTableShell(thead, tbody);
+  el?.querySelectorAll('.nt-btn-row-edit').forEach((btn) => {
+    btn.addEventListener('click', () => ntOpenParagraphDialog(ntParagraphsCache.find((p) => String(p.id) === btn.dataset.id)));
+  });
+  el?.querySelectorAll('.nt-btn-row-del').forEach((btn) => {
+    btn.addEventListener('click', () => ntDeleteParagraph(btn.dataset.id));
+  });
+};
+
+const ntLoadLetters = async () => {
+  ntBindLettersTabs();
+  const tplEl = byId('ntTemplatesList');
+  if (tplEl) tplEl.innerHTML = '<p class="nt-loading">Loading…</p>';
+  try {
+    const [tplRes, parRes] = await Promise.all([
+      ndFetch('/templates').then((r) => r.json()),
+      ndFetch('/paraghraph').then((r) => r.json()),
+    ]);
+    ntTemplatesCache = (Array.isArray(tplRes) ? tplRes : []).map((t) => ({
+      id: t.id, title: t.name || '—', content: t.file_html || '', type: t.file_name || '', createdAt: t.createdAt,
+    }));
+    ntParagraphsCache = (Array.isArray(parRes) ? parRes : []).map((p) => ({
+      id: p.id, title: p.key || '—', body: p.value || '', category: '', createdAt: p.createdAt,
+    }));
+    ntRenderTemplates(ntTemplatesCache);
+    ntRenderParagraphs(ntParagraphsCache);
+  } catch (err) {
+    if (tplEl) tplEl.innerHTML = `<p class="nt-error">Failed to load: ${ntEsc(err.message)}</p>`;
+  }
+};
+
+const ntOpenTemplateDialog = (item = null) => {
+  byId('ntTemplateId').value = item?.id ?? '';
+  byId('ntTemplateTitle').value = item?.title ?? '';
+  byId('ntTemplateType').value = item?.type ?? 'all';
+  byId('ntTemplateContent').value = item?.content ?? '';
+  byId('ntTemplateMsg').textContent = '';
+  byId('ntTemplateDialogTitle').textContent = item ? 'Edit Template' : 'New Template';
+  byId('ntTemplateDialog')?.showModal();
+};
+
+const ntOpenParagraphDialog = (item = null) => {
+  byId('ntParagraphId').value = item?.id ?? '';
+  byId('ntParagraphTitle').value = item?.title ?? '';
+  byId('ntParagraphCategory').value = item?.category ?? '';
+  byId('ntParagraphBody').value = item?.body ?? '';
+  byId('ntParagraphMsg').textContent = '';
+  byId('ntParagraphDialogTitle').textContent = item ? 'Edit Paragraph' : 'New Paragraph';
+  byId('ntParagraphDialog')?.showModal();
+};
+
+const ntDeleteTemplate = async (id) => {
+  if (!window.confirm('Delete this template?')) return;
+  try {
+    await ndFetch(`/templates/${id}`, { method: 'DELETE' });
+    ntTemplatesCache = ntTemplatesCache.filter((t) => String(t.id) !== String(id));
+    ntRenderTemplates(ntTemplatesCache);
+  } catch (err) { alert(err.message); }
+};
+
+const ntDeleteParagraph = async (id) => {
+  if (!window.confirm('Delete this paragraph?')) return;
+  try {
+    await ndFetch(`/paraghraph/${id}`, { method: 'DELETE' });
+    ntParagraphsCache = ntParagraphsCache.filter((p) => String(p.id) !== String(id));
+    ntRenderParagraphs(ntParagraphsCache);
+  } catch (err) { alert(err.message); }
+};
+
+const ntBindTemplateForm = () => {
+  byId('ntTemplateCancel')?.addEventListener('click', () => byId('ntTemplateDialog')?.close());
+  byId('ntTemplateForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = byId('ntTemplateId').value;
+    const payload = {
+      title: byId('ntTemplateTitle').value.trim(),
+      content: byId('ntTemplateContent').value,
+      type: byId('ntTemplateType').value,
+    };
+    const msg = byId('ntTemplateMsg');
+    try {
+      const url = id ? `/templates/${id}` : `/templates`;
+      const res = await ndFetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: payload.title, file_html: payload.content, file_name: payload.type }) });
+      const data = await res.json();
+      if (!res.ok) { if (msg) msg.textContent = data.error || 'Error'; return; }
+      byId('ntTemplateDialog')?.close();
+      ntLoadLetters();
+    } catch (err) { if (msg) msg.textContent = err.message; }
+  });
+};
+
+const ntBindParagraphForm = () => {
+  byId('ntParagraphCancel')?.addEventListener('click', () => byId('ntParagraphDialog')?.close());
+  byId('ntParagraphForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = byId('ntParagraphId').value;
+    const payload = {
+      title: byId('ntParagraphTitle').value.trim(),
+      body: byId('ntParagraphBody').value,
+      category: byId('ntParagraphCategory').value,
+    };
+    const msg = byId('ntParagraphMsg');
+    try {
+      const url = id ? `/paraghraph/${id}` : `/paraghraph`;
+      const res = await ndFetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: payload.title, value: payload.body }) });
+      const data = await res.json();
+      if (!res.ok) { if (msg) msg.textContent = data.error || 'Error'; return; }
+      byId('ntParagraphDialog')?.close();
+      ntLoadLetters();
+    } catch (err) { if (msg) msg.textContent = err.message; }
+  });
+};
+
+// ── Disputes view ───────────────────────────────────────────────────────────
+
+let ndClientsCache = [];
+let ndSelectedClientId = null;
+
+const ndScoreColor = (s) => {
+  const n = parseInt(s, 10);
+  if (!n) return '';
+  if (n >= 720) return 'nd-score-good';
+  if (n >= 660) return 'nd-score-fair';
+  if (n >= 580) return 'nd-score-poor';
+  return 'nd-score-bad';
+};
+
+const ndMaskSsn = (ssn) => {
+  if (!ssn) return '—';
+  const s = String(ssn).replace(/\D/g, '');
+  if (s.length >= 4) return `***-**-${s.slice(-4)}`;
+  return '***-**-****';
+};
+
+const ndRenderClientList = (clients) => {
+  const el = byId('ntDisputesList');
+  if (!el) return;
+  if (!clients.length) {
+    el.innerHTML = `<div class="nd-empty">No clients found. Make sure you're logged in to NinjaDispute.</div>`;
+    return;
+  }
+  const rows = clients.map((c) => {
+    const name = `${ntEsc(c.first_name || c.firstName || '')} ${ntEsc(c.last_name || c.lastName || '')}`.trim() || '—';
+    const ssn = ndMaskSsn(c.ssn);
+    const dob = c.dob ? ntFmt(c.dob) : '—';
+    return `<tr class="nd-client-row" data-client-id="${ntEsc(String(c.id))}" style="cursor:pointer">
+      <td><strong>${name}</strong>${c.email ? `<br><small class="muted">${ntEsc(c.email)}</small>` : ''}</td>
+      <td>${ntEsc(c.phone || '—')}</td>
+      <td>${ssn}</td>
+      <td>${dob}</td>
+      <td>${ntEsc(c.address || '—')}</td>
+    </tr>`;
+  }).join('');
+  const thead = `<tr><th>Client</th><th>Phone</th><th>SSN</th><th>DOB</th><th>Address</th></tr>`;
+  el.innerHTML = `<div class="nd-clients-list-wrap">${ntTableShell(thead, rows)}</div>`;
+  el.querySelectorAll('.nd-client-row').forEach((row) => {
+    row.addEventListener('click', () => ndOpenDispute(row.dataset.clientId));
+  });
+};
+
+const ndBureauCell = (bureauData) => {
+  if (!bureauData) return '<td class="nd-bureau-absent">—</td>';
+  const cls = bureauData.classifycations;
+  const comment = cls?.comment || '';
+  const type = bureauData.type || '';
+  const status = cls?.dataButton?.accountStatus || '';
+  const isDerog = status === 'derogatory' || type;
+  return `<td class="${isDerog ? 'nd-bureau-derog' : 'nd-bureau-ok'}">
+    <span class="nd-bureau-type">${ntEsc(type || 'Open')}</span>
+    ${comment ? `<br><small>${ntEsc(comment)}</small>` : ''}
+  </td>`;
+};
+
+const ndRenderDisputeDetail = (client) => {
+  const el = byId('ntDisputesList');
+  if (!el) return;
+
+  const name = `${client.first_name || client.firstName || ''} ${client.last_name || client.lastName || ''}`.trim() || '—';
+  const json = client.json || {};
+  const reportData = Array.isArray(json.data) ? json.data[0] : null;
+  const cs = reportData?.creditScore || {};
+  const tuScore = cs.TransUnion?.score || '—';
+  const exScore = cs.Experian?.score || '—';
+  const eqScore = cs.Equifax?.score || '—';
+
+  const accounts = Array.isArray(json.accounts) ? json.accounts : [];
+  const derogAccounts = accounts.filter((a) => a.type && a.type !== 'None');
+  const openAccounts = accounts.filter((a) => !a.type || a.type === 'None');
+
+  const derogRows = derogAccounts.map((a) => {
+    const letter = a.letter;
+    const letterName = letter ? ntEsc(letter.name || letter.file_name || '') : '—';
+    return `<tr>
+      <td class="nd-account-name">
+        <strong>${ntEsc(a.acc_name || '—')}</strong>
+        <br><small class="nt-badge">${ntEsc(a.type || '')}</small>
+        ${a.balance && a.balance !== '$0.00' ? `<br><small>Bal: ${ntEsc(a.balance)}</small>` : ''}
+      </td>
+      ${ndBureauCell(a.transunion)}
+      ${ndBureauCell(a.experian)}
+      ${ndBureauCell(a.equifax)}
+      <td class="nd-letter-cell"><span class="nt-badge nd-letter-badge">${letterName}</span></td>
+    </tr>`;
+  }).join('');
+
+  const openRows = openAccounts.map((a) => {
+    const tu = a.transunion;
+    const ex = a.experian;
+    const eq = a.equifax;
+    const anyBureau = tu || ex || eq;
+    const bal = a.balance && a.balance !== '$0.00' ? `<small>Bal: ${ntEsc(a.balance)}</small>` : '';
+    return `<tr>
+      <td><strong>${ntEsc(a.acc_name || '—')}</strong>${bal ? `<br>${bal}` : ''}</td>
+      <td>${anyBureau ? ntEsc((tu || ex || eq)?.type || 'Open') : '—'}</td>
+      <td>${a.acc_num ? ntEsc(a.acc_num) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const namesList = (client.names || client.names_json || '').split(/\n|\r|,/).map(s => s.trim()).filter(Boolean);
+  const employersList = (client.employers || client.employers_json || '').split(/\n|\r|,/).map(s => s.trim()).filter(Boolean);
+  const addressesList = (client.addresses || '').split(/\n\s*\n|\r\n\s*\r\n/).map(s => s.trim()).filter(Boolean);
+
+  el.innerHTML = `
+    <div class="nd-dispute-detail">
+      <div class="nd-detail-topbar">
+        <button class="nt-btn-ghost nd-back-btn" id="ndBackBtn" type="button">← Back to Clients</button>
+      </div>
+
+      <div class="nd-client-info-bar">
+        <h3 class="nd-client-name">${ntEsc(name)}</h3>
+        <div class="nd-client-meta">
+          <span>SSN: <strong>${ntEsc(client.ssn || '—')}</strong></span>
+          <span>DOB: <strong>${ntEsc(client.dob || '—')}</strong></span>
+          ${client.phone ? `<span>Phone: <strong>${ntEsc(client.phone)}</strong></span>` : ''}
+          ${client.email ? `<span>Email: <strong>${ntEsc(client.email)}</strong></span>` : ''}
+          ${client.address ? `<span>Address: <strong>${ntEsc(client.address)}</strong></span>` : ''}
+        </div>
+      </div>
+
+      <div class="nd-scores-bar">
+        <div class="nd-score-card ${ndScoreColor(tuScore)}">
+          <span class="nd-score-label">TransUnion</span>
+          <strong class="nd-score-value">${ntEsc(String(tuScore))}</strong>
+        </div>
+        <div class="nd-score-card ${ndScoreColor(exScore)}">
+          <span class="nd-score-label">Experian</span>
+          <strong class="nd-score-value">${ntEsc(String(exScore))}</strong>
+        </div>
+        <div class="nd-score-card ${ndScoreColor(eqScore)}">
+          <span class="nd-score-label">Equifax</span>
+          <strong class="nd-score-value">${ntEsc(String(eqScore))}</strong>
+        </div>
+      </div>
+
+      ${derogAccounts.length ? `
+      <div class="nd-section">
+        <h4 class="nd-section-title">Derogatory Accounts (${derogAccounts.length})</h4>
+        <div class="nd-derog-table-wrap">
+          <table class="nt-records-table nd-derog-table">
+            <thead><tr>
+              <th>Account</th>
+              <th class="nd-bureau-th nd-tu-th">TransUnion</th>
+              <th class="nd-bureau-th nd-ex-th">Experian</th>
+              <th class="nd-bureau-th nd-eq-th">Equifax</th>
+              <th>Letter</th>
+            </tr></thead>
+            <tbody>${derogRows || '<tr><td colspan="5" class="nt-empty-cell">No derogatory accounts.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>` : '<div class="nd-section nd-clean"><p class="nd-clean-msg">✓ No derogatory accounts found in this report.</p></div>'}
+
+      ${openAccounts.length ? `
+      <div class="nd-section nd-section-collapsed">
+        <details>
+          <summary class="nd-section-title">Open Accounts (${openAccounts.length})</summary>
+          <table class="nt-records-table nd-open-table" style="margin-top:8px">
+            <thead><tr><th>Account</th><th>Status</th><th>Acct #</th></tr></thead>
+            <tbody>${openRows}</tbody>
+          </table>
+        </details>
+      </div>` : ''}
+
+      ${namesList.length ? `
+      <div class="nd-section">
+        <h4 class="nd-section-title">Names on Report</h4>
+        <div class="nd-chips">${namesList.map(n => `<span class="nd-chip">${ntEsc(n)}</span>`).join('')}</div>
+      </div>` : ''}
+
+      ${employersList.length ? `
+      <div class="nd-section">
+        <h4 class="nd-section-title">Employers on Report</h4>
+        <div class="nd-chips">${employersList.map(e => `<span class="nd-chip">${ntEsc(e)}</span>`).join('')}</div>
+      </div>` : ''}
+
+      ${addressesList.length ? `
+      <div class="nd-section">
+        <h4 class="nd-section-title">Addresses on Report</h4>
+        <div class="nd-chips">${addressesList.map(a => `<span class="nd-chip nd-chip-addr">${ntEsc(a)}</span>`).join('')}</div>
+      </div>` : ''}
+
+      ${!reportData ? `<div class="nd-section nd-no-report"><p class="muted">No credit report data found for this client. Run "Get Report" first.</p></div>` : ''}
+    </div>
+  `;
+
+  byId('ndBackBtn')?.addEventListener('click', () => {
+    ndSelectedClientId = null;
+    ndRenderClientList(ndClientsCache);
+  });
+};
+
+const ndOpenDispute = async (clientId) => {
+  ndSelectedClientId = clientId;
+  const el = byId('ntDisputesList');
+  if (el) el.innerHTML = '<p class="nt-loading">Loading client…</p>';
+  try {
+    const client = await ndFetch(`/clients/${clientId}?all=1`).then((r) => r.json());
+    ndRenderDisputeDetail(client);
+  } catch (err) {
+    if (el) el.innerHTML = `<p class="nt-error">Failed to load client: ${ntEsc(err.message)}</p>`;
+  }
+};
+
+const ntLoadDisputes = async () => {
+  const el = byId('ntDisputesList');
+  if (!el) return;
+  if (ndSelectedClientId) {
+    ndOpenDispute(ndSelectedClientId);
+    return;
+  }
+  el.innerHTML = '<p class="nt-loading">Loading…</p>';
+  try {
+    const data = await ndFetch('/clients?pageNumber=1&searchParam=').then((r) => r.json());
+    ndClientsCache = data.clients ?? [];
+    ndRenderClientList(ndClientsCache);
+  } catch (err) {
+    el.innerHTML = `<p class="nt-error">Failed to load: ${ntEsc(err.message)}<br><small>Make sure you are logged in to NinjaDispute.</small></p>`;
+  }
+};
+
+// ── Alternate view ──────────────────────────────────────────────────────────
+
+let ntLettersTabsBound = false;
+let ntAlternateTabsBound = false;
+let ntAlternateActiveTab = 'alternate';
+let ntAlternateCache = [];
+let ntCreditorsCache = [];
+
+const ntBindAlternateTabs = () => {
+  if (ntAlternateTabsBound) return;
+  ntAlternateTabsBound = true;
+  byId('ntAlternatePane')?.querySelectorAll('.nt-pane-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      ntAlternateActiveTab = btn.dataset.tab;
+      byId('ntAlternatePane')?.querySelectorAll('.nt-pane-tab').forEach((b) => {
+        b.classList.toggle('is-active', b.dataset.tab === ntAlternateActiveTab);
+        b.setAttribute('aria-selected', b.dataset.tab === ntAlternateActiveTab ? 'true' : 'false');
+      });
+      const altPanel = byId('ntAlternateLettersPanel');
+      const ccPanel = byId('ntCreditorsPanel');
+      if (altPanel) altPanel.hidden = ntAlternateActiveTab !== 'alternate';
+      if (ccPanel) ccPanel.hidden = ntAlternateActiveTab !== 'creditors';
+      const addBtn = byId('ntAlternateAddBtn');
+      if (addBtn) addBtn.textContent = ntAlternateActiveTab === 'alternate' ? '+ New Letter' : '+ New Contact';
+    });
+  });
+  const addBtn = byId('ntAlternateAddBtn');
+  if (addBtn) {
+    addBtn.textContent = '+ New Letter';
+    addBtn.addEventListener('click', () => {
+      if (ntAlternateActiveTab === 'alternate') ntOpenAlternateDialog();
+      else ntOpenCreditorDialog();
+    });
+  }
+};
+
+const ntRenderAlternate = (items) => {
+  const thead = `<tr><th>Title</th><th>Bureau</th><th>Date</th><th></th></tr>`;
+  const tbody = items.length
+    ? items.map((a) => `<tr>
+        <td>${ntEsc(a.title)}</td>
+        <td><span class="nt-badge">${ntEsc(a.bureau)}</span></td>
+        <td>${ntFmt(a.createdAt)}</td>
+        <td class="nt-row-actions">
+          <button class="nt-btn-row-edit" data-id="${a.id}" type="button">Edit</button>
+          <button class="nt-btn-row-del" data-id="${a.id}" type="button">Delete</button>
+        </td></tr>`).join('')
+    : ntEmptyRow(4, 'No alternate letters yet. Click "+ New Letter" to add one.');
+  const el = byId('ntAlternateList');
+  if (el) el.innerHTML = ntTableShell(thead, tbody);
+  el?.querySelectorAll('.nt-btn-row-edit').forEach((btn) => {
+    btn.addEventListener('click', () => ntOpenAlternateDialog(ntAlternateCache.find((a) => String(a.id) === btn.dataset.id)));
+  });
+  el?.querySelectorAll('.nt-btn-row-del').forEach((btn) => {
+    btn.addEventListener('click', () => ntDeleteAlternate(btn.dataset.id));
+  });
+};
+
+const ntRenderCreditors = (items) => {
+  const thead = `<tr><th>Name</th><th>Address</th><th>Phone</th><th></th></tr>`;
+  const tbody = items.length
+    ? items.map((c) => `<tr>
+        <td>${ntEsc(c.name)}</td>
+        <td>${ntEsc(c.address) || '—'}</td>
+        <td>${ntEsc(c.phone) || '—'}</td>
+        <td class="nt-row-actions">
+          <button class="nt-btn-row-edit" data-id="${c.id}" type="button">Edit</button>
+          <button class="nt-btn-row-del" data-id="${c.id}" type="button">Delete</button>
+        </td></tr>`).join('')
+    : ntEmptyRow(4, 'No creditor contacts yet. Click "+ New Contact" to add one.');
+  const el = byId('ntCreditorsList');
+  if (el) el.innerHTML = ntTableShell(thead, tbody);
+  el?.querySelectorAll('.nt-btn-row-edit').forEach((btn) => {
+    btn.addEventListener('click', () => ntOpenCreditorDialog(ntCreditorsCache.find((c) => String(c.id) === btn.dataset.id)));
+  });
+  el?.querySelectorAll('.nt-btn-row-del').forEach((btn) => {
+    btn.addEventListener('click', () => ntDeleteCreditor(btn.dataset.id));
+  });
+};
+
+const ntLoadAlternate = async () => {
+  ntBindAlternateTabs();
+  const altEl = byId('ntAlternateList');
+  if (altEl) altEl.innerHTML = '<p class="nt-loading">Loading…</p>';
+  try {
+    const [altRes, ccRes] = await Promise.all([
+      ndFetch('/alternate').then((r) => r.json()),
+      ndFetch('/creditor').then((r) => r.json()),
+    ]);
+    ntAlternateCache = (Array.isArray(altRes) ? altRes : []).map((a) => ({
+      id: a.id, title: a.name || '—', content: a.file_html || '', bureau: 'all', createdAt: a.createdAt,
+    }));
+    ntCreditorsCache = (Array.isArray(ccRes) ? ccRes : []).map((c) => ({
+      id: c.id, name: c.name || '—', address: c.value || '', phone: '', createdAt: c.createdAt,
+    }));
+    ntRenderAlternate(ntAlternateCache);
+    ntRenderCreditors(ntCreditorsCache);
+  } catch (err) {
+    if (altEl) altEl.innerHTML = `<p class="nt-error">Failed to load: ${ntEsc(err.message)}</p>`;
+  }
+};
+
+const ntOpenAlternateDialog = (item = null) => {
+  byId('ntAlternateId').value = item?.id ?? '';
+  byId('ntAlternateTitle').value = item?.title ?? '';
+  byId('ntAlternateBureau').value = item?.bureau ?? 'all';
+  byId('ntAlternateContent').value = item?.content ?? '';
+  byId('ntAlternateMsg').textContent = '';
+  byId('ntAlternateDialogTitle').textContent = item ? 'Edit Alternate Letter' : 'New Alternate Letter';
+  byId('ntAlternateDialog')?.showModal();
+};
+
+const ntOpenCreditorDialog = (item = null) => {
+  byId('ntCreditorId').value = item?.id ?? '';
+  byId('ntCreditorName').value = item?.name ?? '';
+  byId('ntCreditorAddress').value = item?.address ?? '';
+  byId('ntCreditorPhone').value = item?.phone ?? '';
+  byId('ntCreditorMsg').textContent = '';
+  byId('ntCreditorDialogTitle').textContent = item ? 'Edit Creditor Contact' : 'New Creditor Contact';
+  byId('ntCreditorDialog')?.showModal();
+};
+
+const ntDeleteAlternate = async (id) => {
+  if (!window.confirm('Delete this alternate letter?')) return;
+  try {
+    await ndFetch(`/alternate/${id}`, { method: 'DELETE' });
+    ntAlternateCache = ntAlternateCache.filter((a) => String(a.id) !== String(id));
+    ntRenderAlternate(ntAlternateCache);
+  } catch (err) { alert(err.message); }
+};
+
+const ntDeleteCreditor = async (id) => {
+  if (!window.confirm('Delete this creditor contact?')) return;
+  try {
+    await ndFetch(`/creditor/${id}`, { method: 'DELETE' });
+    ntCreditorsCache = ntCreditorsCache.filter((c) => String(c.id) !== String(id));
+    ntRenderCreditors(ntCreditorsCache);
+  } catch (err) { alert(err.message); }
+};
+
+const ntBindAlternateForm = () => {
+  byId('ntAlternateCancel')?.addEventListener('click', () => byId('ntAlternateDialog')?.close());
+  byId('ntAlternateForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = byId('ntAlternateId').value;
+    const payload = { title: byId('ntAlternateTitle').value.trim(), content: byId('ntAlternateContent').value, bureau: byId('ntAlternateBureau').value };
+    const msg = byId('ntAlternateMsg');
+    try {
+      const url = id ? `/alternate/${id}` : `/alternate`;
+      const res = await ndFetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: payload.title, file_html: payload.content }) });
+      const data = await res.json();
+      if (!res.ok) { if (msg) msg.textContent = data.error || 'Error'; return; }
+      byId('ntAlternateDialog')?.close();
+      ntLoadAlternate();
+    } catch (err) { if (msg) msg.textContent = err.message; }
+  });
+};
+
+const ntBindCreditorForm = () => {
+  byId('ntCreditorCancel')?.addEventListener('click', () => byId('ntCreditorDialog')?.close());
+  byId('ntCreditorForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = byId('ntCreditorId').value;
+    const payload = { name: byId('ntCreditorName').value.trim(), address: byId('ntCreditorAddress').value, phone: byId('ntCreditorPhone').value };
+    const msg = byId('ntCreditorMsg');
+    try {
+      const url = id ? `/creditor/${id}` : `/creditor`;
+      const res = await ndFetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: payload.name, value: payload.address }) });
+      const data = await res.json();
+      if (!res.ok) { if (msg) msg.textContent = data.error || 'Error'; return; }
+      byId('ntCreditorDialog')?.close();
+      ntLoadAlternate();
+    } catch (err) { if (msg) msg.textContent = err.message; }
+  });
+};
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
+const initHashRouter = () => {
+  ntBindTemplateForm();
+  ntBindParagraphForm();
+  ntBindAlternateForm();
+  ntBindCreditorForm();
+  ntApplyRoute(ntCurrentRoute());
+  window.addEventListener('hashchange', () => ntApplyRoute(ntCurrentRoute()));
 };
 
 const reportBootstrapFailure = (error) => {

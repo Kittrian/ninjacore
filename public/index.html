@@ -13,12 +13,11 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260521-01" />
+    <link rel="stylesheet" href="/styles.css?v=20260527-06" />
     <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
     <link rel="stylesheet" href="/login.css?v=20260512-30" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-    <script src="https://widgets.leadconnectorhq.com/loader.js" data-resources-url="https://widgets.leadconnectorhq.com/chat-widget/loader.js" data-widget-id="6a0f17b6f4e3450dc8e40923" data-source="WEB_USER"></script>
-    <script src="/login.js?v=20260525-37" defer></script>
+<script src="/login.js?v=20260527-38" defer></script>
   </head>
   <body>
     <form class="login-form" style="display: block;">
@@ -35,7 +34,7 @@
 
       <!-- SSO Login Buttons -->
       <div class="sso-login-buttons" style="margin-top: 20px; display: flex; gap: 10px; flex-direction: column;">
-        <a href="https://api.ninjadispute.com/api/auth/google-login" class="sso-button google-button" style="display: flex; align-items: center; justify-content: center; padding: 12px 16px; background: white; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; font-weight: 500; gap: 8px;">
+        <a href="https://auth.ninjadispute.com/login?provider=google&redirect=https://ninjacore.ninjadispute.com" class="sso-button google-button" style="display: flex; align-items: center; justify-content: center; padding: 12px 16px; background: white; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; font-weight: 500; gap: 8px;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -45,11 +44,18 @@
           Sign in with Google
         </a>
 
-        <a href="https://api.ninjadispute.com/api/auth/github-login" class="sso-button github-button" style="display: flex; align-items: center; justify-content: center; padding: 12px 16px; background: #24292e; border: 1px solid #24292e; border-radius: 4px; text-decoration: none; color: white; font-weight: 500; gap: 8px;">
+        <a href="https://auth.ninjadispute.com/login?provider=github&redirect=https://ninjacore.ninjadispute.com" class="sso-button github-button" style="display: flex; align-items: center; justify-content: center; padding: 12px 16px; background: #24292e; border: 1px solid #24292e; border-radius: 4px; text-decoration: none; color: white; font-weight: 500; gap: 8px;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
           </svg>
           Sign in with GitHub
+        </a>
+
+        <a href="https://auth.ninjadispute.com/login?provider=apple&redirect=https://ninjacore.ninjadispute.com" class="sso-button apple-button" style="display: flex; align-items: center; justify-content: center; padding: 12px 16px; background: #000; border: 1px solid #000; border-radius: 4px; text-decoration: none; color: white; font-weight: 500; gap: 8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+          </svg>
+          Sign in with Apple
         </a>
       </div>
 
@@ -107,10 +113,6 @@
                 <label class="field">
                   <span>Token ID</span>
                   <input name="tokenId" type="text" placeholder="Token ID" />
-                </label>
-                <label class="field">
-                  <span>API Secret</span>
-                  <input name="apiSecret" type="text" placeholder="API Secret" />
                 </label>
                 <button type="submit">Save SmartCredit</button>
               </form>
@@ -216,7 +218,7 @@
                   </svg>
                 </span>
                 <div class="tn-depth-list__copy">
-                  <strong><a href="https://dispute.com" target="_blank" rel="noopener noreferrer">Dispute.com</a></strong>
+                  <strong><a href="https://auth.ninjadispute.com/login?redirect=https://ninjadispute.com" target="_blank" rel="noopener noreferrer">Ninja Dispute</a></strong>
                 </div>
                 <span class="tn-depth-list__arrow" aria-hidden="true">›</span>
               </article>
@@ -224,6 +226,25 @@
           </section>
         </div>
       </header>
+
+      <nav class="nt-page-nav" id="ntPageNav" hidden>
+        <a class="nt-page-nav-link" href="#/clients" data-route="clients" aria-current="false">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Clients
+        </a>
+        <a class="nt-page-nav-link" href="#/letters" data-route="letters" aria-current="false">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Letters
+        </a>
+        <a class="nt-page-nav-link" href="#/disputes" data-route="disputes" aria-current="false">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Disputes
+        </a>
+        <a class="nt-page-nav-link" href="#/alternate" data-route="alternate" aria-current="false">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          Alternate
+        </a>
+      </nav>
 
       <main class="crm-layout" id="crmLayout">
         <section class="panel client-hub-pane client-hub-pane-home" id="clientHubHomePane" hidden>
@@ -681,6 +702,134 @@
             <p class="muted">Loading Ninja Tools dashboard...</p>
           </div>
         </section>
+        <!-- ── Letters pane: Templates + Paragraphs ── -->
+        <section class="nt-page-pane panel" id="ntLettersPane" hidden>
+          <div class="nt-pane-header">
+            <div class="nt-pane-tabs" role="tablist">
+              <button class="nt-pane-tab is-active" role="tab" data-tab="templates" aria-selected="true">Templates</button>
+              <button class="nt-pane-tab" role="tab" data-tab="paragraphs" aria-selected="false">Paragraphs</button>
+            </div>
+            <button class="nt-pane-add-btn" id="ntLettersAddBtn" type="button">+ New</button>
+          </div>
+
+          <div id="ntTemplatesPanel">
+            <div id="ntTemplatesList" class="nt-records-table-wrap"></div>
+          </div>
+          <div id="ntParagraphsPanel" hidden>
+            <div id="ntParagraphsList" class="nt-records-table-wrap"></div>
+          </div>
+
+          <dialog class="nt-record-dialog" id="ntTemplateDialog">
+            <form class="nt-record-form" id="ntTemplateForm" method="dialog">
+              <h3 id="ntTemplateDialogTitle">New Template</h3>
+              <input type="hidden" id="ntTemplateId" value="" />
+              <label class="nt-field"><span>Title</span><input type="text" id="ntTemplateTitle" required placeholder="e.g. Equifax Round 1" /></label>
+              <label class="nt-field">
+                <span>Bureau</span>
+                <select id="ntTemplateType">
+                  <option value="all">All Bureaus</option>
+                  <option value="equifax">Equifax</option>
+                  <option value="experian">Experian</option>
+                  <option value="transunion">TransUnion</option>
+                </select>
+              </label>
+              <label class="nt-field"><span>Content</span><textarea id="ntTemplateContent" rows="8" placeholder="Letter body…"></textarea></label>
+              <p class="nt-record-form-msg" id="ntTemplateMsg"></p>
+              <div class="nt-record-form-actions">
+                <button type="button" class="nt-btn-ghost" id="ntTemplateCancel">Cancel</button>
+                <button type="submit" class="nt-btn-primary" id="ntTemplateSave">Save Template</button>
+              </div>
+            </form>
+          </dialog>
+
+          <dialog class="nt-record-dialog" id="ntParagraphDialog">
+            <form class="nt-record-form" id="ntParagraphForm" method="dialog">
+              <h3 id="ntParagraphDialogTitle">New Paragraph</h3>
+              <input type="hidden" id="ntParagraphId" value="" />
+              <label class="nt-field"><span>Title</span><input type="text" id="ntParagraphTitle" required placeholder="e.g. Opening – FCRA Rights" /></label>
+              <label class="nt-field">
+                <span>Category</span>
+                <select id="ntParagraphCategory">
+                  <option value="">— none —</option>
+                  <option value="opening">Opening</option>
+                  <option value="dispute">Dispute</option>
+                  <option value="closing">Closing</option>
+                  <option value="legal">Legal</option>
+                </select>
+              </label>
+              <label class="nt-field"><span>Body</span><textarea id="ntParagraphBody" rows="6" placeholder="Paragraph text…"></textarea></label>
+              <p class="nt-record-form-msg" id="ntParagraphMsg"></p>
+              <div class="nt-record-form-actions">
+                <button type="button" class="nt-btn-ghost" id="ntParagraphCancel">Cancel</button>
+                <button type="submit" class="nt-btn-primary" id="ntParagraphSave">Save Paragraph</button>
+              </div>
+            </form>
+          </dialog>
+        </section>
+
+        <!-- ── Disputes pane ── -->
+        <section class="nt-page-pane panel" id="ntDisputesPane" hidden>
+          <div class="nt-pane-header">
+            <h2 class="nt-pane-title">Active Disputes</h2>
+          </div>
+          <div id="ntDisputesList" class="nt-records-table-wrap"></div>
+        </section>
+
+        <!-- ── Alternate pane: Alternate Letters + Creditor Contacts ── -->
+        <section class="nt-page-pane panel" id="ntAlternatePane" hidden>
+          <div class="nt-pane-header">
+            <div class="nt-pane-tabs" role="tablist">
+              <button class="nt-pane-tab is-active" role="tab" data-tab="alternate" aria-selected="true">Alternate Letters</button>
+              <button class="nt-pane-tab" role="tab" data-tab="creditors" aria-selected="false">Creditor Contacts</button>
+            </div>
+            <button class="nt-pane-add-btn" id="ntAlternateAddBtn" type="button">+ New</button>
+          </div>
+
+          <div id="ntAlternateLettersPanel">
+            <div id="ntAlternateList" class="nt-records-table-wrap"></div>
+          </div>
+          <div id="ntCreditorsPanel" hidden>
+            <div id="ntCreditorsList" class="nt-records-table-wrap"></div>
+          </div>
+
+          <dialog class="nt-record-dialog" id="ntAlternateDialog">
+            <form class="nt-record-form" id="ntAlternateForm" method="dialog">
+              <h3 id="ntAlternateDialogTitle">New Alternate Letter</h3>
+              <input type="hidden" id="ntAlternateId" value="" />
+              <label class="nt-field"><span>Title</span><input type="text" id="ntAlternateTitle" required placeholder="e.g. Aggressive Round 2" /></label>
+              <label class="nt-field">
+                <span>Bureau</span>
+                <select id="ntAlternateBureau">
+                  <option value="all">All Bureaus</option>
+                  <option value="equifax">Equifax</option>
+                  <option value="experian">Experian</option>
+                  <option value="transunion">TransUnion</option>
+                </select>
+              </label>
+              <label class="nt-field"><span>Content</span><textarea id="ntAlternateContent" rows="8" placeholder="Alternate letter body…"></textarea></label>
+              <p class="nt-record-form-msg" id="ntAlternateMsg"></p>
+              <div class="nt-record-form-actions">
+                <button type="button" class="nt-btn-ghost" id="ntAlternateCancel">Cancel</button>
+                <button type="submit" class="nt-btn-primary" id="ntAlternateSave">Save Letter</button>
+              </div>
+            </form>
+          </dialog>
+
+          <dialog class="nt-record-dialog" id="ntCreditorDialog">
+            <form class="nt-record-form" id="ntCreditorForm" method="dialog">
+              <h3 id="ntCreditorDialogTitle">New Creditor Contact</h3>
+              <input type="hidden" id="ntCreditorId" value="" />
+              <label class="nt-field"><span>Name</span><input type="text" id="ntCreditorName" required placeholder="e.g. Capital One" /></label>
+              <label class="nt-field"><span>Address</span><input type="text" id="ntCreditorAddress" placeholder="Dispute mailing address" /></label>
+              <label class="nt-field"><span>Phone</span><input type="text" id="ntCreditorPhone" placeholder="800-555-1234" /></label>
+              <p class="nt-record-form-msg" id="ntCreditorMsg"></p>
+              <div class="nt-record-form-actions">
+                <button type="button" class="nt-btn-ghost" id="ntCreditorCancel">Cancel</button>
+                <button type="submit" class="nt-btn-primary" id="ntCreditorSave">Save Contact</button>
+              </div>
+            </form>
+          </dialog>
+        </section>
       </main>
     </div>
 
@@ -1080,6 +1229,28 @@
       </form>
     </dialog>
 
+    <dialog id="daysLeftDialog" class="client-edit-dialog">
+      <form id="daysLeftForm" class="client-edit-form" method="dialog">
+        <div class="client-edit-header">
+          <div>
+            <p class="eyebrow">Update Days Left</p>
+            <h3>Set Next Import Days</h3>
+          </div>
+          <button class="client-edit-close" type="button" id="daysLeftClose" aria-label="Close days left dialog">X</button>
+        </div>
+        <div class="client-edit-grid">
+          <label class="field field-full">
+            <span>Days Until Next Import</span>
+            <input type="number" id="daysLeftInput" step="1" required />
+          </label>
+        </div>
+        <div class="client-edit-actions">
+          <button class="client-edit-cancel" type="button" id="daysLeftCancel">Cancel</button>
+          <button type="submit">Update Days</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="imageCropDialog" class="image-crop-dialog">
       <div id="imageCropVueApp" class="image-crop-shell">
         <div class="image-crop-head">
@@ -1152,6 +1323,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
-    <script type="module" src="/app.js?v=20260526-02"></script>
+    <script type="module" src="/app.js?v=20260527-05"></script>
   </body>
 </html>
