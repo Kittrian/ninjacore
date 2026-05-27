@@ -1461,7 +1461,8 @@
                             }), i
                         },
                         formatDate(e) {
-                            return this.$options.filters.date(new Date(e).toISOString())
+                            const t = new Date(e);
+                            return Number.isNaN(t.getTime()) ? "-" : this.$options.filters.date(t.toISOString())
                         },
                         async setHide(e) {
                             const t = this.database.findIndex(t => t.acc_num === e.acc_num && t.acc_name === e.acc_name);
@@ -1494,7 +1495,7 @@
                             width: "100px"
                         },
                         attrs: {
-                            src: "/transunion.svg",
+                            src: "/full-zip/transunion.svg",
                             alt: "TransUnion Logo"
                         }
                     })], 1), q("th", [q("q-img", {
@@ -1503,7 +1504,7 @@
                             width: "100px"
                         },
                         attrs: {
-                            src: "/experian.png",
+                            src: "/full-zip/experian.png",
                             alt: "Experian Logo"
                         }
                     })], 1), q("th", [q("q-img", {
@@ -1512,7 +1513,7 @@
                             width: "100px"
                         },
                         attrs: {
-                            src: "/equifax.svg",
+                            src: "/full-zip/equifax.svg",
                             alt: "Equifax Logo"
                         }
                     })], 1)])]), q("tbody", S._l(S.selectedAccount.creaditScores, (function({
@@ -5805,7 +5806,7 @@
                                             width: "100px"
                                         },
                                         attrs: {
-                                            src: "/transunion.svg",
+                                            src: "/full-zip/transunion.svg",
                                             alt: "TransUnion Logo"
                                         }
                                     })] : "experian" === t.name ? [C("q-img", {
@@ -5814,7 +5815,7 @@
                                             width: "100px"
                                         },
                                         attrs: {
-                                            src: "/experian.png",
+                                            src: "/full-zip/experian.png",
                                             alt: "Experian Logo"
                                         }
                                     })] : "equifax" === t.name ? [C("q-img", {
@@ -5823,7 +5824,7 @@
                                             width: "100px"
                                         },
                                         attrs: {
-                                            src: "/equifax.svg",
+                                            src: "/full-zip/equifax.svg",
                                             alt: "Equifax Logo"
                                         }
                                     })] : [b._v("\n              " + b._s(t.label) + "\n            ")]], 2)

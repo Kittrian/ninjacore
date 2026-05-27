@@ -446,7 +446,7 @@
                             "margin-right": "-45px"
                         },
                         attrs: {
-                            src: "/logo3-no-bg.png",
+                            src: "/full-zip/logo3.png",
                             "spinner-color": "primary",
                             fit: "contain"
                         }
@@ -457,7 +457,7 @@
                             "margin-right": "-45px"
                         },
                         attrs: {
-                            src: "/logo3.png",
+                            src: "/full-zip/logo3.png",
                             "spinner-color": "primary",
                             fit: "contain"
                         }
