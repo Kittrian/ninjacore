@@ -8811,6 +8811,32 @@ const serveStatic = async (res, pathname) => {
   }
 };
 
+const serveFullApiSnapshot = async (res, pathname) => {
+  const relativePath = pathname.replace(/^\/full-api\/?/, '');
+  const basePath = path.join(publicDir, 'full-api');
+  const requestedPath = path.join(basePath, relativePath);
+  if (!requestedPath.startsWith(basePath)) {
+    notFound(res);
+    return;
+  }
+
+  const candidates = [
+    requestedPath,
+    `${requestedPath}.html`,
+    path.join(requestedPath, 'index.html'),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const file = await fs.readFile(candidate);
+      send(res, 200, file, 'application/json; charset=utf-8');
+      return;
+    } catch {}
+  }
+
+  notFound(res);
+};
+
 const server = createServer((req, res) => {
   const cookies = parseCookies(req?.headers?.cookie || '');
   const requestUser = normalizeUsername(cookies.get('txn') || '');
@@ -8871,6 +8897,14 @@ const server = createServer((req, res) => {
     if ((pathname === '/payments' || pathname === '/payments.html') && !isAppAuthenticated(req)) {
       res.writeHead(302, { Location: '/' });
       res.end();
+      return;
+    }
+    if (pathname === '/full-api/auth/refresh_token') {
+      send(res, 200, { token: 'full-zip-static-token' });
+      return;
+    }
+    if (pathname.startsWith('/full-api/')) {
+      await serveFullApiSnapshot(res, pathname);
       return;
     }
 

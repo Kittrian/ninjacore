@@ -1,0 +1,2112 @@
+! function(e) {
+    function t(t) {
+        for (var o, n, i = t[0], c = t[1], l = t[2], d = 0, p = []; d < i.length; d++) n = i[d], Object.prototype.hasOwnProperty.call(r, n) && r[n] && p.push(r[n][0]), r[n] = 0;
+        for (o in c) Object.prototype.hasOwnProperty.call(c, o) && (e[o] = c[o]);
+        for (u && u(t); p.length;) p.shift()();
+        return s.push.apply(s, l || []), a()
+    }
+
+    function a() {
+        for (var e, t = 0; t < s.length; t++) {
+            for (var a = s[t], o = !0, n = 1; n < a.length; n++) {
+                var c = a[n];
+                0 !== r[c] && (o = !1)
+            }
+            o && (s.splice(t--, 1), e = i(i.s = a[0]))
+        }
+        return e
+    }
+    var o = {},
+        n = {
+            5: 0
+        },
+        r = {
+            5: 0
+        },
+        s = [];
+
+    function i(t) {
+        if (o[t]) return o[t].exports;
+        var a = o[t] = {
+            i: t,
+            l: !1,
+            exports: {}
+        };
+        return e[t].call(a.exports, a, a.exports, i), a.l = !0, a.exports
+    }
+    i.e = function(e) {
+        var t = [];
+        n[e] ? t.push(n[e]) : 0 !== n[e] && {
+            1: 1,
+            2: 1,
+            3: 1,
+            4: 1,
+            6: 1,
+            7: 1,
+            8: 1,
+            9: 1,
+            10: 1,
+            11: 1,
+            12: 1,
+            13: 1,
+            14: 1,
+            15: 1,
+            16: 1
+        }[e] && t.push(n[e] = new Promise((function(t, a) {
+            for (var o = "css/" + ({
+                    1: "chunk-common"
+                }[e] || e) + "." + {
+                    1: "59731d67",
+                    2: "556b60fe",
+                    3: "c2f99bc6",
+                    4: "bb6ef74f",
+                    6: "d8c43ed0",
+                    7: "afba14de",
+                    8: "f32073e9",
+                    9: "ebd80f8d",
+                    10: "e1085133",
+                    11: "1f046ba8",
+                    12: "152c47a2",
+                    13: "857e618c",
+                    14: "7ba765c7",
+                    15: "3004d46f",
+                    16: "20e473df",
+                    17: "31d6cfe0",
+                    18: "31d6cfe0",
+                    19: "31d6cfe0",
+                    20: "31d6cfe0",
+                    21: "31d6cfe0",
+                    22: "31d6cfe0",
+                    23: "31d6cfe0",
+                    24: "31d6cfe0",
+                    25: "31d6cfe0",
+                    26: "31d6cfe0",
+                    27: "31d6cfe0",
+                    28: "31d6cfe0",
+                    29: "31d6cfe0",
+                    30: "31d6cfe0",
+                    31: "31d6cfe0"
+                }[e] + ".css", r = i.p + o, s = document.getElementsByTagName("link"), c = 0; c < s.length; c++) {
+                var l = (u = s[c]).getAttribute("data-href") || u.getAttribute("href");
+                if ("stylesheet" === u.rel && (l === o || l === r)) return t()
+            }
+            var d = document.getElementsByTagName("style");
+            for (c = 0; c < d.length; c++) {
+                var u;
+                if ((l = (u = d[c]).getAttribute("data-href")) === o || l === r) return t()
+            }
+            var p = document.createElement("link");
+            p.rel = "stylesheet", p.type = "text/css", p.onload = t, p.onerror = function(t) {
+                var o = t && t.target && t.target.src || r,
+                    s = new Error("Loading CSS chunk " + e + " failed.\n(" + o + ")");
+                s.code = "CSS_CHUNK_LOAD_FAILED", s.request = o, delete n[e], p.parentNode.removeChild(p), a(s)
+            }, p.href = r, document.getElementsByTagName("head")[0].appendChild(p)
+        })).then((function() {
+            n[e] = 0
+        })));
+        var a = r[e];
+        if (0 !== a)
+            if (a) t.push(a[2]);
+            else {
+                var o = new Promise((function(t, o) {
+                    a = r[e] = [t, o]
+                }));
+                t.push(a[2] = o);
+                var s, c = document.createElement("script");
+                c.charset = "utf-8", c.timeout = 120, i.nc && c.setAttribute("nonce", i.nc), c.src = function(e) {
+                    return i.p + "js/" + ({
+                        1: "chunk-common"
+                    }[e] || e) + "." + {
+                        1: "4e47a318",
+                        2: "1d6d82a6",
+                        3: "8e12e587",
+                        4: "1dd1ca3a",
+                        6: "3f45d010",
+                        7: "8e1e4cf6",
+                        8: "233ddc1a",
+                        9: "2836c0cf",
+                        10: "8dbe267c",
+                        11: "c8bd171f",
+                        12: "c13d5c04",
+                        13: "ac7c7f53",
+                        14: "176cd842",
+                        15: "7e712925",
+                        16: "a863f374",
+                        17: "4837f816",
+                        18: "f4ad531c",
+                        19: "a089d665",
+                        20: "b9bc7c00",
+                        21: "77e40f59",
+                        22: "4de399e9",
+                        23: "6142030c",
+                        24: "ffd4625a",
+                        25: "baa01279",
+                        26: "acf410ac",
+                        27: "d42f335e",
+                        28: "c6463cc1",
+                        29: "06ebc0bd",
+                        30: "78d936cd",
+                        31: "6049a53d"
+                    }[e] + ".js"
+                }(e);
+                var l = new Error;
+                s = function(t) {
+                    c.onerror = c.onload = null, clearTimeout(d);
+                    var a = r[e];
+                    if (0 !== a) {
+                        if (a) {
+                            var o = t && ("load" === t.type ? "missing" : t.type),
+                                n = t && t.target && t.target.src;
+                            l.message = "Loading chunk " + e + " failed.\n(" + o + ": " + n + ")", l.name = "ChunkLoadError", l.type = o, l.request = n, a[1](l)
+                        }
+                        r[e] = void 0
+                    }
+                };
+                var d = setTimeout((function() {
+                    s({
+                        type: "timeout",
+                        target: c
+                    })
+                }), 12e4);
+                c.onerror = c.onload = s, document.head.appendChild(c)
+            }
+        return Promise.all(t)
+    }, i.m = e, i.c = o, i.d = function(e, t, a) {
+        i.o(e, t) || Object.defineProperty(e, t, {
+            enumerable: !0,
+            get: a
+        })
+    }, i.r = function(e) {
+        "undefined" != typeof Symbol && Symbol.toStringTag && Object.defineProperty(e, Symbol.toStringTag, {
+            value: "Module"
+        }), Object.defineProperty(e, "__esModule", {
+            value: !0
+        })
+    }, i.t = function(e, t) {
+        if (1 & t && (e = i(e)), 8 & t) return e;
+        if (4 & t && "object" == typeof e && e && e.__esModule) return e;
+        var a = Object.create(null);
+        if (i.r(a), Object.defineProperty(a, "default", {
+                enumerable: !0,
+                value: e
+            }), 2 & t && "string" != typeof e)
+            for (var o in e) i.d(a, o, function(t) {
+                return e[t]
+            }.bind(null, o));
+        return a
+    }, i.n = function(e) {
+        var t = e && e.__esModule ? function() {
+            return e.default
+        } : function() {
+            return e
+        };
+        return i.d(t, "a", t), t
+    }, i.o = function(e, t) {
+        return Object.prototype.hasOwnProperty.call(e, t)
+    }, i.p = "", i.oe = function(e) {
+        throw console.error(e), e
+    };
+    var c = window.webpackJsonp = window.webpackJsonp || [],
+        l = c.push.bind(c);
+    c.push = t, c = c.slice();
+    for (var d = 0; d < c.length; d++) t(c[d]);
+    var u = l;
+    s.push([1, 0]), a()
+}({
+    "0047": function(e, t, a) {},
+    1: function(e, t, a) {
+        e.exports = a("2f39")
+    },
+    "29b2": function(e, t, a) {
+        "use strict";
+        a.d(t, "a", (function() {
+            return r
+        }));
+        var o = a("8e27");
+        let n = null;
+
+        function r() {
+            if (n) console.log("--- EXISTING SOCKET INSTANCE RETURNED ---", n.id);
+            else {
+                const e = "/full-api/";
+                n = Object(o.io)(e, {
+                    reconnection: !0,
+                    reconnectionDelay: 1e3,
+                    reconnectionDelayMax: 5e3,
+                    reconnectionAttempts: 99999,
+                    transports: ["websocket", "polling"],
+                    auth: e => {
+                        const t = localStorage.getItem("token");
+                        e({
+                            token: t ? JSON.parse(t) : null
+                        })
+                    }
+                }), console.log("--- NEW SOCKET INSTANCE CREATED ---", n.id, "Connecting to:", e), n.on("connect", () => {
+                    console.log("Singleton Socket Connected:", n.id)
+                }), n.on("disconnect", e => {
+                    console.log("Singleton Socket Disconnected:", n.id, "Reason:", e)
+                }), n.on("connect_error", e => {
+                    console.error("Singleton Socket Connection Error:", e)
+                })
+            }
+            return n
+        }
+    },
+    "2f39": function(e, t, a) {
+        "use strict";
+        a.r(t);
+        a("9f29"), a("7d6e"), a("e54f"), a("4439"), a("4605"), a("f580"), a("5b2b"), a("8753"), a("2967"), a("7e67"), a("d770"), a("dd82"), a("922c"), a("d7fb"), a("a533"), a("c32e"), a("a151"), a("8bc7"), a("e80f"), a("5fec"), a("e42f"), a("57fc"), a("d67f"), a("880e"), a("1c10"), a("9482"), a("e797"), a("4848"), a("53d0"), a("63b1"), a("e9fd"), a("195c"), a("64e9"), a("33c5"), a("4f62"), a("0dbc"), a("7c38"), a("0756"), a("4953"), a("81db"), a("2e52"), a("2248"), a("7797"), a("12a1"), a("ce96"), a("70ca"), a("2318"), a("24bd"), a("8f27"), a("3064"), a("c9a2"), a("8767"), a("4a8e"), a("b828"), a("3c1c"), a("21cb"), a("c00e"), a("e4a8"), a("e4d3"), a("f4d9"), a("fffd"), a("f645"), a("639e"), a("34ee"), a("b794"), a("af24"), a("7c9c"), a("7bb2"), a("64f7"), a("c382"), a("053c"), a("c48f"), a("f5d1"), a("3cec"), a("c00ee"), a("d450"), a("ca07"), a("14e3"), a("9393"), a("9227"), a("1dba"), a("674a"), a("de26"), a("6721"), a("9cb5"), a("ed9b"), a("fc83"), a("98e5"), a("605a"), a("ba60"), a("df07"), a("7903"), a("e046"), a("58af"), a("7713"), a("0571"), a("3e27"), a("6837"), a("3fc9"), a("0693"), a("bf41"), a("985d"), a("0047"), a("5781");
+        var o = a("2b0e"),
+            n = a("1f91"),
+            r = a("42d2"),
+            s = a("b05d"),
+            i = a("4d5a"),
+            c = a("e359"),
+            l = a("9404"),
+            d = a("09e3"),
+            u = a("9989"),
+            p = a("65c6"),
+            m = a("6ac5"),
+            f = a("05c0"),
+            h = a("9c40"),
+            g = a("f20b"),
+            b = a("6a67"),
+            E = a("0016"),
+            _ = a("1c1c"),
+            v = a("66e5"),
+            S = a("3b73"),
+            A = a("4074"),
+            O = a("0170"),
+            I = a("4983"),
+            T = a("ed5e"),
+            y = a("eb85"),
+            N = a("4e73"),
+            R = a("cb32"),
+            P = a("b498"),
+            D = a("27f9"),
+            k = a("8f8e"),
+            C = a("9564"),
+            w = a("0d59"),
+            M = a("714f"),
+            j = a("7f67"),
+            x = a("2a19"),
+            U = a("436b"),
+            q = a("18d6"),
+            L = a("9c64"),
+            F = a("b12a");
+        o.a.use(s.a, {
+            config: {
+                dark: !1
+            },
+            lang: n.a,
+            iconSet: r.a,
+            components: {
+                QLayout: i.a,
+                QHeader: c.a,
+                QDrawer: l.a,
+                QPageContainer: d.a,
+                QPage: u.a,
+                QToolbar: p.a,
+                QToolbarTitle: m.a,
+                QTooltip: f.a,
+                QBtn: h.a,
+                QBtnDropdown: g.a,
+                QBtnToggle: b.a,
+                QIcon: E.a,
+                QList: _.a,
+                QItem: v.a,
+                QExpansionItem: S.a,
+                QItemSection: A.a,
+                QItemLabel: O.a,
+                QScrollArea: I.a,
+                QScrollObserver: T.a,
+                QSeparator: y.a,
+                QMenu: N.a,
+                QAvatar: R.a,
+                QColor: P.a,
+                QInput: D.a,
+                QCheckbox: k.a,
+                QToggle: C.a,
+                QSpinner: w.a
+            },
+            directives: {
+                Ripple: M.a,
+                ClosePopup: j.a
+            },
+            plugins: {
+                Notify: x.a,
+                Dialog: U.a,
+                LocalStorage: q.a,
+                Meta: L.a,
+                AppFullscreen: F.a
+            }
+        });
+        var V = {
+                name: "App",
+                data: () => ({
+                    IDLE_TIMEOUT: 5,
+                    idleSecondsCounter: 0
+                }),
+                methods: {
+                    CheckIdleTime() {
+                        this.idleSecondsCounter++, this.idleSecondsCounter >= this.IDLE_TIMEOUT && alert("Time expired!")
+                    }
+                },
+                beforeMount() {
+                    var e;
+                    const t = JSON.parse(localStorage.getItem("usuario"));
+                    var a;
+                    null != t && null !== (e = t.configs) && void 0 !== e && e.isDark && this.$q.dark.set(null == t || null === (a = t.configs) || void 0 === a ? void 0 : a.isDark)
+                }
+            },
+            Q = a("2877"),
+            W = Object(Q.a)(V, (function() {
+                var e = this._self._c;
+                return e("div", {
+                    attrs: {
+                        id: "q-app"
+                    }
+                }, [e("router-view")], 1)
+            }), [], !1, null, null, null).exports,
+            $ = a("2f62"),
+            z = a("7884"),
+            G = a("ff52"),
+            H = a("29b2");
+        const B = Object(H.a)(),
+            J = {
+                searchParam: "",
+                pageNumber: 1,
+                status: ["open", "pending"],
+                showAll: !1,
+                count: null,
+                queuesIds: [],
+                withUnreadMessages: !1,
+                isNotAssignedUser: !1,
+                includeNotQueueDefined: !0
+            };
+        var K = {
+            state: {
+                token: null,
+                isAdmin: !1,
+                isSuporte: !1
+            },
+            mutations: {
+                SET_IS_SUPORTE(e, t) {
+                    let a = !1;
+                    ["@mercy.io"].forEach(e => {
+                        -1 !== (null == t ? void 0 : t.email.toLocaleLowerCase().indexOf(e.toLocaleLowerCase())) && (a = !0)
+                    }), e.isSuporte = a
+                },
+                SET_IS_ADMIN(e, t) {
+                    e.isAdmin = !(!e.isSuporte && "admin" !== t.profile)
+                }
+            },
+            actions: {
+                async UserLogin({
+                    commit: e,
+                    dispatch: t
+                }, a) {
+                    a.email = a.email.trim();
+                    try {
+                        var o, n;
+                        const {
+                            data: t
+                        } = await Object(z.a)(a);
+                        localStorage.setItem("token", JSON.stringify(t.token)), localStorage.setItem("username", t.username), localStorage.setItem("profile", t.profile), localStorage.setItem("userId", t.userId), localStorage.setItem("usuario", JSON.stringify(t)), localStorage.setItem("queues", JSON.stringify(t.queues)), localStorage.setItem("filtrosAtendimento", JSON.stringify(J)), null != t && null !== (o = t.configs) && void 0 !== o && o.filtrosAtendimento && localStorage.setItem("filtrosAtendimento", JSON.stringify(t.configs.filtrosAtendimento)), null != t && null !== (n = t.configs) && void 0 !== n && n.isDark && G.a.set(t.configs.isDark), e("SET_IS_SUPORTE", t), e("SET_IS_ADMIN", t), B && (B.connected || B.connect(), B.emit(t.tenantId + ":setUserActive")), x.a.create({
+                            type: "positive",
+                            message: "Login successful!",
+                            position: "top",
+                            progress: !0
+                        });
+                        const r = localStorage.getItem("redirect");
+                        if (r) {
+                            this.$router.app.$route.path;
+                            r !== this.$router.app.$route.path && this.$router.push({
+                                path: r
+                            }).catch(e => {
+                                if ("NavigationDuplicated" !== e.name) throw e
+                            })
+                        } else t.profile, this.$router.push({
+                            name: "clients"
+                        })
+                    } catch (e) {
+                        var r, s;
+                        console.error(e), x.a.create({
+                            type: "negative",
+                            message: "Login failed: " + ((null === (r = e.response) || void 0 === r || null === (s = r.data) || void 0 === s ? void 0 : s.message) || "Unknown error"),
+                            position: "top",
+                            progress: !0
+                        })
+                    }
+                }
+            }
+        };
+        var Y = {
+                state: {
+                    whatsApps: []
+                },
+                mutations: {
+                    LOAD_WHATSAPPS(e, t) {
+                        e.whatsApps = t
+                    },
+                    UPDATE_WHATSAPPS(e, t) {
+                        const a = t;
+                        let o = [...e.whatsApps];
+                        const n = o.findIndex(e => e.id === a.id); - 1 !== n ? o[n] = a : o = [a, ...o], e.whatsApps = [...o]
+                    },
+                    UPDATE_SESSION(e, t) {
+                        const a = t,
+                            o = e.whatsApps.findIndex(e => e.id === a.id);
+                        return -1 !== o ? (e.whatsApps[o].status = a.status, e.whatsApps[o].updatedAt = a.updatedAt, e.whatsApps[o].qrcode = a.qrcode, e.whatsApps[o].retries = a.retries, e.whatsApps) : e.whatsApps
+                    },
+                    DELETE_WHATSAPPS(e, t) {
+                        const a = t,
+                            o = e.whatsApps.findIndex(e => e.id === a);
+                        return -1 !== o && e.whatsApps.splice(o, 1), e.whatsApps
+                    },
+                    RESET_WHATSAPPS(e) {
+                        e.whatsApps = []
+                    }
+                }
+            },
+            X = (a("e9f5"), a("f665"), a("7d54"), a("c5bd")),
+            Z = a("a18c"),
+            ee = a("2ef0"),
+            te = a("e3ee");
+        const ae = e => [...Object(ee.orderBy)(e, e => Object(te.a)(e.timestamp || e.createdAt), ["asc"])],
+            oe = e => {
+                var t, a;
+                const o = JSON.parse(localStorage.getItem("filtrosAtendimento")) || {
+                        searchParam: "",
+                        pageNumber: 1,
+                        status: ["open", "pending"],
+                        showAll: !1,
+                        count: null,
+                        queuesIds: [],
+                        withUnreadMessages: !1,
+                        isNotAssignedUser: !1,
+                        includeNotQueueDefined: !0
+                    },
+                    n = JSON.parse(localStorage.getItem("usuario")),
+                    r = JSON.parse(localStorage.getItem("queues")),
+                    s = JSON.parse(localStorage.getItem("filasCadastradas") || "[]"),
+                    i = "admin" === localStorage.getItem("profile") && o.showAll,
+                    c = s.length > 0,
+                    l = (null == n ? void 0 : n.userId) || +localStorage.getItem("userId");
+                if (i) return console.log("isAdminShowAll", i), !0;
+                if (e.isGroup) return console.log("ticket.isGroup", e.isGroup), !0;
+                if (o.status.length > 0 && !o.status.includes(e.status)) return console.log("Status ticket", o.status, e.status), !1;
+                if ((null == e ? void 0 : e.userId) == l) return console.log("Ticket do usuário", null == e ? void 0 : e.userId, l), !0;
+                if ((() => {
+                        const e = JSON.parse(localStorage.getItem("configuracoes")),
+                            t = null == e ? void 0 : e.find(e => "NotViewTicketsChatBot" === e.key);
+                        return "enabled" === (null == t ? void 0 : t.value)
+                    })() && e.autoReplyId && !(null != e && e.userId || e.queueId)) return console.log("NotViewTicketsChatBot e o ticket está sem usuário e fila definida"), !1;
+                let d = !0;
+                if (c) {
+                    if (-1 === r.findIndex(t => e.queueId === t.id)) return console.log("Usuario não tem acesso a fila", e.queueId), !1;
+                    console.log("Fila do ticket liberada para o Usuario", e.queueId), d = !0
+                }
+                if (c && null != o && o.queuesIds.length) {
+                    if (-1 == o.queuesIds.findIndex(t => e.queueId === t)) return console.log("filas filtradas e diferentes da do ticket", e.queueId), !1
+                }
+                if ((() => {
+                        const e = JSON.parse(localStorage.getItem("configuracoes")),
+                            t = null == e ? void 0 : e.find(e => "DirectTicketsToWallets" === e.key);
+                        return "enabled" === (null == t ? void 0 : t.value)
+                    })() && ((null == e || null === (t = e.contact) || void 0 === t || null === (a = t.wallets) || void 0 === a ? void 0 : a.length) || 0) > 0) {
+                    var u;
+                    return -1 !== (null == e || null === (u = e.contact) || void 0 === u ? void 0 : u.wallets.findIndex(e => e.id == l)) ? (console.log("Ticket da carteira do usuário"), !0) : (console.log("DirectTicketsToWallets: Ticket não pertence à carteira do usuário", e), !1)
+                }
+                return (() => {
+                    const e = JSON.parse(localStorage.getItem("configuracoes")),
+                        t = null == e ? void 0 : e.find(e => "NotViewAssignedTickets" === e.key);
+                    return "enabled" === (null == t ? void 0 : t.value)
+                })() && ((null == e ? void 0 : e.userId) || l) !== l ? (console.log("isNotViewAssignedTickets e ticket não é do usuário", null == e ? void 0 : e.userId, l), null == e || !e.userId) : o.isNotAssignedUser ? (console.log("isNotAssignedUser ativo para exibir somente tickets não assinados", o.isNotAssignedUser, !e.userId), o.isNotAssignedUser && !e.userId) : d
+            };
+        var ne = {
+            state: {
+                chatTicketDisponivel: !1,
+                tickets: [],
+                ticketsLocalizadosBusca: [],
+                ticketFocado: {
+                    contacts: {
+                        tags: [],
+                        wallets: [],
+                        extraInfo: []
+                    }
+                },
+                hasMore: !1,
+                contatos: [],
+                mensagens: []
+            },
+            mutations: {
+                SET_HAS_MORE(e, t) {
+                    e.hasMore = t
+                },
+                LOAD_TICKETS(e, t) {
+                    var a;
+                    (a = t, [...Object(ee.orderBy)(a, e => Object(te.a)(e.lastMessageAt || e.updatedAt), ["asc"])]).forEach(t => {
+                        const a = e.tickets.findIndex(e => e.id === t.id); - 1 !== a ? (e.tickets[a] = t, t.unreadMessages > 0 && e.tickets.unshift(e.tickets.splice(a, 1)[0])) : oe(t) && e.tickets.push(t)
+                    })
+                },
+                RESET_TICKETS(e) {
+                    e.hasMore = !0, e.tickets = []
+                },
+                RESET_UNREAD(e, t) {
+                    const a = [...e.tickets],
+                        o = t.ticketId,
+                        n = a.findIndex(e => e.id === o); - 1 !== n && (a[n] = t, a[n].unreadMessages = 0), e.ticket = a
+                },
+                UPDATE_TICKET(e, t) {
+                    const a = e.tickets.findIndex(e => e.id === t.id);
+                    if (-1 !== a) {
+                        var o, n, r;
+                        const s = [...e.tickets];
+                        s[a] = { ...s[a],
+                            ...t,
+                            username: (null == t || null === (o = t.user) || void 0 === o ? void 0 : o.name) || (null == t ? void 0 : t.username) || s[a].username,
+                            profilePicUrl: (null == t || null === (n = t.contact) || void 0 === n ? void 0 : n.profilePicUrl) || (null == t ? void 0 : t.profilePicUrl) || s[a].profilePicUrl,
+                            name: (null == t || null === (r = t.contact) || void 0 === r ? void 0 : r.name) || (null == t ? void 0 : t.name) || s[a].name
+                        }, e.tickets = s.filter(e => oe(e)), e.ticketFocado.id == t.id && (e.ticketFocado = { ...e.ticketFocado,
+                            ...t
+                        })
+                    } else {
+                        var s, i, c;
+                        const a = [...e.tickets];
+                        a.unshift({ ...t,
+                            username: (null == t || null === (s = t.user) || void 0 === s ? void 0 : s.name) || (null == t ? void 0 : t.username),
+                            profilePicUrl: (null == t || null === (i = t.contact) || void 0 === i ? void 0 : i.profilePicUrl) || (null == t ? void 0 : t.profilePicUrl),
+                            name: (null == t || null === (c = t.contact) || void 0 === c ? void 0 : c.name) || (null == t ? void 0 : t.name)
+                        }), e.tickets = a.filter(e => oe(e))
+                    }
+                },
+                DELETE_TICKET(e, t) {
+                    const a = t,
+                        o = e.tickets.findIndex(e => e.id === a); - 1 !== o && e.tickets.splice(o, 1)
+                },
+                UPDATE_TICKET_FOCADO_CONTACT(e, t) {
+                    e.ticketFocado.contact = t
+                },
+                UPDATE_CONTACT(e, t) {
+                    e.ticketFocado.contactId == t.id && (e.ticketFocado.contact = t);
+                    const a = e.tickets.findIndex(e => e.contactId === t.id);
+                    if (-1 !== a) {
+                        const o = [...e.tickets];
+                        o[a].contact = t, o[a].name = t.name, o[a].profilePicUrl = t.profilePicUrl, e.tickets = o
+                    }
+                },
+                TICKET_FOCADO(e, t) {
+                    const a = { ...t,
+                        status: "pending" == t.status ? "open" : t.status
+                    };
+                    e.ticketFocado = a
+                },
+                LOAD_INITIAL_MESSAGES(e, t) {
+                    const {
+                        messages: a,
+                        messagesOffLine: o
+                    } = t;
+                    e.mensagens = [];
+                    const n = ae([...a, ...o]);
+                    e.mensagens = n
+                },
+                LOAD_MORE_MESSAGES(e, t) {
+                    const {
+                        messages: a,
+                        messagesOffLine: o
+                    } = t, n = [...a, ...o], r = [];
+                    n.forEach((t, a) => {
+                        const o = e.mensagens.findIndex(e => e.id === t.id); - 1 !== o ? (e.mensagens[o] = t, n.splice(a, 1)) : r.push(t)
+                    });
+                    const s = ae(r);
+                    e.mensagens = [...s, ...e.mensagens]
+                },
+                UPDATE_MESSAGES(e, t) {
+                    if (e.ticketFocado.id === t.ticket.id) {
+                        const a = e.mensagens.findIndex(e => e.id === t.id),
+                            o = [...e.mensagens];
+                        if (-1 !== a ? o[a] = t : o.push(t), e.mensagens = o, t.scheduleDate && "pending" == t.status) {
+                            -1 === e.ticketFocado.scheduledMessages.findIndex(e => e.id === t.id) && e.ticketFocado.scheduledMessages.push(t)
+                        }
+                    }
+                    const a = e.tickets.findIndex(e => e.id == t.ticket.id);
+                    if (-1 !== a) {
+                        const o = [...e.tickets],
+                            n = e.ticketFocado.id == t.ticket.id ? 0 : t.ticket.unreadMessages;
+                        o[a] = { ...e.tickets[a],
+                            answered: t.ticket.answered,
+                            unreadMessages: n,
+                            lastMessage: t.mediaName || t.body
+                        }, e.tickets = o
+                    }
+                },
+                UPDATE_MESSAGE_STATUS(e, t) {
+                    var a;
+                    if (e.ticketFocado.id != t.ticket.id) return;
+                    const o = e.mensagens.findIndex(e => e.id === t.id),
+                        n = [...e.mensagens];
+                    if (-1 !== o && (n[o] = t, e.mensagens = n), null !== (a = e.ticketFocado) && void 0 !== a && a.scheduledMessages) {
+                        const a = [...e.ticketFocado.scheduledMessages].filter(e => e.id != t.id);
+                        e.ticketFocado.scheduledMessages = a
+                    }
+                },
+                RESET_MESSAGE(e) {
+                    e.mensagens = []
+                }
+            },
+            actions: {
+                async LocalizarMensagensTicket({
+                    commit: e,
+                    dispatch: t
+                }, a) {
+                    const o = await Object(X.j)(a);
+                    e("SET_HAS_MORE", o.data.hasMore), 1 === a.pageNumber ? e("LOAD_INITIAL_MESSAGES", o.data) : e("LOAD_MORE_MESSAGES", o.data)
+                },
+                async AbrirChatMensagens({
+                    commit: e,
+                    dispatch: t
+                }, a) {
+                    try {
+                        await e("TICKET_FOCADO", {}), await e("RESET_MESSAGE");
+                        const o = await Object(X.c)(a);
+                        await e("TICKET_FOCADO", o.data);
+                        const n = {
+                            ticketId: a.id,
+                            pageNumber: 1
+                        };
+                        await t("LocalizarMensagensTicket", n), await Z.a.push({
+                            name: "chat",
+                            params: n,
+                            query: {
+                                t: (new Date).getTime()
+                            }
+                        })
+                    } catch (e) {
+                        var o, n;
+                        if (!e) return;
+                        (null == e || null === (o = e.response) || void 0 === o || null === (n = o.data) || void 0 === n ? void 0 : n.error) ? x.a.create({
+                            type: "negative",
+                            message: e.response.data.error,
+                            progress: !0,
+                            position: "top"
+                        }): x.a.create({
+                            type: "negative",
+                            message: "Ops... An unidentified problem occurred. " + JSON.stringify(e),
+                            progress: !0,
+                            position: "top"
+                        })
+                    }
+                }
+            }
+        };
+        var re = {
+            state: {
+                flow: {},
+                usuarios: [],
+                filas: []
+            },
+            mutations: {
+                SET_FLOW_DATA(e, t) {
+                    e.flow = t.flow, e.usuarios = t.usuarios, e.filas = t.filas
+                },
+                RESET_FLOW_DATA(e) {
+                    e.flow = {}, e.usuarios = [], e.filas = []
+                }
+            }
+        };
+        var se = {
+            state: {
+                usersApp: []
+            },
+            mutations: {
+                SET_USERS_APP(e, t) {
+                    e.usersApp = t
+                }
+            }
+        };
+        var ie = {
+            tickets: e => {
+                return t = e.atendimentoTicket.tickets, Object(ee.orderBy)(t, e => Object(te.a)(e.updatedAt), ["desc"]);
+                var t
+            },
+            mensagensTicket: e => e.atendimentoTicket.mensagens,
+            ticketFocado: e => e.atendimentoTicket.ticketFocado,
+            hasMore: e => e.atendimentoTicket.hasMore,
+            whatsapps: e => e.whatsapp.whatsApps,
+            isSuporte: e => e.user.isSuporte,
+            isAdmin: e => e.user.isAdmin
+        };
+        o.a.use($.a);
+        var ce = function() {
+                return new $.a.Store({
+                    getters: ie,
+                    modules: {
+                        user: K,
+                        atendimentoTicket: ne,
+                        whatsapp: Y,
+                        chatFlow: re,
+                        usersApp: se
+                    },
+                    strict: !1
+                })
+            },
+            le = a("1aba"),
+            de = a("1dce"),
+            ue = a.n(de),
+            pe = a("7f53"),
+            me = a("9aa5"),
+            fe = a.n(me);
+        const he = {
+                required: "{attribute} is required",
+                email: "{attribute} It is invalid.",
+                minValue: "{attribute} must be greater than {min}",
+                minLength: "{attribute} must have at least {min} characters",
+                maxLength: "{attribute} must have at least {min} characters",
+                validaData: "Invalid date"
+            },
+            ge = {
+                email: "E-mail",
+                name: "Nome",
+                nome: "Nome",
+                username: "Users"
+            };
+        var be = ({
+                Vue: e
+            }) => {
+                e.directive("linkified", fe.a), e.use(ue.a), e.use(pe.a, {
+                    messages: he,
+                    attributes: ge
+                })
+            },
+            Ee = a("446a");
+        var _e = [{
+            error: "ERR_SESSION_EXPIRED",
+            description: "Your connection has expired.",
+            detail: "The validity of your connection has expired. A new login is required."
+        }, {
+            error: "ERR_API_CONFIG_NOT_FOUND",
+            description: "API settings not localized.",
+            detail: "Please refresh the page and try again. If the error persists, contact support.."
+        }, {
+            error: "ERR_NO_CONTACT_FOUND",
+            description: "Client not found in system.",
+            detail: "Check if the number is actually saved in the system correctly or register the client."
+        }, {
+            error: "ERR_DUPLICATED_CONTACT",
+            description: "Contato já cadastrado no sistema.",
+            detail: "Localize o contato já cadastro."
+        }, {
+            error: "ERR_CONTACT_TICKETS_REGISTERED",
+            description: "The client cannot be deleted.",
+            detail: "O contato possui atendimentos registrados e não pode ser excluso para garantir a integridade da informação."
+        }, {
+            error: "ERR_CREATING_MESSAGE",
+            description: "Mensagem não foi criada.",
+            detail: "Verifique se a conexão com o Whatsapp está ativa ou se a mensagem não feriu os termos do whatsapp."
+        }, {
+            error: "ERR_NO_TICKET_FOUND",
+            description: "Atendimento não localizado.",
+            detail: "Não localizamos o atendimento informado. Atualize a página (F5) e tente novamente. Consulte o suporte caso o erro persista"
+        }, {
+            error: "ERR_AUTO_REPLY_RELATIONED_TICKET",
+            description: "Não é possível apagar o registro.",
+            detail: "O fluxo já foi utilizado em diversos atendimentos."
+        }, {
+            error: "ERR_NO_AUTO_REPLY_FOUND",
+            description: "Fluxo informado não encontrado.",
+            detail: "Verifique se o fluxo realmente existe. Atualize a página e tente novamente."
+        }, {
+            error: "ERR_NO_STEP_AUTO_REPLY_FOUND",
+            description: "Não localizao etapa para o fluxo.",
+            detail: "Verifique o cadastro das etapas do chatbot. Confirme se a etapa realmente existe."
+        }, {
+            error: "ERR_CAMPAIGN_CONTACTS_NOT_EXISTS_OR_NOT_ACESSIBLE",
+            description: "Campanha não existe ou não está acessível.",
+            detail: "Verifique se a campanha ainda existe ou se está disponível."
+        }, {
+            error: "ERROR_CAMPAIGN_NOT_EXISTS",
+            description: "Campanha não localizada.",
+            detail: "Verifique se a campanha ainda existe ou se está disponível."
+        }, {
+            error: "ERR_NO_CAMPAIGN_FOUND",
+            description: "Campanha não localizada.",
+            detail: "Verifique se a campanha ainda existe ou se está disponível."
+        }, {
+            error: "ERR_NO_UPDATE_CAMPAIGN_NOT_IN_CANCELED_PENDING",
+            description: "Campanha não está cancelada ou pendente.",
+            detail: "Somente campanhas nos status mencionados podem ser alteradas."
+        }, {
+            error: "ERROR_CAMPAIGN_DATE_NOT_VALID",
+            description: "Data para programação inválida.",
+            detail: "A data precisa ser maior que a data atual."
+        }, {
+            error: "ERR_NO_CAMPAIGN_CONTACTS_NOT_FOUND",
+            description: "A campanha não existe.",
+            detail: "A campanha não localizada. Atualize a página."
+        }, {
+            error: "ERR_CAMPAIGN_CONTACTS_NOT_EXISTS",
+            description: "Campanha não existe. Contatos não vínculados.",
+            detail: "Possívelmente a campanha já foi apagada e não existem contatos vínculados. Atualize a pagína."
+        }, {
+            error: "ERR_CAMPAIGN_CONTACTS",
+            description: "Probleme com a campanha.",
+            detail: "Atualize a página e tente novamente."
+        }, {
+            error: "ERR_NO_FAST_REPLY_FOUND",
+            description: "Resposta rápida não localizada.",
+            detail: "Verifique se o registro realmente existe. Atualize a página e tente novamente."
+        }, {
+            error: "ERR_FAST_REPLY_EXISTS",
+            description: "Resposta rápida não existe.",
+            detail: "Possívelmente o registro já foi deletado. Atualize a página."
+        }, {
+            error: "ERR_NO_QUEUE_FOUND",
+            description: "Fila não localizada.",
+            detail: "Possívelmente o registro já foi deletado. Atualize a página."
+        }, {
+            error: "ERR_QUEUE_TICKET_EXISTS",
+            description: "Fila possui atendimentos vinculados. ",
+            detail: "Não é possível apagar o registro para manter a integridade das informações."
+        }, {
+            error: "ERR_NO_TAG_FOUND",
+            description: "template not found.",
+            detail: "Possívelmente o registro já foi deletado. Atualize a página."
+        }, {
+            error: "ERR_TAG_CONTACTS_EXISTS",
+            description: "Template has linked contacts.",
+            detail: "It is not possible to erase the record to maintain the integrity of the information."
+        }, {
+            error: "ERR_NO_SETTING_FOUND",
+            description: "Configuração não existe.",
+            detail: "Atualize a pagína e tente novamente. Consulte o suporte caso o erro persista."
+        }, {
+            error: "ERR_NO_TENANT_FOUND",
+            description: "Não localizamos empresa cadastrada ou ativa.",
+            detail: "Atualize a pagína e tente novamente. Consulte o suporte caso o erro persista."
+        }, {
+            error: "ERR_CREATING_TICKET",
+            description: "Não foi possível criar o atendimento.",
+            detail: "Atualize a pagína e tente novamente. Consulte o suporte caso o erro persista."
+        }, {
+            error: "ERR_NO_STATUS_SELECTED",
+            description: "No status selected.",
+            detail: "It is necessary to select status to list the calls."
+        }, {
+            error: "ERR_INVALID_CREDENTIALS",
+            description: "Invalid username and/or password.",
+            detail: "Login data is invalid. If the problem persists, contact a system administrator to reset credentials."
+        }, {
+            error: "ERR_NO_USER_FOUND",
+            description: "User not found.",
+            detail: "Check if the user really exists. Refresh the page if necessary."
+        }, {
+            error: "ERR_WAPP_INVALID_CONTACT",
+            description: "Número informado no contato é inválido",
+            detail: "O número não é um contato vinculdo à uma conta do Whatsapp."
+        }, {
+            error: "ERR_WAPP_CHECK_CONTACT",
+            description: "Ocorreu um erro ao válidar o contato pelo whatsapp.",
+            detail: "Verifique se a conexão com o whatsapp está ativa. Se necessário, atualize a página e tente novamente em alguns instantes."
+        }, {
+            error: "ERR_DELETE_WAPP_MSG",
+            description: "O Whatsapp não permitiu apagar a mensagem.",
+            detail: "Não é possível apagar mensagens antigas. Se a mensagem for das últimas 24h, verifique se a conexão com o whatsapp está ativa. Se necessário, atualize a página e tente novamente em alguns instantes."
+        }, {
+            error: "ERR_SENDING_WAPP_MSG",
+            description: "Mensagem não enviada pelo Whatsapp.",
+            detail: "Verifique se a conexão com o whatsapp está ativa. Se necessário, atualize a página e tente novamente em alguns instantes."
+        }, {
+            error: "ERR_WAPP_NOT_INITIALIZED",
+            description: "Sessão com o Whatsapp não inicializada",
+            detail: "Verifique o status da conexão com o whatsapp do sistema. Necessário que a conexão seja estabelecida com sucesso."
+        }, {
+            error: "ERR_CONTACTS_NOT_EXISTS_WHATSAPP",
+            description: "Contact does not exist in Whatsapp.",
+            detail: "The number is not a valid contact for Whatsapp."
+        }, {
+            error: "ERR_NO_WAPP_FOUND",
+            description: "Session not found.",
+            detail: "Verify that the record actually exists. If necessary, refresh the page."
+        }, {
+            error: "ERR_OTHER_OPEN_TICKET",
+            description: "There is already an open service for contact.",
+            detail: "Locate the contact in the call list."
+        }, {
+            error: "ERR_NO_DEF_WAPP_FOUND",
+            description: 'There is no connection marked with "DEFAULT".',
+            detail: "It is necessary to carry out the definition in the sessions menu."
+        }, {
+            error: "ERR_FETCH_WAPP_MSG",
+            description: "Could not find messages.",
+            detail: "Validate the connection status with whatsapp."
+        }, {
+            error: "ERR_NO_PERMISSION",
+            description: "User without permission.",
+            detail: "Your user does not have permission to perform the action."
+        }];
+        const ve = (e, t = null) => {
+                let a = "";
+                var o, n, r, s, i;
+                t && (a = (null == t || null === (o = t.data) || void 0 === o ? void 0 : o.error) || (null == t || null === (n = t.data) || void 0 === n ? void 0 : n.msg) || (null == t || null === (r = t.data) || void 0 === r ? void 0 : r.message) || (null == t || null === (s = t.response) || void 0 === s || null === (i = s.data) || void 0 === i ? void 0 : i.error) || "Não identificado");
+                const c = _e.find(e => e.error == a);
+                let l = "";
+                throw l = t && null != c && c.error ? `\n      <p class="text-bold">\n      Ops...<br>\n      <span class="text-bold">${c.description}.</span>\n      </p>\n      <p>${c.detail}</p>\n    ` : `\n    <p class="text-bold">\n      Ops...<br>\n      <span class="text-bold">${e}</span>\n    </p>\n    <p>Detail: ${a}</p>\n    `, x.a.create({
+                    type: "negative",
+                    progress: !0,
+                    position: "top",
+                    timeout: 5e3,
+                    message: l,
+                    actions: [{
+                        icon: "close",
+                        round: !0,
+                        color: "white"
+                    }],
+                    html: !0
+                }), new Error(l)
+            },
+            Se = e => {
+                const t = `All very well... <br>${e}.`;
+                x.a.create({
+                    type: "positive",
+                    progress: !0,
+                    position: "top",
+                    message: t,
+                    timeout: 5e3,
+                    actions: [{
+                        icon: "close",
+                        round: !0,
+                        color: "white"
+                    }],
+                    html: !0
+                })
+            };
+        var Ae = a("1732"),
+            Oe = a("b166"),
+            Ie = a("2cf3"),
+            Te = a("49ef"),
+            ye = {
+                name: "ccInputDate",
+                extends: pe.b,
+                inheritAttrs: !1,
+                data: () => ({
+                    date: null,
+                    dateSelect: null
+                }),
+                props: {
+                    value: [String, Date],
+                    initValue: {
+                        type: [String, Date],
+                        default: null
+                    },
+                    error: {
+                        type: [String, Boolean, Number],
+                        default: "NI"
+                    },
+                    errorMessage: {
+                        type: [String, Boolean, Number],
+                        default: ""
+                    },
+                    classAtrrs: {
+                        type: String,
+                        default: () => ""
+                    },
+                    icon: {
+                        type: Object,
+                        default: () => {}
+                    }
+                },
+                watch: {
+                    initValue(e) {
+                        this.dateFormated(e)
+                    }
+                },
+                computed: {
+                    cValue() {
+                        return this.value ? this.value : this.dateSelect ? Object(Oe.a)(Object(Ie.a)(this.dateSelect, "dd/MM/yyyy", new Date), "yyyy-MM-dd") : null
+                    },
+                    cQDate() {
+                        return Object(Te.a)(this.cValue) ? Object(Oe.a)(this.cValue, "dd/MM/yyyy") : this.cValue ? Object(Oe.a)(Object(Ie.a)(this.cValue, "yyyy-MM-dd", new Date), "dd/MM/yyyy") : Object(Oe.a)(new Date, "dd/MM/yyyy")
+                    },
+                    cError() {
+                        return "NI" == this.error ? this.hasErrors : this.error
+                    },
+                    cErrorMessage() {
+                        return "" == this.errorMessage ? this.firstErrorMessage : this.errorMessage
+                    },
+                    iconElment: {
+                        cache: !1,
+                        get() {
+                            const e = {
+                                    name: null,
+                                    size: "24px",
+                                    color: "#000"
+                                },
+                                t = { ...e,
+                                    ...this.icon
+                                };
+                            return t.name ? t : e
+                        }
+                    }
+                },
+                methods: {
+                    emitDate(e, t, a) {
+                        let o = e;
+                        o || (o = `${a.day}/${a.month}/${a.year}`);
+                        const n = Object(Ie.a)(o, "dd/MM/yyyy", new Date);
+                        this.$emit("input", Object(Oe.a)(n, "yyyy-MM-dd")), this.$refs.qDateProxy.hide()
+                    },
+                    dateIsValid(e) {
+                        return !this.cValue || Object(Te.a)(e)
+                    }
+                }
+            },
+            Ne = a("7cbe"),
+            Re = a("52ee"),
+            Pe = a("eebe"),
+            De = a.n(Pe),
+            ke = Object(Q.a)(ye, (function() {
+                var e = this,
+                    t = e._self._c;
+                return t("div", [t("q-input", e._g(e._b({
+                    staticClass: "full-width",
+                    class: e.classAtrrs,
+                    attrs: {
+                        "hide-bottom-space": "",
+                        outlined: "",
+                        "stack-label": "",
+                        type: "date",
+                        "bottom-slots": "",
+                        value: e.cValue,
+                        error: e.cError,
+                        "error-message": e.cErrorMessage,
+                        ruler: [t => e.dateIsValid(t) || "Data inválida!"]
+                    },
+                    scopedSlots: e._u([{
+                        key: "append",
+                        fn: function() {
+                            return [t("q-icon", {
+                                staticClass: "cursor-pointer q-mr-sm",
+                                attrs: {
+                                    name: "event"
+                                }
+                            }, [t("q-popup-proxy", {
+                                ref: "qDateProxy",
+                                attrs: {
+                                    "transition-show": "scale",
+                                    "transition-hide": "scale"
+                                }
+                            }, [t("q-date", {
+                                attrs: {
+                                    value: e.cQDate,
+                                    "today-btn": "",
+                                    mask: "DD/MM/YYYY"
+                                },
+                                on: {
+                                    input: e.emitDate
+                                }
+                            })], 1)], 1)]
+                        },
+                        proxy: !0
+                    }, e._l(e.$scopedSlots, (function(t, a) {
+                        return {
+                            key: a,
+                            fn: function(t) {
+                                return [e._t(a, null, null, t)]
+                            }
+                        }
+                    }))], null, !0)
+                }, "q-input", e.$attrs, !1), e.$listeners))], 1)
+            }), [], !1, null, "233f947d", null),
+            Ce = ke.exports;
+        De()(ke, "components", {
+            QInput: D.a,
+            QIcon: E.a,
+            QPopupProxy: Ne.a,
+            QDate: Re.a
+        });
+        var we = {
+                name: "ccInputDateTime",
+                extends: pe.b,
+                inheritAttrs: !1,
+                data: () => ({
+                    date: null,
+                    dateSelect: null
+                }),
+                props: {
+                    value: [String, Date],
+                    initValue: {
+                        type: [String, Date],
+                        default: null
+                    },
+                    error: {
+                        type: [String, Boolean, Number],
+                        default: "NI"
+                    },
+                    errorMessage: {
+                        type: [String, Boolean, Number],
+                        default: ""
+                    },
+                    classAtrrs: {
+                        type: String,
+                        default: () => ""
+                    },
+                    icon: {
+                        type: Object,
+                        default: () => {}
+                    }
+                },
+                watch: {
+                    initValue(e) {
+                        this.dateFormated(e)
+                    }
+                },
+                computed: {
+                    cValue() {
+                        return this.value ? this.value : this.dateSelect ? Object(Oe.a)(Object(Ie.a)(this.dateSelect, "dd/MM/yyyy HH:mm", new Date), "yyyy-MM-dd HH:mm") : null
+                    },
+                    cQDate() {
+                        return Object(Te.a)(this.cValue) ? Object(Oe.a)(this.cValue, "dd/MM/yyyy HH:mm") : this.cValue ? Object(Oe.a)(Object(Ie.a)(this.cValue, "yyyy-MM-dd HH:mm", new Date), "dd/MM/yyyy HH:mm") : Object(Oe.a)(new Date, "dd/MM/yyyy HH:mm")
+                    },
+                    cError() {
+                        return "NI" == this.error ? this.hasErrors : this.error
+                    },
+                    cErrorMessage() {
+                        return "" == this.errorMessage ? this.firstErrorMessage : this.errorMessage
+                    },
+                    iconElment: {
+                        cache: !1,
+                        get() {
+                            const e = {
+                                    name: null,
+                                    size: "24px",
+                                    color: "#000"
+                                },
+                                t = { ...e,
+                                    ...this.icon
+                                };
+                            return t.name ? t : e
+                        }
+                    }
+                },
+                methods: {
+                    emitDate(e, t, a) {
+                        let o = e;
+                        if (!o) {
+                            const e = Object(Oe.a)(new Date, "HH:mm");
+                            o = `${a.day}/${a.month}/${a.year} ${e}`
+                        }
+                        const n = Object(Ie.a)(o, "dd/MM/yyyy HH:mm", new Date);
+                        this.$emit("input", Object(Oe.a)(n, "yyyy-MM-dd HH:mm")), this.$refs.qDateProxy.hide(), this.$refs.qTimeProxy.hide()
+                    },
+                    dateIsValid(e) {
+                        return !this.cValue || Object(Te.a)(e)
+                    }
+                }
+            },
+            Me = a("ca78"),
+            je = Object(Q.a)(we, (function() {
+                var e = this,
+                    t = e._self._c;
+                return t("div", [t("p", [e._v("DATE TIME: " + e._s(e.cValue))]), t("q-input", e._g(e._b({
+                    staticClass: "full-width",
+                    class: e.classAtrrs,
+                    attrs: {
+                        "hide-bottom-space": "",
+                        outlined: "",
+                        "stack-label": "",
+                        type: "text",
+                        mask: "##/##/#### ##:##",
+                        "fill-mask": "",
+                        "bottom-slots": "",
+                        value: e.cValue,
+                        error: e.cError,
+                        "error-message": e.cErrorMessage,
+                        ruler: [t => e.dateIsValid(t) || "Data inválida!"]
+                    },
+                    scopedSlots: e._u([{
+                        key: "prepend",
+                        fn: function() {
+                            return [t("q-icon", {
+                                staticClass: "cursor-pointer q-mr-sm",
+                                attrs: {
+                                    name: "event"
+                                }
+                            }, [t("q-popup-proxy", {
+                                ref: "qDateProxy",
+                                attrs: {
+                                    "transition-show": "scale",
+                                    "transition-hide": "scale"
+                                }
+                            }, [t("q-date", {
+                                attrs: {
+                                    value: e.cQDate,
+                                    "today-btn": "",
+                                    mask: "DD/MM/YYYY HH:mm"
+                                },
+                                on: {
+                                    input: e.emitDate
+                                }
+                            })], 1)], 1)]
+                        },
+                        proxy: !0
+                    }, {
+                        key: "append",
+                        fn: function() {
+                            return [t("q-icon", {
+                                staticClass: "cursor-pointer",
+                                attrs: {
+                                    name: "access_time"
+                                }
+                            }, [t("q-popup-proxy", {
+                                ref: "qTimeProxy",
+                                attrs: {
+                                    "transition-show": "scale",
+                                    "transition-hide": "scale"
+                                }
+                            }, [t("q-time", {
+                                attrs: {
+                                    value: e.cQDate,
+                                    mask: "DD/MM/YYYY HH:mm",
+                                    format24h: ""
+                                },
+                                on: {
+                                    input: e.emitDate
+                                }
+                            }, [t("div", {
+                                staticClass: "row items-center justify-end"
+                            }, [t("q-btn", {
+                                directives: [{
+                                    name: "close-popup",
+                                    rawName: "v-close-popup"
+                                }],
+                                attrs: {
+                                    label: "Close",
+                                    color: "primary",
+                                    flat: ""
+                                }
+                            })], 1)])], 1)], 1)]
+                        },
+                        proxy: !0
+                    }, e._l(e.$scopedSlots, (function(t, a) {
+                        return {
+                            key: a,
+                            fn: function(t) {
+                                return [e._t(a, null, null, t)]
+                            }
+                        }
+                    }))], null, !0)
+                }, "q-input", e.$attrs, !1), e.$listeners))], 1)
+            }), [], !1, null, "3ae6c2a3", null),
+            xe = je.exports;
+        De()(je, "components", {
+            QInput: D.a,
+            QIcon: E.a,
+            QPopupProxy: Ne.a,
+            QDate: Re.a,
+            QTime: Me.a,
+            QBtn: h.a
+        }), De()(je, "directives", {
+            ClosePopup: j.a
+        });
+        var Ue = a("e018"),
+            qe = a("9a1b");
+        const Le = (e, t = !1, a = {}) => {
+                const o = {
+                        language: "pt-br",
+                        options: {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 3
+                        },
+                        ...a
+                    },
+                    n = Intl.NumberFormat(o.language, o.options).format(e);
+                return t && e <= 0 ? "" : n
+            },
+            Fe = (e, t) => {
+                if (("" + e).includes("e")) {
+                    const a = ("" + e).split("e");
+                    let o = "";
+                    return +a[1] + t > 0 && (o = "+"), +(Math.round(+a[0] + "e" + o + (+a[1] + t)) + "e-" + t)
+                }
+                return +(Math.round(e + "e+" + t) + "e-" + t)
+            },
+            Ve = e => {
+                const t = (e = e.replace(/\s(de|da|dos|das)\s/g, " ")).match(/\b(\w)/gi),
+                    a = t.splice(1, t.length - 1).join("").toLowerCase();
+                return (t + a).toUpperCase()
+            },
+            Qe = (e, t = "dd/MM/yyyy") => Object(Oe.a)(Object(te.a)(e), t, {
+                locale: Ue.a
+            }),
+            We = ({
+                isDark: e
+            }) => {
+                G.a.set(e);
+                const t = JSON.parse(localStorage.getItem("usuario")),
+                    a = {
+                        filtrosAtendimento: JSON.parse(localStorage.getItem("filtrosAtendimento")) || {
+                            searchParam: "",
+                            pageNumber: 1,
+                            status: ["open", "pending"],
+                            showAll: !1,
+                            count: null,
+                            queuesIds: [],
+                            withUnreadMessages: !1,
+                            isNotAssignedUser: !1,
+                            includeNotQueueDefined: !0
+                        },
+                        isDark: G.a.isActive
+                    };
+                Object(qe.d)(t.userId, a).then(e => console.log("Configurações do usuário atualizadas")).catch(e => console.error), localStorage.setItem("usuario", JSON.stringify({ ...t,
+                    configs: a
+                }))
+            };
+        var $e = ({
+                Vue: e
+            }) => {
+                e.component("cInput", Ee.a), e.component("DatePick", Ce), e.component("cDateTimePick", xe), e.prototype.$formatarValorMoeda = Le, e.prototype.$round = Fe, e.prototype.$formatarData = Qe, e.prototype.$iniciaisString = Ve, e.prototype.$notificarErro = ve, e.prototype.$notificarSucesso = Se, e.prototype.$setConfigsUsuario = We, e.prototype.$uuid = Ae.a
+            },
+            ze = a("a667");
+        a("45a3");
+        o.a.use(ze.QuasarTiptapPlugin, {
+            language: "zh-hans",
+            spellcheck: !0
+        }), o.a.config.silent = !0;
+        !async function() {
+            const {
+                app: e,
+                store: t,
+                router: a
+            } = await async function() {
+                const e = await ce(o.a),
+                    t = "function" == typeof Z.a ? await Object(Z.a)({
+                        Vue: o.a,
+                        store: e
+                    }) : Z.a;
+                e.$router = t;
+                const a = {
+                    router: t,
+                    store: e,
+                    render: e => e(W),
+                    el: "#q-app"
+                };
+                return {
+                    app: a,
+                    store: e,
+                    router: t
+                }
+            }();
+            let n = !1;
+            const r = e => {
+                    n = !0;
+                    const t = Object(e) === e ? a.resolve(e).route.fullPath : e;
+                    window.location.href = t
+                },
+                s = window.location.href.replace(window.location.origin, ""),
+                i = [le.a, be, $e, void 0];
+            for (let c = 0; !1 === n && c < i.length; c++)
+                if ("function" == typeof i[c]) try {
+                    await i[c]({
+                        app: e,
+                        router: a,
+                        store: t,
+                        Vue: o.a,
+                        ssrContext: null,
+                        redirect: r,
+                        urlPath: s,
+                        publicPath: ""
+                    })
+                } catch (e) {
+                    return e && e.url ? void(window.location.href = e.url) : void console.error("[Quasar] boot error:", e)
+                }!0 !== n && new o.a(e)
+        }()
+    },
+    3908: function(e, t, a) {
+        "use strict";
+        var o = a("f508"),
+            n = a("a154"),
+            r = a("06d5");
+        const s = {};
+        let i = new Date;
+        s.show = function(e) {
+            const t = new Date,
+                a = t - i;
+            i = t, a > 2e3 && ("gears" === e.loading || "hourglass" === e.loading ? o.a.show({
+                spinner: n.a,
+                message: "",
+                messageColor: "white",
+                spinnerSize: 100,
+                spinnerColor: "white",
+                customClass: ""
+            }) : o.a.show({
+                spinner: r.a,
+                message: "We're working...",
+                messageColor: "white",
+                spinnerSize: 150,
+                spinnerColor: "white",
+                customClass: ""
+            }))
+        }, s.hide = function(e) {
+            setTimeout(() => {
+                o.a.hide()
+            }, 1e3)
+        }, t.a = s
+    },
+    "446a": function(e, t, a) {
+        "use strict";
+        var o = {
+                extends: a("7f53").b,
+                name: "ccInput",
+                inheritAttrs: !1,
+                data: () => ({}),
+                props: {
+                    autocomplete: {
+                        type: String,
+                        default: null
+                    },
+                    spellcheck: {
+                        type: Boolean,
+                        default: !1
+                    },
+                    autocorrect: {
+                        type: String,
+                        default: null
+                    },
+                    value: [String, Number, Date],
+                    label: String,
+                    classAtrrs: {
+                        type: String,
+                        default: () => ""
+                    },
+                    error: {
+                        type: [String, Boolean, Number],
+                        default: "NI"
+                    },
+                    errorMessage: {
+                        type: [String, Boolean, Number],
+                        default: ""
+                    },
+                    dense: {
+                        type: Boolean,
+                        default: !0
+                    },
+                    icon: {
+                        type: Object,
+                        default: () => {}
+                    }
+                },
+                computed: {
+                    cError() {
+                        return "NI" == this.error ? this.hasErrors : this.error
+                    },
+                    cErrorMessage() {
+                        return "" == this.errorMessage ? this.firstErrorMessage : this.errorMessage
+                    },
+                    iconElment: {
+                        cache: !1,
+                        get() {
+                            const e = {
+                                    name: null,
+                                    size: "24px",
+                                    color: "#000"
+                                },
+                                t = { ...e,
+                                    ...this.icon
+                                };
+                            return t.name ? t : e
+                        }
+                    }
+                },
+                methods: {
+                    valorInputSeEmpty(e) {
+                        e.target.value ? this.$emit("input", e.target.value) : this.$emit("input", null)
+                    }
+                }
+            },
+            n = a("2877"),
+            r = a("27f9"),
+            s = a("0016"),
+            i = a("eebe"),
+            c = a.n(i),
+            l = Object(n.a)(o, (function() {
+                var e = this,
+                    t = e._self._c;
+                return t("div", [t("q-input", e._g(e._b({
+                    ref: "inputCustomCodar",
+                    class: e.classAtrrs,
+                    attrs: {
+                        "hide-bottom-space": "",
+                        "bottom-slots": "",
+                        label: e.label,
+                        value: e.value,
+                        error: e.cError,
+                        "error-message": e.cErrorMessage,
+                        autocorrect: "off",
+                        autocomplete: "off",
+                        spellcheck: !1
+                    },
+                    nativeOn: {
+                        input: function(t) {
+                            return e.valorInputSeEmpty.apply(null, arguments)
+                        }
+                    },
+                    scopedSlots: e._u([e.iconElment.name ? {
+                        key: "before",
+                        fn: function() {
+                            return [t("q-icon", {
+                                attrs: {
+                                    name: e.iconElment.name,
+                                    size: e.iconElment.size,
+                                    color: e.iconElment.color
+                                }
+                            })]
+                        },
+                        proxy: !0
+                    } : null, e._l(e.$scopedSlots, (function(t, a) {
+                        return {
+                            key: a,
+                            fn: function(t) {
+                                return [e._t(a, null, null, t)]
+                            }
+                        }
+                    }))], null, !0)
+                }, "q-input", e.$attrs, !1), e.$listeners))], 1)
+            }), [], !1, null, "e2910644", null);
+        t.a = l.exports;
+        c()(l, "components", {
+            QInput: r.a,
+            QIcon: s.a
+        })
+    },
+    7884: function(e, t, a) {
+        "use strict";
+        a.d(t, "a", (function() {
+            return n
+        })), a.d(t, "b", (function() {
+            return r
+        })), a.d(t, "c", (function() {
+            return s
+        }));
+        var o = a("8982");
+
+        function n(e) {
+            return Object(o.a)({
+                url: "/auth/login/",
+                method: "post",
+                data: e
+            })
+        }
+
+        function r(e) {
+            return Object(o.a)({
+                url: "/auth/logout/",
+                method: "post",
+                data: e
+            })
+        }
+
+        function s() {
+            return Object(o.a)({
+                url: "/auth/refresh_token",
+                method: "post"
+            })
+        }
+    },
+    8982: function(e, t, a) {
+        "use strict";
+        a("e9f5"), a("7d54");
+        var o = a("bc3a"),
+            n = a.n(o),
+            r = a("a18c"),
+            s = a("3908"),
+            i = a("2a19");
+        var c = {
+                ERR_NO_DEF_WAPP_FOUND: "Nenhum WhatsApp padrão encontrado. Verifique a página de conexões.",
+                ERR_WAPP_NOT_INITIALIZED: "Esta sessão do WhatsApp não foi inicializada. Verifique a página de conexões.",
+                ERR_WAPP_INITIALIZED: "Não está conectado com o Whatsapp. Estamos reiniciando a conexão. Tente novamente em alguns segundos.",
+                ERR_WAPP_CHECK_CONTACT: "Não foi possível verificar o contato do WhatsApp. Verifique a página de conexões",
+                ERR_WAPP_INVALID_CONTACT: "Este não é um número de Whatsapp válido.",
+                ERR_WAPP_DOWNLOAD_MEDIA: "Não foi possível baixar mídia do WhatsApp. Verifique a página de conexões.",
+                ERR_INVALID_CREDENTIALS: "Authentication error. Please try again.",
+                ERR_SENDING_WAPP_MSG: "Erro ao enviar mensagem do WhatsApp. Verifique a página de conexões.",
+                ERR_DELETE_WAPP_MSG: "Não foi possível excluir a mensagem do WhatsApp.",
+                ERR_OTHER_OPEN_TICKET: "Já existe um Ticket aberto para este contato.",
+                ERR_SESSION_EXPIRED: "Sessão expirada. Por favor entre.",
+                ERR_USER_CREATION_DISABLED: "A criação do usuário foi desabilitada pelo administrador.",
+                ERR_NO_PERMISSION: "You do not have permission to access this resource.",
+                ERR_DUPLICATED_CONTACT: "Já existe um contato com este número.",
+                ERR_NO_SETTING_FOUND: "Nenhuma configuração encontrada com este ID.",
+                ERR_NO_CLIENT_FOUND: "No contact found with this ID.",
+                ERR_NO_TICKET_FOUND: "Nenhum Ticket encontrado com este ID.",
+                ERR_NO_USER_FOUND: "Nenhum usuário encontrado com este ID.",
+                ERR_NO_WAPP_FOUND: "Nenhum WhatsApp encontrado com este ID.",
+                ERR_CREATING_MESSAGE: "Erro ao criar mensagem no banco de dados.",
+                ERR_CREATING_TICKET: "Erro ao criar Ticket no banco de dados.",
+                ERR_FETCH_WAPP_MSG: "Erro ao buscar a mensagem no WhtasApp, talvez ela seja muito antiga."
+            },
+            l = a("7884");
+        let d = !1,
+            u = [];
+        const p = (e, t = null) => {
+                u.forEach(a => {
+                    e ? a.reject(e) : a.resolve(t)
+                }), u = []
+            },
+            m = n.a.create({
+                baseURL: "/full-api/",
+                timeout: 12e4,
+                withCredentials: !0
+            }),
+            f = e => {
+                var t, a;
+                const o = null == e || null === (t = e.response) || void 0 === t || null === (a = t.data) || void 0 === a ? void 0 : a.error;
+                let n = "An unidentified error occurred.";
+                o && (n = c[o] ? c[o] : e.response.data.error), i.a.create({
+                    position: "top",
+                    type: "negative",
+                    html: !0,
+                    progress: !0,
+                    message: "Ops... <br>" + JSON.stringify(n)
+                })
+            };
+        m.interceptors.request.use(e => {
+            try {
+                e.loading = void 0 === e.loading ? ["put", "post"].includes(e.method) : e.loading, e.loading && s.a.show(e.loading)
+            } catch (e) {
+                console.log({
+                    error: e
+                })
+            }
+            const t = "Bearer " + JSON.parse(localStorage.getItem("token"));
+            return t && (e.headers.Authorization = t), e
+        }, e => {
+            Promise.reject(e)
+        }), m.interceptors.response.use(e => {
+            s.a.hide(e.config);
+            return "2" !== e.status.toString().substr(0, 1) ? Promise.reject("error") : e
+        }, async e => {
+            var t;
+            s.a.hide(e.config);
+            const a = e.config,
+                o = r.a.app.$route.path;
+            if (403 === (null == e || null === (t = e.response) || void 0 === t ? void 0 : t.status) && !e.config._retry) {
+                if (d) return new Promise((e, t) => {
+                    u.push({
+                        resolve: e,
+                        reject: t
+                    })
+                }).then(e => (a.headers.Authorization = "Bearer " + e, m(a))).catch(e => Promise.reject(e));
+                a._retry = !0, d = !0;
+                try {
+                    const e = (await Object(l.c)()).data.token;
+                    return localStorage.setItem("token", JSON.stringify(e)), d = !1, p(null, e), a.headers.Authorization = "Bearer " + e, m(a)
+                } catch (e) {
+                    return d = !1, p(e, null), localStorage.clear(), r.a.push({
+                        name: "login"
+                    }), Promise.reject(e)
+                }
+            }
+            return e.response && 401 === e.response.status ? (localStorage.clear(), localStorage.setItem("redirect", o), -1 === e.config.url.indexOf("logout") && (f(e), setTimeout(() => {
+                r.a.push({
+                    name: "login"
+                })
+            }, 2e3))) : e.response && 500 === e.response.status ? f(e) : e.message.indexOf("timeout") > -1 && i.a.create({
+                message: 'We waited a long time for an answer. Is everything "Ok" with the internet?',
+                position: "top",
+                type: "negative",
+                progress: !0,
+                html: !0
+            }), Promise.reject(e.response)
+        });
+        t.a = m
+    },
+    "9a1b": function(e, t, a) {
+        "use strict";
+        a.d(t, "c", (function() {
+            return n
+        })), a.d(t, "a", (function() {
+            return r
+        })), a.d(t, "e", (function() {
+            return s
+        })), a.d(t, "d", (function() {
+            return i
+        })), a.d(t, "b", (function() {
+            return c
+        }));
+        var o = a("8982");
+
+        function n(e) {
+            return Object(o.a)({
+                url: "/users/",
+                method: "get",
+                params: e
+            })
+        }
+
+        function r(e) {
+            return Object(o.a)({
+                url: "/users",
+                method: "post",
+                data: e
+            })
+        }
+
+        function s(e, t) {
+            return Object(o.a)({
+                url: "/users/" + e,
+                method: "put",
+                data: t
+            })
+        }
+
+        function i(e, t) {
+            return Object(o.a)({
+                url: `/users/${e}/configs`,
+                method: "put",
+                data: t
+            })
+        }
+
+        function c(e) {
+            return Object(o.a)({
+                url: "/users/" + e,
+                method: "delete"
+            })
+        }
+    },
+    a18c: function(e, t, a) {
+        "use strict";
+        var o = a("2b0e"),
+            n = a("8c4f"),
+            r = a("2a19");
+        var s = [{
+            path: "/",
+            component: () => Promise.all([a.e(0), a.e(1), a.e(3)]).then(a.bind(null, "713b")),
+            redirect: {
+                name: "clients"
+            },
+            children: [{
+                path: "",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(2)]).then(a.bind(null, "e090"))
+            }, {
+                path: "/sessoes",
+                name: "sessoes",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(29)]).then(a.bind(null, "c124"))
+            }, {
+                path: "/clients",
+                name: "clients",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(2)]).then(a.bind(null, "e090"))
+            }, {
+                path: "/usuarios",
+                name: "usuarios",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(31)]).then(a.bind(null, "9bad"))
+            }, {
+                path: "/auto-resposta",
+                name: "auto-resposta",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(26)]).then(a.bind(null, "6c40"))
+            }, {
+                path: "/mensagens-rapidas",
+                name: "mensagens-rapidas",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(28)]).then(a.bind(null, "076b"))
+            }, {
+                path: "/filas",
+                name: "filas",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(25)]).then(a.bind(null, "7010"))
+            }, {
+                path: "/configuracoes",
+                name: "configuracoes",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(22)]).then(a.bind(null, "8ee8"))
+            }, {
+                path: "/etiquetas",
+                name: "etiquetas",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(24)]).then(a.bind(null, "907f"))
+            }, {
+                path: "/letters",
+                name: "letters",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(9)]).then(a.bind(null, "e887"))
+            }, {
+                path: "/template",
+                name: "template",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(30)]).then(a.bind(null, "cb83"))
+            }, {
+                path: "/alternate",
+                name: "alternate",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(11)]).then(a.bind(null, "5b7f"))
+            }, {
+                path: "/creditor",
+                name: "creditor",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(23)]).then(a.bind(null, "e0a6"))
+            }, {
+                path: "/campanhas",
+                name: "campanhas",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(8)]).then(a.bind(null, "983f"))
+            }, {
+                path: "/campanhas/:campanhaId",
+                name: "contatos-campanha",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(12)]).then(a.bind(null, "8fbc"))
+            }, {
+                path: "/horario-atendimento",
+                name: "horarioAtendimento",
+                component: () => Promise.all([a.e(0), a.e(27)]).then(a.bind(null, "d3b1"))
+            }, {
+                path: "/api-service",
+                name: "api-service",
+                component: () => Promise.all([a.e(0), a.e(19)]).then(a.bind(null, "9c62"))
+            }, {
+                path: "/chat-flow",
+                component: () => a.e(20).then(a.bind(null, "5fd2")),
+                redirect: "chat-flow",
+                children: [{
+                    path: "",
+                    name: "chat-flow",
+                    component: () => Promise.all([a.e(0), a.e(1), a.e(21)]).then(a.bind(null, "0bbc"))
+                }, {
+                    path: "builder",
+                    name: "chat-flow-builder",
+                    component: () => Promise.all([a.e(0), a.e(1)]).then(a.bind(null, "e2bb"))
+                }]
+            }]
+        }, {
+            path: "/dispute",
+            component: () => Promise.all([a.e(0), a.e(1), a.e(3)]).then(a.bind(null, "713b")),
+            children: [{
+                path: "/dispute/:clientId",
+                name: "dispute",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(6)]).then(a.bind(null, "d1cc"))
+            }]
+        }, {
+            path: "/relatorios",
+            redirect: "relatorios",
+            component: () => Promise.all([a.e(0), a.e(1), a.e(3)]).then(a.bind(null, "713b")),
+            children: [{
+                path: "",
+                name: "relatorios",
+                component: () => a.e(17).then(a.bind(null, "1e9a"))
+            }, {
+                path: "estatisticas-atendimentos-usuarios",
+                name: "estatisticas-atendimentos-usuarios",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(16)]).then(a.bind(null, "088f"))
+            }, {
+                path: "lista-contatos",
+                name: "lista-contatos",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(15)]).then(a.bind(null, "2162"))
+            }, {
+                path: "contatos-por-etiquetas",
+                name: "contatos-por-etiquetas",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(14)]).then(a.bind(null, "b1ff"))
+            }, {
+                path: "contatos-por-estado",
+                name: "contatos-por-estado",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(13)]).then(a.bind(null, "e2bc"))
+            }]
+        }, {
+            path: "/atendimento",
+            name: "atendimento",
+            component: () => Promise.all([a.e(0), a.e(1), a.e(7)]).then(a.bind(null, "989e")),
+            children: [{
+                path: "/chats/",
+                name: "chat-empty",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(4)]).then(a.bind(null, "923d"))
+            }, {
+                path: ":ticketId",
+                name: "chat",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(4)]).then(a.bind(null, "923d"))
+            }, {
+                path: "contatos",
+                name: "chat-contatos",
+                component: () => Promise.all([a.e(0), a.e(1), a.e(2)]).then(a.bind(null, "e090")),
+                props: {
+                    isChatContact: !0
+                }
+            }]
+        }, {
+            path: "*",
+            component: () => a.e(18).then(a.bind(null, "e51e"))
+        }, {
+            path: "/login",
+            name: "login",
+            component: () => Promise.all([a.e(0), a.e(10)]).then(a.bind(null, "013f"))
+        }];
+        o.a.use(n.a);
+        const i = new n.a({
+                scrollBehavior: () => ({
+                    x: 0,
+                    y: 0
+                }),
+                routes: s,
+                mode: "hash",
+                base: ""
+            }),
+            c = ["login"];
+        i.beforeEach((e, t, a) => {
+            const o = localStorage.getItem("token") ? JSON.parse(localStorage.getItem("token")) : null,
+                n = "login" === e.name;
+            o ? n ? a({
+                path: "/"
+            }) : a() : -1 === c.indexOf(e.name) ? n || e.query.tokenSetup ? a({}) : (r.a.create({
+                message: "Please login",
+                position: "top"
+            }), "login" !== t.name ? a({
+                name: "login"
+            }) : a(!1)) : a()
+        }), i.afterEach(e => {
+            window.scrollTo(0, 0)
+        });
+        t.a = i
+    },
+    a3b0: function(e, t, a) {
+        var o = {
+            "./de": "75b3",
+            "./de.js": "75b3",
+            "./en-gb": "1267",
+            "./en-gb.js": "1267",
+            "./en-us": "d23a",
+            "./en-us.js": "d23a",
+            "./es": "ec5d3",
+            "./es-419": "1805",
+            "./es-419.js": "1805",
+            "./es.js": "ec5d3",
+            "./fr": "be0b",
+            "./fr.js": "be0b",
+            "./it": "58dc",
+            "./it.js": "58dc",
+            "./pl": "c817",
+            "./pl.js": "c817",
+            "./pt": "b4ad",
+            "./pt-br": "ccc7",
+            "./pt-br.js": "ccc7",
+            "./pt.js": "b4ad",
+            "./ru": "1af2",
+            "./ru.js": "1af2"
+        };
+
+        function n(e) {
+            var t = r(e);
+            return a(t)
+        }
+
+        function r(e) {
+            if (!a.o(o, e)) {
+                var t = new Error("Cannot find module '" + e + "'");
+                throw t.code = "MODULE_NOT_FOUND", t
+            }
+            return o[e]
+        }
+        n.keys = function() {
+            return Object.keys(o)
+        }, n.resolve = r, e.exports = n, n.id = "a3b0"
+    },
+    c5bd: function(e, t, a) {
+        "use strict";
+        a.d(t, "e", (function() {
+            return n
+        })), a.d(t, "c", (function() {
+            return r
+        })), a.d(t, "d", (function() {
+            return s
+        })), a.d(t, "a", (function() {
+            return i
+        })), a.d(t, "b", (function() {
+            return c
+        })), a.d(t, "j", (function() {
+            return l
+        })), a.d(t, "i", (function() {
+            return d
+        })), a.d(t, "h", (function() {
+            return u
+        })), a.d(t, "g", (function() {
+            return p
+        })), a.d(t, "f", (function() {
+            return m
+        }));
+        var o = a("8982");
+
+        function n(e) {
+            return Object(o.a)({
+                url: "/tickets",
+                method: "get",
+                params: e
+            })
+        }
+
+        function r(e) {
+            return Object(o.a)({
+                url: "/tickets/" + e.id,
+                method: "get",
+                params: e
+            })
+        }
+
+        function s(e) {
+            return Object(o.a)({
+                url: `/tickets/${e.ticketId}/logs`,
+                method: "get",
+                params: e
+            })
+        }
+
+        function i(e, t, a) {
+            return Object(o.a)({
+                url: "/tickets/" + e,
+                method: "put",
+                data: {
+                    status: t,
+                    userId: a
+                }
+            })
+        }
+
+        function c(e, t) {
+            return Object(o.a)({
+                url: "/tickets/" + e,
+                method: "put",
+                data: t
+            })
+        }
+
+        function l(e) {
+            return Object(o.a)({
+                url: "/messages/" + e.ticketId,
+                method: "get",
+                params: e
+            })
+        }
+
+        function d(e, t) {
+            return Object(o.a)({
+                url: "/messages/" + e,
+                method: "post",
+                data: t
+            })
+        }
+
+        function u(e, t) {
+            const a = {
+                messages: e,
+                contact: t
+            };
+            return Object(o.a)({
+                url: "/forward-messages/",
+                method: "post",
+                data: a
+            })
+        }
+
+        function p(e) {
+            return Object(o.a)({
+                url: "/messages/" + e.messageId,
+                method: "delete",
+                data: e
+            })
+        }
+
+        function m(e) {
+            return Object(o.a)({
+                url: "/tickets",
+                method: "post",
+                data: e
+            })
+        }
+    }
+});
