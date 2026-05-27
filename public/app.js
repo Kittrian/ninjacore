@@ -7554,8 +7554,6 @@ const ntApplyRoute = (route) => {
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
-const ND_API = 'https://api.ninjadispute.com';
-
 // Called whenever any api.ninjadispute.com request returns 401 — token expired.
 // Clears both the ninjacore session and the domain-wide ninja_token, then boots
 // the user to the login screen so they know exactly why they're logged out.
