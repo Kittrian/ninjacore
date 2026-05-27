@@ -3000,6 +3000,28 @@ const getSortIndicator = (key) => {
   return state.sortDirection === 'asc' ? '↑' : '↓';
 };
 
+// Build an optimistic client row from a save payload. Used so the Clients
+// list can show the edit immediately while the PATCH is still in flight.
+// Only camelCase fields are touched here — server-derived fields (status
+// taxonomy normalization, updated_at, etc.) are reconciled when the PATCH
+// returns.
+const mergeClientOptimistic = (current, payloadBody) => {
+  const next = { ...current };
+  const copy = [
+    'firstName', 'lastName', 'email', 'dob', 'ssn', 'address', 'phone',
+    'spouseClientId', 'spouseClientLabel', 'assignedTo', 'status', 'phase',
+    'ninjaAssigned', 'affiliateAssigned', 'monitoringAgency',
+    'monitoringUsername', 'monitoringPassword', 'secretKey', 'tokenId',
+    'portalPassword', 'language',
+  ];
+  for (const key of copy) {
+    if (Object.prototype.hasOwnProperty.call(payloadBody, key)) {
+      next[key] = payloadBody[key];
+    }
+  }
+  return next;
+};
+
 const sortClients = (clients) => {
   const direction = state.sortDirection === 'asc' ? 1 : -1;
   const key = state.sortKey;
@@ -7098,45 +7120,72 @@ const bindEvents = () => {
         documents: collectClientDocumentsFromForm(),
       };
 
-      let savedClientId = '';
-      let wasUpdate = false;
       if (state.addFormEditingClientId) {
-        const payload = await request(`/api/clients/${state.addFormEditingClientId}/profile`, {
+        // Optimistic update path. Apply the form values to state.clients
+        // immediately, navigate to the Clients list after a brief progress
+        // confirmation, and let the PATCH complete in the background. The
+        // user perceives the save as near-instant; reconciliation with the
+        // server's returned row happens silently a moment later.
+        const editingId = state.addFormEditingClientId;
+        const idx = state.clients.findIndex((entry) => entry.id === editingId);
+        const previous = idx >= 0 ? { ...state.clients[idx] } : null;
+        if (idx >= 0) {
+          state.clients[idx] = mergeClientOptimistic(state.clients[idx], payloadBody);
+          renderClients();
+        }
+        const savePromise = request(`/api/clients/${editingId}/profile`, {
           method: 'PATCH',
           body: JSON.stringify(payloadBody),
         });
-        savedClientId = payload?.client?.id || state.addFormEditingClientId;
-        wasUpdate = true;
-        setFormMessage('Client updated.');
-      } else {
-        const payload = await request('/api/clients', {
-          method: 'POST',
-          body: JSON.stringify(payloadBody),
-        });
-        savedClientId = payload?.client?.id || '';
-        setFormMessage('Client saved.');
+
+        // Brief progress flash so the user knows the save was accepted, then
+        // jump back to the Clients list without waiting on the network.
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        await finishClientSaveProgress();
+        setHubMode('clients');
+
+        savePromise
+          .then((payload) => {
+            // Silent reconciliation: server's returned row may differ slightly
+            // (normalized fields, server-set timestamps). No full list re-fetch.
+            const updated = payload?.client;
+            if (updated && idx >= 0) {
+              state.clients[idx] = { ...state.clients[idx], ...updated };
+              renderClients();
+            }
+          })
+          .catch((error) => {
+            // Roll back optimistic change and surface the error.
+            if (previous && idx >= 0) {
+              state.clients[idx] = previous;
+              renderClients();
+            }
+            window.alert(`Save failed: ${error.message}\n\nThe row has been restored.`);
+          });
+
+        pendingQuickSaveExitToContacts = false;
+        return;
       }
+
+      // New-client (POST) path — kept synchronous because the server assigns
+      // the id and we need it before navigating.
+      const payload = await request('/api/clients', {
+        method: 'POST',
+        body: JSON.stringify(payloadBody),
+      });
+      setFormMessage('Client saved.');
 
       if (shouldExitToContacts) {
         await finishClientSaveProgress();
         setHubMode('clients');
         loadClients().catch(() => {});
-      } else if (wasUpdate) {
-        await finishClientSaveProgress();
-        await loadClients();
-        // Keep user on Add/Edit with current data visible after save.
-        setHubMode('add', { preserveAddFormState: true });
-        if (savedClientId) {
-          const refreshedClient = state.clients.find((entry) => entry.id === savedClientId);
-          if (refreshedClient) {
-            setClientFormMode('edit', refreshedClient);
-            populateAddClientFormFromClient(refreshedClient);
-          }
-        }
       } else {
         await finishClientSaveProgress();
-        await loadClients();
-        // New record flow keeps prior behavior.
+        // Merge the new client into state instead of refetching the whole list.
+        if (payload?.client) {
+          state.clients.push(payload.client);
+          renderClients();
+        }
         setHubMode('clients');
         form.reset();
         setClientFormMode('add');
