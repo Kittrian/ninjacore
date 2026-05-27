@@ -1,0 +1,184 @@
+#InfoCabecalhoChat .q-item__label + .q-item__label[data-v-73d3d6f4] {
+  margin-top: 1.5px;
+}
+.timerBox[data-v-3fda5757] {
+  width: 45px;
+  text-align: center;
+  font-size: 14px;
+  margin-left: 5px;
+  margin-right: 5px;
+}
+@media (max-width: 850px) {
+.inputEnvioMensagem[data-v-1e31ebdc],
+  .PickerFileMessage[data-v-1e31ebdc] {
+    width: 150px;
+}
+}
+@media (min-width: 851px), (max-width: 1360px) {
+.inputEnvioMensagem[data-v-1e31ebdc],
+  .PickerFileMessage[data-v-1e31ebdc] {
+    width: 200px !important;
+}
+}
+body.body--dark {
+  background: #090E11;
+  border-color: none !important;
+  color: #b8c2cc;
+}
+body.body--dark .bg-white {
+  background: #1E1E1E !important;
+  color: #b8c2cc !important;
+}
+body.body--dark .bg-blue-1 {
+  background: rgba(7, 7, 7, 0.198) !important;
+}
+body.body--dark .text-grey-8 {
+  color: #b8c2cc !important;
+}
+body.body--dark .text-grey-9 {
+  color: #424242 !important;
+}
+body.body--dark .bg-grey-3 {
+  background: #424242 !important;
+}
+body.body--dark .bg-padrao {
+  background: rgba(7, 7, 7, 0.609) !important;
+}
+body.body--dark .bg-blue-grey-1 {
+  background: none !important;
+}
+body.body--dark .ticket-active-item {
+  background: rgba(7, 7, 7, 0.849) !important;
+}
+body.body--dark #item-ticket-houve:hover {
+  background: rgba(7, 7, 7, 0.849) !important;
+}
+body.body--dark div.q-badge.bg-secondary {
+  background: rgba(7, 7, 7, 0.198) !important;
+}
+body.body--dark div.q-badge.text-grey-10 {
+  color: #E0E1E2 !important;
+}
+body.body--dark hr.bg-grey-2 {
+  background: rgba(7, 7, 7, 0.198) !important;
+}
+body.body--dark hr.q-separator--dark {
+  background: rgba(7, 7, 7, 0.801) !important;
+  border-color: rgba(7, 7, 7, 0.801) !important;
+}
+body.body--dark aside div.bg-grey-1 {
+  background: rgba(7, 7, 7, 0.322) !important;
+}
+body.body--dark .text-primary {
+  color: #8DB1DD !important;
+}
+body.body--dark .bg-primary {
+  background: rgba(7, 7, 7, 0.959) !important;
+}
+body.body--dark label div.bg-grey-2 {
+  background: rgba(7, 7, 7, 0.801) !important;
+}
+body.body--dark div .bg-amber .q-carousel--dark {
+  color: rgba(7, 7, 7, 0.801) !important;
+}
+body.body--dark div.q-fab > div.q-fab__actions {
+  background: rgba(0, 0, 0, 0.897) !important;
+}
+body.body--dark .q-table__top, body.body--dark table.q-table thead tr th, body.body--dark .q-table__bottom {
+  background: #1E1E1E !important;
+}
+body.body--dark .q-header, body.body--dark .q-footer, body.body--dark .q-drawer {
+  border-color: rgba(7, 7, 7, 0.801) !important;
+}
+audio {
+  height: 40px;
+  width: 264px;
+}
+.mostar-btn-opcoes-chat {
+  display: none;
+  transition: width 2s transform 2s;
+}
+.q-message-text:hover .mostar-btn-opcoes-chat {
+  display: block;
+  float: right;
+  position: absolute;
+  z-index: 999;
+}
+.hr-text {
+  line-height: 1em;
+  position: relative;
+  outline: 0;
+  border: 0;
+  color: black;
+  text-align: center;
+  height: 1.5em;
+  opacity: 0.8;
+}
+.hr-text:before {
+  content: "";
+  background: linear-gradient(to right, transparent, #818078, transparent);
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 1px;
+}
+.hr-text:after {
+  content: attr(data-content);
+  position: relative;
+  display: inline-block;
+  color: black;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 0 0.5em;
+  line-height: 1.5em;
+  background-color: #b8c2cc;
+  border-radius: 15px;
+}
+.textContentItem {
+  overflow-wrap: break-word;
+}
+.textContentItemDeleted {
+  font-style: italic;
+  color: rgba(0, 0, 0, 0.36);
+  overflow-wrap: break-word;
+}
+.replyginContactMsgSideColor {
+  flex: none;
+  width: 4px;
+  background-color: #35cd96;
+}
+.replyginSelfMsgSideColor {
+  flex: none;
+  width: 4px;
+  background-color: #6bcbef;
+}
+.replyginMsgBody {
+  padding: 10;
+  height: auto;
+  display: block;
+  white-space: pre-wrap;
+  overflow: hidden;
+}
+.messageContactName {
+  display: flex;
+  color: #6bcbef;
+  font-weight: 500;
+}
+.vac-icon-scroll {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  box-shadow: 0 1px 1px -1px rgba(0, 0, 0, 0.2), 0 1px 1px 0 rgba(0, 0, 0, 0.14), 0 1px 2px 0 rgba(0, 0, 0, 0.12);
+  display: flex;
+  cursor: pointer;
+  z-index: 99;
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s;
+}
+.fade-enter,
+.fade-leave-to {
+  opacity: 0;
+}

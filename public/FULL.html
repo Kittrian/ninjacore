@@ -1,45 +1,48 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NinjaCore FULL Disputes</title>
-  <link rel="icon" href="/favicon.ico" />
-  <link rel="stylesheet" href="/full-disputes.css?v=20260527-01" />
-</head>
-<body>
-  <div class="full-shell">
-    <header class="full-topbar">
-      <div>
-        <p class="full-kicker">NinjaCore isolated renderer</p>
-        <h1>FULL Disputes View</h1>
-        <p class="full-subtitle">Separate page for rendering the complete NinjaDispute report payload without changing the home page.</p>
-      </div>
-      <div class="full-version">v3.05 FULL</div>
-    </header>
-
-    <main class="full-layout">
-      <aside class="full-sidebar">
-        <form id="fullSearchForm" class="full-search">
-          <label for="fullSearchInput">Find client</label>
-          <div class="full-search-row">
-            <input id="fullSearchInput" type="search" autocomplete="off" placeholder="Name, email, phone, or client id" />
-            <button type="submit">Search</button>
-          </div>
-        </form>
-        <div class="full-status" id="fullStatus">Loading clients...</div>
-        <div class="full-client-list" id="fullClientList"></div>
-      </aside>
-
-      <section class="full-content" id="fullContent">
-        <div class="full-empty-state">
-          <h2>Select a client</h2>
-          <p>The page will render profile fields, report scores, disputes, tradelines, inquiries, subscribers, progress, deletions, letters, and raw JSON when present.</p>
-        </div>
-      </section>
-    </main>
-  </div>
-
-  <script type="module" src="/full-disputes.js?v=20260527-01"></script>
-</body>
+<!DOCTYPE html>
+<html>
+  <head>
+    <base href="/legacy-dispute/" />
+    <script>
+      (function () {
+        try {
+          var url = new URL(window.location.href);
+          var clientId = url.searchParams.get('client') || url.searchParams.get('clientId');
+          if (clientId && !window.location.hash) {
+            window.location.hash = '#/dispute/' + encodeURIComponent(clientId);
+          }
+          if (!window.location.hash) {
+            window.location.hash = '#/clients';
+          }
+          var hasToken = document.cookie.split(';').some(function (cookie) {
+            return cookie.trim().indexOf('ninja_token=') === 0;
+          });
+          if (!hasToken) {
+            window.location.replace('https://auth.ninjadispute.com/login?redirect=' + encodeURIComponent(window.location.href));
+          }
+        } catch (error) {
+          window.location.hash = window.location.hash || '#/clients';
+        }
+      })();
+    </script>
+    <title>NinjaCore FULL Legacy Dispute</title>
+    <meta charset="utf-8">
+    <meta name="description" content="Bureau Credit Report & Scores | Dispute - Ninja">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="msapplication-tap-highlight" content="no">
+    <meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width">
+    <link rel="icon" type="image/png" sizes="128x128" href="icons/favicon-128x128.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="icons/favicon-96x96.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+    <link rel="icon" type="image/ico" href="favicon.ico">
+    <script src="resources/mammoth.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css?family=Indie Flower" rel="stylesheet">
+    <link href="css/vendor.ef5328ce.css" rel="stylesheet">
+    <link href="css/app.2e91cf55.css" rel="stylesheet">
+  </head>
+  <body>
+    <div id="q-app"></div>
+    <script src="js/vendor.c3660414.js"></script>
+    <script src="js/app.aa9f7a86.js?v=2"></script>
+  </body>
 </html>

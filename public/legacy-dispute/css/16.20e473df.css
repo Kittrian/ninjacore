@@ -1,0 +1,21 @@
+
+.text-right[data-v-68600a08] {
+  text-align: right;
+}
+thead tr:nth-child(1) td[data-v-68600a08] {
+  color: #000;
+  background: lightgrey;
+  position: sticky;
+  opacity: 1;
+  top: 0;
+  z-index: 1000;
+}
+.tableSmall[data-v-68600a08] {
+  max-height: calc(100vh - 130px);
+  height: calc(100vh - 130px);
+}
+.tableLarge[data-v-68600a08] {
+  max-height: calc(100vh - 250px);
+  height: calc(100vh - 250px);
+}
+

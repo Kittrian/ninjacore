@@ -1,0 +1,52 @@
+.main {
+  width: 400px;
+  height: 650px;
+  background: #000000;
+  padding: 30px;
+  border-radius: 2em;
+}
+.inner {
+  border-radius: 20em;
+  width: 390px;
+  height: 630px;
+  background: #fff;
+  padding: 10px;
+  margin-left: -25px;
+  border-top-right-radius: 2em;
+  border-top-left-radius: 2em;
+  border-bottom-left-radius: 2em;
+  border-bottom-right-radius: 2em;
+  margin-top: -24px;
+}
+.cam {
+  background: black;
+  width: 20px;
+  height: 20px;
+  border-radius: 20em;
+  margin-left: 50px;
+}
+.speaker {
+  width: 40px;
+  height: 10px;
+  background: linear-gradient(90deg, grey 20%, white 30%, black 40%);
+  border-radius: 0.5em;
+  margin-left: 165px;
+  margin-top: -12px;
+}
+.screen {
+  background: rgba(238, 236, 236, 0.8823529412);
+  background-size: cover;
+  width: 380px;
+  height: 570px;
+  margin-top: 10px;
+  margin-left: -5px;
+  overflow: auto;
+}
+.screen div {
+  white-space: normal;
+  word-wrap: break-word;
+}
+border-error {
+  border: 3px solid red;
+  background: red !important;
+}
