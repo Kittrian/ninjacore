@@ -11,8 +11,8 @@ binding = "ASSETS"
 # Public production env. Secrets (API tokens, etc.) go through
 # `wrangler secret put NAME` — never commit them.
 [vars]
-NEXT_PUBLIC_API_BASE = "https://api.ninjacore.ninjadispute.com"
-NINJACORE_API_ORIGIN = "https://api.ninjacore.ninjadispute.com"
+NEXT_PUBLIC_API_BASE = "https://api.ninjadispute.com"
+NINJACORE_API_ORIGIN = "https://api.ninjadispute.com"
 
 # R2 bucket for ISR/cache. Create with: wrangler r2 bucket create ninjacore-web-cache
 [[r2_buckets]]
