@@ -84,6 +84,16 @@ export function ClientsView() {
     });
   }
 
+  // When the active search narrows the list to exactly one client, eagerly
+  // preload that client's detail so the click→navigate transition feels instant.
+  useEffect(() => {
+    if (!query.trim()) return;
+    if (filtered.length !== 1) return;
+    prefetchDetail(filtered[0].id);
+    // prefetchDetail is stable (closure over qc); intentionally not in deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, filtered]);
+
   const visible = filtered.slice(0, visibleCount);
   const streaming = visibleCount < filtered.length;
 
