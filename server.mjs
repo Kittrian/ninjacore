@@ -8086,21 +8086,35 @@ const requestSmartCreditJwtViaIntegration = async (customerToken) => {
     throw new Error('SmartCredit customer token is required.');
   }
 
-  const response = await fetch(`${smartCreditIntegrationBaseUrl}/smartcredit/token/${encodeURIComponent(customer)}`, {
-    method: 'GET',
-    headers: {
-      accept: 'application/json',
-      'user-agent': 'BestTexasCreditPros-Server/1.0',
-    },
-  });
+  const endpointCandidates = [
+    `${smartCreditIntegrationBaseUrl}/api/smartcredit/token/${encodeURIComponent(customer)}`,
+    `${smartCreditIntegrationBaseUrl}/smartcredit/token/${encodeURIComponent(customer)}`,
+  ];
 
-  const text = await response.text();
-  const parsed = parseJsonValue(text) || {};
-  const jwt = String(parsed.smartCreditToken || parsed.token || parsed.jwt || '').trim();
-  if (!response.ok || !jwt) {
-    throw new Error(parsed.error || parsed.detail || parsed.message || `SmartCreditIntegration token flow failed (${response.status})`);
+  let lastError = null;
+  for (const endpoint of endpointCandidates) {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'BestTexasCreditPros-Server/1.0',
+      },
+    }).catch((error) => ({
+      ok: false,
+      status: 0,
+      text: async () => String(error?.message || error || 'fetch failed'),
+    }));
+
+    const text = await response.text();
+    const parsed = parseJsonValue(text) || {};
+    const jwt = String(parsed.smartCreditToken || parsed.token || parsed.jwt || parsed.access_token || '').trim();
+    if (response.ok && jwt) {
+      return jwt;
+    }
+    lastError = parsed.error || parsed.detail || parsed.message || `SmartCreditIntegration token flow failed (${response.status}) at ${endpoint}`;
   }
-  return jwt;
+
+  throw new Error(String(lastError || 'SmartCreditIntegration token flow failed.'));
 };
 
 const smartCreditApiRequest = async ({ jwt, path, method = 'GET', body }) => {
@@ -11444,11 +11458,21 @@ const server = createServer((req, res) => {
 
       await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
 
+      let history = [];
+      let historyWarning = '';
+      try {
+        history = await listReportHistory(client.id);
+      } catch (historyError) {
+        historyWarning = `history unavailable: ${historyError.message}`;
+        console.warn(`[report-sync][identityiq] history read failed for client ${client.id}: ${historyError.message}`);
+      }
+
       send(res, 200, {
         ok: true,
         jsonLength: String(reportJsonText || '').length,
         client: toSafeClient(client),
-        history: await listReportHistory(client.id),
+        history,
+        warning: historyWarning || undefined,
         savePaths: getReportSavePaths(),
       });
     } catch (error) {
@@ -11538,10 +11562,20 @@ const server = createServer((req, res) => {
 
       await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
 
+      let history = [];
+      let historyWarning = '';
+      try {
+        history = await listReportHistory(client.id);
+      } catch (historyError) {
+        historyWarning = `history unavailable: ${historyError.message}`;
+        console.warn(`[report-sync][smartcredit] history read failed for client ${client.id}: ${historyError.message}`);
+      }
+
       send(res, 200, {
         ok: true,
         client: toSafeClient(client),
-        history: await listReportHistory(client.id),
+        history,
+        warning: historyWarning || undefined,
         savePaths: getReportSavePaths(),
       });
     } catch (error) {

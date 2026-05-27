@@ -30,6 +30,26 @@ const tryParseJson = (value) => {
   }
 };
 
+const normalizeJsonPayload = (reportPayload = {}, label = 'JSON payload') => {
+  const rawInput = String(reportPayload?.reportJsonRaw || '').trim();
+  const parsedInput = reportPayload?.reportJson || tryParseJson(rawInput) || tryParseJson(extractFirstJsonObject(rawInput));
+  if (!parsedInput || (typeof parsedInput !== 'object')) {
+    throw new Error(`${label} cleanup failed: payload was not valid JSON object/array.`);
+  }
+
+  const normalizedRaw = JSON.stringify(parsedInput);
+  const reparsed = tryParseJson(normalizedRaw);
+  if (!reparsed) {
+    throw new Error(`${label} cleanup failed: normalized payload did not parse.`);
+  }
+
+  return {
+    ...reportPayload,
+    reportJson: reparsed,
+    reportJsonRaw: normalizedRaw,
+  };
+};
+
 const unwrapJsonCallback = (value) => {
   const text = String(value || '').replace(/^\uFEFF/, '').trim();
   if (!text) {
@@ -524,12 +544,14 @@ const captureIdentityIqDirectJson = async (iqPage) => {
       }
     } else {
       console.log(`-> Direct JSON URL captured valid JSON (${parsedBody.reportJsonRaw.length} chars).`);
-      return {
+      const payload = {
         reportHtml: await iqPage.content().catch(() => ''),
         reportJson: parsedBody.reportJson,
         reportJsonRaw: parsedBody.reportJsonRaw,
         responseUrl: response?.url() || directJsonUrl,
       };
+      console.log('CLEANING UP JSON...');
+      return normalizeJsonPayload(payload, 'IdentityIQ direct JSON');
     }
   }
 
@@ -566,12 +588,14 @@ const captureIdentityIqDirectJson = async (iqPage) => {
       }
 
       console.log(`-> In-page fetch fallback captured valid JSON (${parsedBody.reportJsonRaw.length} chars).`);
-      return {
+      const payload = {
         reportHtml: await iqPage.content().catch(() => ''),
         reportJson: parsedBody.reportJson,
         reportJsonRaw: parsedBody.reportJsonRaw,
         responseUrl: target,
       };
+      console.log('CLEANING UP JSON...');
+      return normalizeJsonPayload(payload, 'IdentityIQ in-page JSON');
     } catch (error) {
       console.log(`-> In-page fetch fallback threw: ${error.message}`);
     }
@@ -637,10 +661,63 @@ const captureSmartCreditCurrentJson = async (scPage) => {
   };
 };
 
+const readResponseDetails = async (response) => {
+  const status = Number(response?.status || 0);
+  const statusText = String(response?.statusText || '').trim();
+  let raw = '';
+  try {
+    raw = await response.text();
+  } catch {
+    raw = '';
+  }
+  let parsed = {};
+  try {
+    parsed = raw ? JSON.parse(raw) : {};
+  } catch {
+    parsed = {};
+  }
+  return {
+    status,
+    statusText,
+    raw,
+    payload: parsed && typeof parsed === 'object' ? parsed : {},
+  };
+};
+
+const postJsonWithRetry = async (url, options = {}, retryCount = 1) => {
+  let lastError;
+  for (let attempt = 1; attempt <= retryCount + 1; attempt += 1) {
+    try {
+      const response = await fetch(url, options);
+      const details = await readResponseDetails(response);
+      if (response.ok) return details;
+      const retryable = details.status >= 500 || details.status === 408 || details.status === 429;
+      const reason = String(details.payload?.error || details.raw || `HTTP ${details.status}`).slice(0, 320);
+      if (retryable && attempt <= retryCount) {
+        console.log(`-> Sync POST retry ${attempt}/${retryCount + 1} for ${url}: ${details.status} ${details.statusText || ''} ${reason}`);
+        await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+        continue;
+      }
+      throw new Error(`HTTP ${details.status} ${details.statusText || ''} ${reason}`.trim());
+    } catch (error) {
+      lastError = error;
+      if (attempt <= retryCount) {
+        console.log(`-> Sync POST network retry ${attempt}/${retryCount + 1} for ${url}: ${error.message}`);
+        await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError || new Error(`POST failed for ${url}`);
+};
+
 const syncIdentityIqReportToToolsNinja = async (client, reportPayload, apiBase) => {
+  const cleanedPayload = normalizeJsonPayload(reportPayload, 'IdentityIQ pre-sync JSON');
   console.log(`Syncing IdentityIQ report to Tools Ninja for ${client.firstName} ${client.lastName}...`);
   const apiUser = String(process.env.TOOLS_NINJA_API_USER || 'admin').trim() || 'admin';
-  const response = await fetch(`${apiBase}/api/report-sync/identityiq`, {
+  const syncUrl = `${apiBase}/api/report-sync/identityiq`;
+  const { payload } = await postJsonWithRetry(syncUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -655,18 +732,13 @@ const syncIdentityIqReportToToolsNinja = async (client, reportPayload, apiBase) 
       monitoringAgency: client.monitoringAgency,
       creditReportSource: 'identityiq-json',
       creditReportFileName: 'identityiq-latest-report.html',
-      ...reportPayload,
+      ...cleanedPayload,
     }),
-  });
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || `Tools Ninja sync failed with ${response.status}`);
-  }
-  const fallbackLength = Number((reportPayload?.reportJsonRaw || '').length || 0);
+  }, 1);
+  const fallbackLength = Number((cleanedPayload?.reportJsonRaw || '').length || 0);
   const jsonLength = Number(payload?.jsonLength || fallbackLength || 0);
   if (!Number.isFinite(jsonLength) || jsonLength <= 0) {
-    throw new Error('Tools Ninja sync returned empty JSON payload; report was not saved.');
+    throw new Error(`Tools Ninja sync returned empty JSON payload for client ${client.firstName} ${client.lastName}; report may not have been saved.`);
   }
 
   console.log(`JSON loaded to NinjaTools (${jsonLength} bytes).`);
@@ -682,7 +754,8 @@ const syncIdentityIqReportToToolsNinja = async (client, reportPayload, apiBase) 
 const syncSmartCreditReportToToolsNinja = async (client, reportPayload, apiBase) => {
   console.log(`Syncing SmartCredit report to Tools Ninja for ${client.firstName} ${client.lastName}...`);
   const apiUser = String(process.env.TOOLS_NINJA_API_USER || 'admin').trim() || 'admin';
-  const response = await fetch(`${apiBase}/api/report-sync/smartcredit`, {
+  const syncUrl = `${apiBase}/api/report-sync/smartcredit`;
+  const { payload } = await postJsonWithRetry(syncUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -700,12 +773,7 @@ const syncSmartCreditReportToToolsNinja = async (client, reportPayload, apiBase)
       creditReportFileName: 'smartcredit-latest-report.json',
       ...reportPayload,
     }),
-  });
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || `Tools Ninja SmartCredit sync failed with ${response.status}`);
-  }
+  }, 1);
 
   const rawLength = Number((reportPayload?.reportJsonRaw || '').length || 0);
   if (rawLength > 0) {

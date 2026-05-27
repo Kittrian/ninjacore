@@ -5772,9 +5772,26 @@ const syncSelectedClientFromServer = async (clientId) => {
 const pollReportRun = async (runId, clientId, initialLogCount = 0, previousReportDate = '') => {
   let lastLogCount = Number.isFinite(initialLogCount) ? initialLogCount : 0;
   let earlyHydrated = false;
+  let transientPollErrors = 0;
 
   while (true) {
-    const payload = await request(`/api/report-runs/${runId}`);
+    let payload;
+    try {
+      payload = await request(`/api/report-runs/${runId}`);
+      transientPollErrors = 0;
+    } catch (error) {
+      transientPollErrors += 1;
+      if (transientPollErrors <= 8) {
+        setWidgetConsoleMessage(
+          `Report poll retry ${transientPollErrors}/8 after temporary API error: ${error?.message || 'Request failed'}`,
+          false,
+          true,
+        );
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        continue;
+      }
+      throw error;
+    }
     const run = payload.run;
     const logLines = Array.isArray(run?.logs) ? run.logs : [];
     if (logLines.length > lastLogCount) {
@@ -5932,6 +5949,9 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
       + savePathsMessage,
     );
   } catch (error) {
+    if (state.selectedClientId) {
+      await syncSelectedClientFromServer(state.selectedClientId).catch(() => null);
+    }
     const selectedClient = state.clients.find((client) => client.id === state.selectedClientId);
     if (selectedClient) {
       selectedClient.lastReportRunStatus = 'failed';
