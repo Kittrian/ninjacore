@@ -8780,6 +8780,9 @@ const serveStatic = async (res, pathname) => {
   if (pathname === '/payments') {
     requested = '/payments.html';
   }
+  if (pathname === '/FULL' || pathname === '/full') {
+    requested = '/FULL.html';
+  }
   if (pathname === '/add-clients') {
     requested = '/add-clients.html';
   }

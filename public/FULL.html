@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NinjaCore FULL Disputes</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/full-disputes.css?v=20260527-01" />
+</head>
+<body>
+  <div class="full-shell">
+    <header class="full-topbar">
+      <div>
+        <p class="full-kicker">NinjaCore isolated renderer</p>
+        <h1>FULL Disputes View</h1>
+        <p class="full-subtitle">Separate page for rendering the complete NinjaDispute report payload without changing the home page.</p>
+      </div>
+      <div class="full-version">v3.05 FULL</div>
+    </header>
+
+    <main class="full-layout">
+      <aside class="full-sidebar">
+        <form id="fullSearchForm" class="full-search">
+          <label for="fullSearchInput">Find client</label>
+          <div class="full-search-row">
+            <input id="fullSearchInput" type="search" autocomplete="off" placeholder="Name, email, phone, or client id" />
+            <button type="submit">Search</button>
+          </div>
+        </form>
+        <div class="full-status" id="fullStatus">Loading clients...</div>
+        <div class="full-client-list" id="fullClientList"></div>
+      </aside>
+
+      <section class="full-content" id="fullContent">
+        <div class="full-empty-state">
+          <h2>Select a client</h2>
+          <p>The page will render profile fields, report scores, disputes, tradelines, inquiries, subscribers, progress, deletions, letters, and raw JSON when present.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/full-disputes.js?v=20260527-01"></script>
+</body>
+</html>
