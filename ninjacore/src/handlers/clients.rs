@@ -314,83 +314,87 @@ pub async fn patch_profile(
     Path(id): Path<String>,
     Json(body): Json<ProfilePatch>,
 ) -> AppResult<Json<Value>> {
-    let existing = load_client_raw(&state, &id).await?;
+    // No pre-fetch. Fields the Edit form always sends are bound directly;
+    // fields the form omits (goal/notes/financials/reportDate/nextImportInt)
+    // use SurrealQL's `IF $foo_set THEN $foo ELSE foo END` so the DB itself
+    // preserves the existing value. One round trip instead of two.
 
-    // Pull values with existing fallback (matches readOptionalStringField behavior).
-    let pick = |key: &str| -> String {
-        if let Some(v) = body.fields.get(key).and_then(|v| v.as_str()) {
-            v.to_string()
-        } else {
-            existing.get(snake(key).as_str())
-                .or_else(|| existing.get(key))
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string()
-        }
+    let pick_str = |key: &str| -> Option<String> {
+        body.fields.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
     };
-    let pick_or = |key: &str, default: &str| -> String {
-        let v = pick(key);
+    let req = |key: &str| -> String { pick_str(key).unwrap_or_default() };
+    let req_or = |key: &str, default: &str| -> String {
+        let v = req(key);
         if v.is_empty() { default.into() } else { v }
     };
 
-    let first_name = pick("firstName");
-    let last_name = pick("lastName");
-    let email = pick("email");
-    let phone = pick("phone");
-    let dob = normalize_dob(&pick("dob"));
-    let ssn = normalize_ssn(&pick("ssn"));
-    let address = pick("address");
-    let status = pick_or("status", "Client");
-    let phase = pick_or("phase", "None");
-    let language = pick_or("language", "English");
-    let affiliate = pick_or("affiliateAssigned", "None");
-    let monitoring_agency = pick("monitoringAgency");
-    let monitoring_user = pick("monitoringUsername");
-    let monitoring_pass = pick("monitoringPassword");
-    let monitoring_token = pick("tokenId");
-    let goal = pick("goal");
-    let notes = pick("notes");
-    let yearly_income = pick("yearlyIncome");
-    let housing_payment = pick("housingPayment");
-    let debt = pick("debtMonthlyPayments");
-    let report_date = pick("reportDate");
-    let spouse_id = pick("spouseClientId");
-    let spouse_label = pick("spouseClientLabel");
-    let assigned_to = pick("assignedTo");
-    let ninja_assigned = pick("ninjaAssigned");
+    // Always-sent fields from the Edit Client form.
+    let first_name = req("firstName");
+    let last_name = req("lastName");
+    let email = req("email");
+    let phone = req("phone");
+    let dob = normalize_dob(&req("dob"));
+    let ssn = normalize_ssn(&req("ssn"));
+    let address = req("address");
+    let status = req_or("status", "Client");
+    let phase = req_or("phase", "None");
+    let language = req_or("language", "English");
+    let affiliate = req_or("affiliateAssigned", "None");
+    let monitoring_agency = req("monitoringAgency");
+    let monitoring_user = req("monitoringUsername");
+    let monitoring_pass = req("monitoringPassword");
+    let monitoring_token = req("tokenId");
+    let spouse_id = req("spouseClientId");
+    let spouse_label = req("spouseClientLabel");
+    let assigned_to = req("assignedTo");
+    let ninja_assigned = req("ninjaAssigned");
 
-    let requested_secret = pick("secretKey");
+    let requested_secret = req("secretKey");
     let secret_key = if requested_secret.is_empty() {
         last_four(&ssn).to_string()
-    } else {
-        requested_secret
-    };
-    let requested_portal = pick("portalPassword");
+    } else { requested_secret };
+    let requested_portal = req("portalPassword");
     let portal_password = if requested_portal.is_empty() {
         default_portal_password(&last_name, &ssn)
-    } else {
-        requested_portal
-    };
-    let portal_enabled = pick_or("portalEnabled", if existing.get("portal_enabled").and_then(|v| v.as_bool()).unwrap_or(false) { "on" } else { "off" })
-        .to_lowercase() != "off";
+    } else { requested_portal };
+    let portal_enabled = req("portalEnabled").to_lowercase() != "off";
 
-    // next_import
-    let next_import_raw = body.fields.get("nextImportInt").cloned()
-        .unwrap_or_else(|| existing.get("next_import_int").cloned().unwrap_or(Value::Null));
-    let next_import_str = next_import_raw.as_str().unwrap_or("").trim().to_string();
-    let (ni, nl, manual_days_set, today_set) = if let Ok(n) = next_import_str.parse::<i64>() {
-        let (i, l) = format_next_import(n);
-        let today = time::OffsetDateTime::now_utc()
-            .date()
-            .format(&time::format_description::well_known::Iso8601::DATE)
-            .unwrap_or_default();
-        (i, l, Some(n), Some(today))
-    } else {
-        (next_import_str.clone(), next_import_str, None, None)
+    // Conditional fields — only update if body actually sent them.
+    let goal_opt = pick_str("goal");
+    let notes_opt = pick_str("notes");
+    let yi_opt = pick_str("yearlyIncome");
+    let hp_opt = pick_str("housingPayment");
+    let dmp_opt = pick_str("debtMonthlyPayments");
+    let rd_opt = pick_str("reportDate");
+
+    // next_import — only touch the related fields if a value came in.
+    let ni_raw = pick_str("nextImportInt").map(|s| s.trim().to_string());
+    let (ni_opt, nl_opt, manual_days_set, today_set) = match ni_raw {
+        Some(s) => {
+            if let Ok(n) = s.parse::<i64>() {
+                let (i, l) = format_next_import(n);
+                let today = time::OffsetDateTime::now_utc()
+                    .date()
+                    .format(&time::format_description::well_known::Iso8601::DATE)
+                    .unwrap_or_default();
+                (Some(i), Some(l), Some(n), Some(today))
+            } else {
+                (Some(s.clone()), Some(s), None, None)
+            }
+        }
+        None => (None, None, None, None),
     };
 
     let email_n = email.trim().to_lowercase();
     let phone_n: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
+
+    let goal_set = goal_opt.is_some();
+    let notes_set = notes_opt.is_some();
+    let yi_set = yi_opt.is_some();
+    let hp_set = hp_opt.is_some();
+    let dmp_set = dmp_opt.is_some();
+    let rd_set = rd_opt.is_some();
+    let ni_set = ni_opt.is_some();
 
     let mut __resp = state.db.query(
         "UPDATE type::thing('clients', $id) SET \
@@ -402,10 +406,14 @@ pub async fn patch_profile(
             spouse_client_id = $sid, spouse_client_label = $slabel, \
             monitoring_agency = $ma, monitoring_username = $mu, monitoring_password = $mp, monitoring_token = $mt, \
             secret_key = $sk, portal_password = $pp, portal_enabled = $pe, \
-            goal = $goal, notes = $notes, \
-            yearly_income = $yi, housing_payment = $hp, debt_monthly_payments = $dmp, \
-            report_date = $rd, \
-            next_import_int = $ni, next_import_label = $nl, \
+            goal = IF $goal_set THEN $goal ELSE goal END, \
+            notes = IF $notes_set THEN $notes ELSE notes END, \
+            yearly_income = IF $yi_set THEN $yi ELSE yearly_income END, \
+            housing_payment = IF $hp_set THEN $hp ELSE housing_payment END, \
+            debt_monthly_payments = IF $dmp_set THEN $dmp ELSE debt_monthly_payments END, \
+            report_date = IF $rd_set THEN $rd ELSE report_date END, \
+            next_import_int = IF $ni_set THEN $ni ELSE next_import_int END, \
+            next_import_label = IF $ni_set THEN $nl ELSE next_import_label END, \
             next_import_mode = IF $manualDays THEN 'manual' ELSE next_import_mode END, \
             manual_next_import_start_days = IF $manualDays THEN $manualDays ELSE manual_next_import_start_days END, \
             manual_next_import_set_date = IF $manualToday THEN $manualToday ELSE manual_next_import_set_date END, \
@@ -436,14 +444,21 @@ pub async fn patch_profile(
         .bind(("sk", secret_key))
         .bind(("pp", portal_password))
         .bind(("pe", portal_enabled))
-        .bind(("goal", goal))
-        .bind(("notes", notes))
-        .bind(("yi", yearly_income))
-        .bind(("hp", housing_payment))
-        .bind(("dmp", debt))
-        .bind(("rd", report_date))
-        .bind(("ni", ni))
-        .bind(("nl", nl))
+        .bind(("goal", goal_opt.unwrap_or_default()))
+        .bind(("goal_set", goal_set))
+        .bind(("notes", notes_opt.unwrap_or_default()))
+        .bind(("notes_set", notes_set))
+        .bind(("yi", yi_opt.unwrap_or_default()))
+        .bind(("yi_set", yi_set))
+        .bind(("hp", hp_opt.unwrap_or_default()))
+        .bind(("hp_set", hp_set))
+        .bind(("dmp", dmp_opt.unwrap_or_default()))
+        .bind(("dmp_set", dmp_set))
+        .bind(("rd", rd_opt.unwrap_or_default()))
+        .bind(("rd_set", rd_set))
+        .bind(("ni", ni_opt.unwrap_or_default()))
+        .bind(("nl", nl_opt.unwrap_or_default()))
+        .bind(("ni_set", ni_set))
         .bind(("manualDays", manual_days_set))
         .bind(("manualToday", today_set))
         .await?;
