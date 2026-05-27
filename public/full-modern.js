@@ -5,7 +5,7 @@ const state = {
   expandedAccount: 0,
 };
 
-const app = document.getElementById('fullApp');
+const getFullApp = () => document.getElementById('fullApp');
 const bureaus = [
   ['transunion', 'tu', 'TransUnion'],
   ['experian', 'ex', 'Experian'],
@@ -276,6 +276,8 @@ function renderToolbar() {
 }
 
 function renderClient(client) {
+  const app = getFullApp();
+  if (!app) return;
   const nameParts = clientName(client).split(/\s+/);
   const last = nameParts.length > 1 ? nameParts.pop() : '';
   const firstNames = nameParts.join(' ') || clientName(client);
@@ -349,6 +351,8 @@ function renderClient(client) {
 }
 
 function renderError(error) {
+  const app = getFullApp();
+  if (!app) return;
   app.innerHTML = `<section class="error-box"><strong>FULL failed to load.</strong><br>${esc(error.message || error)}</section>`;
 }
 
@@ -387,9 +391,13 @@ async function loadClient(clientId) {
       // Static snapshots are optional; the live store remains the primary source.
     }
   }
-  const url = new URL(window.location.href);
-  url.searchParams.set('client', state.activeClientId);
-  window.history.replaceState({}, '', url);
+  if (window.ND_HASH_SHELL_ACTIVE) {
+    window.history.replaceState({}, '', `${window.location.pathname}${window.location.search}#/dispute/${encodeURIComponent(state.activeClientId)}`);
+  } else {
+    const url = new URL(window.location.href);
+    url.searchParams.set('client', state.activeClientId);
+    window.history.replaceState({}, '', url);
+  }
   renderClient(state.activeClient);
 }
 
@@ -418,4 +426,16 @@ async function init() {
   }
 }
 
-init();
+window.renderFullModernDispute = async (clientId = '') => {
+  state.activeClientId = String(clientId || state.activeClientId || '');
+  try {
+    await loadClients('');
+    await loadClient(state.activeClientId || state.clients[0]?.id);
+  } catch (error) {
+    renderError(error);
+  }
+};
+
+if (!window.ND_HASH_SHELL_ACTIVE) {
+  init();
+}

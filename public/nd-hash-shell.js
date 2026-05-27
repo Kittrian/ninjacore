@@ -1,8 +1,16 @@
-const cssHref = '/nd-hash-shell.css?v=20260527-09';
+const cssHref = '/nd-hash-shell.css?v=20260527-10';
 if (!document.querySelector(`link[href="${cssHref}"]`)) {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = cssHref;
+  document.head.appendChild(link);
+}
+
+const fullModernCssHref = '/full-modern.css?v=3.14';
+if (!document.querySelector(`link[href="${fullModernCssHref}"]`)) {
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = fullModernCssHref;
   document.head.appendChild(link);
 }
 
@@ -209,30 +217,27 @@ function disputeTable(client) {
 }
 
 async function renderDispute(id) {
-  const client = await loadClient(id);
-  const score = scores(client);
-  const cards = list(client.openAccounts);
-  const card = cards[0] || {};
-  shell('clients', `
-    <section class="nd-dispute-page">
-      <div class="nd-dispute-head">
-        <div><h1 class="nd-client-title">${esc(clientName(client))} <button class="nd-action" data-edit-client="${esc(client.id)}">✎</button></h1><div class="nd-small">${esc(client.ssn || '')}<br>${esc(client.dob || '')}</div></div>
-        <div class="nd-dispute-controls"><button class="nd-open-btn">Open Report</button><button class="nd-action">☁</button><select class="nd-flat-select"><option>Select Report By Month</option><option selected>${esc(client.reportDate || 'Latest Report')}</option></select></div>
-      </div>
-      <div class="nd-score-area">
-        <div><p>Average Age of Credit <strong>${esc(client.bureauAgeOfCredit?.transunion?.averageAgeYears || 'NaN')} Years</strong></p><div class="nd-bureau-icons"><span class="tu">${esc(score.tu || 'tu')}</span><span class="ex">${esc(score.ex || 'e')}</span><span class="eq">${esc(score.eq || 'EQ')}</span></div></div>
-        <div class="nd-auto-grid"><button class="nd-auto-btn">⚔ AUTO ATTACK</button><select class="nd-flat-select"><option>Account per Letter</option><option selected>5 Accounts</option></select><select class="nd-flat-select nd-wide-select"><option>${esc(first(card.name, card.creditorName, 'Select Credit Card'))}</option></select><div class="nd-metrics"><div><span class="nd-small">BALANCE</span><br><strong>${money(first(card.balance, 0))}</strong></div><div><span class="nd-small">LIMIT</span><br><strong>${money(first(card.creditLimit, 0))}</strong></div><div><span class="nd-small">UTILIZATION</span></div></div></div>
-      </div>
-      <div class="nd-add-account-row"><select class="nd-flat-select"><option>Add Account from Credit Report</option></select><div class="nd-bankruptcy-row"><select class="nd-flat-select"><option>Select Bankruptcy</option></select><button class="nd-outline-btn">ADD MORE ACCOUNTS</button><label class="nd-switch">⚪ Get Personal Info?</label></div></div>
-      <section class="nd-card"><div class="nd-page-head"><h1>Derogatory Accounts</h1><button class="nd-link-btn">⟳ RESET DATA</button></div>${disputeTable(client)}</section>
-      ${['Credit Info', 'Progress', 'Inquiries', 'Tradeline Comparison Report'].map((title) => `<div class="nd-collapse"><div class="nd-collapse-title">◉ ${esc(title)} <span style="margin-left:auto">⌄</span></div></div>`).join('')}
-      <section class="nd-card nd-alt-grid"><div class="nd-section-title">Alternate Letters</div>${table(['Choose Letter', 'Choose Bureau', 'Bureau\\Repository Address', 'Choose Creditor', 'Address of Creditor', 'Add Incon', 'Account / Reference #', 'Actions'], ['<tr><td><input placeholder="LETTER"></td><td><input placeholder="Choose Bureau"></td><td></td><td><input placeholder="Choose Creditor"></td><td></td><td><input type="checkbox"></td><td><input></td><td>＋ －</td></tr>'])}</section>
-    </section>
-  `);
-  document.querySelector('[data-edit-client]')?.addEventListener('click', () => {
-    state.modalClient = client;
-    renderClientModal();
+  document.body.innerHTML = `
+    <div class="nd-app nd-app-modern">
+      ${topbar('clients')}
+      <main class="nd-content nd-modern-content">
+        <main id="fullApp" class="modern-full">
+          <section class="loading-card">
+            <span class="spinner"></span>
+            <strong>Loading modern dispute UI...</strong>
+          </section>
+        </main>
+      </main>
+    </div>
+  `;
+  document.getElementById('ndSearchForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    state.search = document.getElementById('ndSearchInput')?.value.trim() || '';
+    location.hash = `#/clients${state.search ? `?q=${encodeURIComponent(state.search)}` : ''}`;
+    await render();
   });
+  await import('/full-modern.js?v=3.14');
+  await window.renderFullModernDispute(id);
 }
 
 function renderClientModal() {

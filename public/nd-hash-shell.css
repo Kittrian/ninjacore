@@ -152,6 +152,14 @@ button, input, select, textarea {
   padding: 22px 24px;
 }
 
+.nd-modern-content {
+  padding: 0;
+}
+
+.nd-app-modern .modern-full {
+  min-height: calc(100vh - 58px);
+}
+
 .nd-card {
   border: 1px solid var(--nd-line);
   background: var(--nd-panel);
