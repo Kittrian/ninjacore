@@ -60,6 +60,7 @@ const features = {
         request, byId, setIntegrationMessage, applyIntegrationValues,
         syncSmartCreditClientTokenInput, renderClientDetail
       });
+      // Don't bind events - existing smartCreditIntegrationForm listener handles per-client tokens
     }
     return featureModules.integrations;
   },
