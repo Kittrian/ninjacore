@@ -1,4 +1,8 @@
 (function initAuthPage() {
+  if (window.ND_HASH_SHELL_ACTIVE || String(window.location.hash || '').startsWith('#/')) {
+    return;
+  }
+
   const loginForm = document.querySelector('.login-form');
   const pageShell = document.querySelector('.page-shell');
   const authMessage = document.getElementById('authMessage');
