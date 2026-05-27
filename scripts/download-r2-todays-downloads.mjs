@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const VERSION = 'v.002';
+const VERSION = 'v.003';
 
 const usage = () => {
   console.log(`
@@ -37,6 +37,8 @@ Optional:
   --tz <IANA tz>           Timezone for "today" (default: America/Chicago)
   --out <dir>              Output dir (default: ./_downloads)
   --since-minutes <n>      Only include objects modified in the last N minutes
+  --any-date               When used with --since-minutes, ignore the "today" date filter
+  --all                    List/download without any date filter (overrides --date/--since-minutes filters)
   --match <regex>          Only include keys matching this JS regex (e.g. "\\\\.pdf$")
   --dry-run                Only list; do not download
   --limit <n>              Max objects to download (default: 0 = no limit)
@@ -59,6 +61,8 @@ const parseArgs = () => {
     limit: 0,
     concurrency: 6,
     sinceMinutes: 0,
+    anyDate: false,
+    all: false,
     match: '',
     nullSeparated: false,
     outMode: 'dated',
@@ -74,6 +78,8 @@ const parseArgs = () => {
     else if (a === '--limit') out.limit = Number.parseInt(args[++i] || '0', 10) || 0;
     else if (a === '--concurrency') out.concurrency = Math.max(1, Number.parseInt(args[++i] || '6', 10) || 6);
     else if (a === '--since-minutes') out.sinceMinutes = Math.max(0, Number.parseInt(args[++i] || '0', 10) || 0);
+    else if (a === '--any-date') out.anyDate = true;
+    else if (a === '--all') out.all = true;
     else if (a === '--match') out.match = args[++i] || '';
     else if (a === '--null') out.nullSeparated = true;
     else if (a === '--out-mode') out.outMode = (args[++i] || 'dated').trim().toLowerCase();
@@ -183,11 +189,11 @@ const parseListObjectsV2Xml = (xml) => {
   return { contents, isTruncated, nextToken: nextToken.trim() };
 };
 
-const listObjectsToday = async ({ endpoint, bucket, prefix, accessKey, secretKey, region, today, tz, sinceMinutes, matchRe }) => {
+const listObjectsToday = async ({ endpoint, bucket, prefix, accessKey, secretKey, region, today, tz, sinceMinutes, anyDate, all, matchRe }) => {
   let continuationToken = '';
   const results = [];
   const nowMs = Date.now();
-  const sinceMs = sinceMinutes && sinceMinutes > 0 ? (sinceMinutes * 60_000) : 0;
+  const sinceMs = !all && sinceMinutes && sinceMinutes > 0 ? (sinceMinutes * 60_000) : 0;
   for (;;) {
     const qs = {
       'list-type': '2',
@@ -210,8 +216,11 @@ const listObjectsToday = async ({ endpoint, bucket, prefix, accessKey, secretKey
       const lm = obj.lastModified ? new Date(obj.lastModified) : null;
       if (!lm || Number.isNaN(lm.getTime())) continue;
       if (sinceMs > 0 && (nowMs - lm.getTime()) > sinceMs) continue;
-      const lmDay = formatDateInTz(lm, tz);
-      if (lmDay === today) results.push(obj);
+      if (!all && !anyDate) {
+        const lmDay = formatDateInTz(lm, tz);
+        if (lmDay !== today) continue;
+      }
+      results.push(obj);
     }
 
     if (!page.isTruncated || !page.nextToken) break;
@@ -303,11 +312,15 @@ const main = async () => {
     today,
     tz,
     sinceMinutes: args.sinceMinutes,
+    anyDate: Boolean(args.anyDate && args.sinceMinutes > 0),
+    all: Boolean(args.all),
     matchRe,
   });
 
   objects.sort((a, b) => (a.lastModified < b.lastModified ? -1 : a.lastModified > b.lastModified ? 1 : 0));
-  logInfo(`Found ${objects.length} object(s) modified on ${today}.`);
+  if (args.all) logInfo(`Found ${objects.length} object(s) (no date filter).`);
+  else if (args.anyDate && args.sinceMinutes > 0) logInfo(`Found ${objects.length} object(s) modified in the last ${args.sinceMinutes} minute(s).`);
+  else logInfo(`Found ${objects.length} object(s) modified on ${today}.`);
 
   const limited = args.limit > 0 ? objects.slice(0, args.limit) : objects;
   if (args.dryRun) {
