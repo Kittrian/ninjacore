@@ -1,5 +1,5 @@
 {
-  "frontendVersion": "v3.10",
-  "buildVersion": "20260527-06",
-  "appScriptVersion": "v3.10 FULL spa backup socket disabled"
+  "frontendVersion": "v3.12",
+  "buildVersion": "20260527-08",
+  "appScriptVersion": "v3.12 FULL modern UI with snapshot fallback"
 }

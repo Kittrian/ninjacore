@@ -5259,6 +5259,48 @@ const toClientListItem = (client) => {
   };
 };
 
+const buildFullDisputeClient = (client) => {
+  const safeClient = toSafeClient(client);
+  const jsonReport = parseJsonValue(client.creditReportJson) || parseJsonValue(client.creditReportHtml) || {};
+  const localDerogatoryAccounts = Object.keys(jsonReport).length
+    ? enrichDerogatoryAccountsWithSubscriberContacts(
+      parseDerogatoryAccountsFromJson(jsonReport),
+      jsonReport,
+      client.creditReportHtml || '',
+    )
+    : [];
+  const localAllTradelineAccounts = Object.keys(jsonReport).length
+    ? parseAllTradelineAccountsFromJson(jsonReport)
+    : [];
+  const reportAccounts = Array.isArray(jsonReport.accounts) && jsonReport.accounts.length
+    ? jsonReport.accounts
+    : (localDerogatoryAccounts.length ? localDerogatoryAccounts : localAllTradelineAccounts);
+  return {
+    ...safeClient,
+    json: {
+      ...jsonReport,
+      accounts: reportAccounts,
+      localDerogatoryAccounts,
+      localAllTradelineAccounts,
+    },
+    raw: {
+      id: client.id,
+      firstName: client.firstName || '',
+      lastName: client.lastName || '',
+      email: client.email || '',
+      phone: client.phone || '',
+      ssn: client.ssn || '',
+      dob: client.dob || '',
+      address: client.address || '',
+      monitoringAgency: inferMonitoringAgency(client),
+      creditReportSource: client.creditReportSource || '',
+      creditReportFileName: client.creditReportFileName || '',
+      creditReportHtmlAvailable: Boolean(client.creditReportHtml),
+      creditReportJsonAvailable: Boolean(client.creditReportJson),
+    },
+  };
+};
+
 const normalizeStore = (store) => {
   const normalizedBusinessSettings = {
     ...seedData.businessSettings,
@@ -9518,6 +9560,39 @@ const server = createServer((req, res) => {
       const fallback = buildFallbackVantageResult({}, 'baseline', error.message || 'What-if simulation failed.');
       send(res, 200, { result: fallback, warning: error.message || 'What-if simulation failed.' });
     }
+    return;
+  }
+
+  if (pathname === '/api/full/clients' && req.method === 'GET') {
+    const store = await readStore();
+    const searchParam = String(url.searchParams.get('searchParam') || url.searchParams.get('q') || '').trim().toLowerCase();
+    const clients = store.clients
+      .filter((client) => {
+        if (!searchParam) return true;
+        return [
+          client.id,
+          client.firstName,
+          client.lastName,
+          client.email,
+          client.phone,
+          client.ssn,
+        ].some((value) => String(value || '').toLowerCase().includes(searchParam));
+      })
+      .slice(0, 100)
+      .map(toClientListItem);
+    send(res, 200, { clients });
+    return;
+  }
+
+  if (pathname.startsWith('/api/full/clients/') && req.method === 'GET') {
+    const id = decodeURIComponent(pathname.split('/')[4] || '');
+    const store = await readStore();
+    const client = store.clients.find((entry) => String(entry.id) === String(id));
+    if (!client) {
+      notFound(res);
+      return;
+    }
+    send(res, 200, { client: buildFullDisputeClient(client) });
     return;
   }
 

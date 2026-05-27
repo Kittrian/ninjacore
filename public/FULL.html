@@ -1,63 +1,22 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <base href="/full-spa-backup/" />
-    <title>NinjaCore FULL Dispute</title>
+    <title>NinjaCore FULL Modern Dispute UI</title>
     <meta charset="utf-8" />
-    <meta name="description" content="Bureau Credit Report & Scores | Dispute - Ninja" />
-    <meta name="format-detection" content="telephone=no" />
-    <meta name="msapplication-tap-highlight" content="no" />
-    <meta
-      name="viewport"
-      content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width"
-    />
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png" />
-    <link rel="icon" type="image/ico" href="favicon.ico" />
-    <script>
-      (() => {
-        const params = new URLSearchParams(window.location.search);
-        const clientId = params.get('clientId') || params.get('client') || params.get('id') || localStorage.getItem('ntSelectedClientId') || '592';
-        const user = {
-          id: 1,
-          userId: 1,
-          tenantId: 1,
-          name: 'Full UI',
-          username: 'Full UI',
-          email: 'full@ninjacore.local',
-          profile: 'admin',
-          status: 'online',
-          configs: {}
-        };
-        localStorage.setItem('token', localStorage.getItem('token') || JSON.stringify('full-backup-static-token'));
-        localStorage.setItem('usuario', localStorage.getItem('usuario') || JSON.stringify(user));
-        localStorage.setItem('username', localStorage.getItem('username') || 'Full UI');
-        localStorage.setItem('profile', localStorage.getItem('profile') || 'admin');
-        localStorage.setItem('userId', localStorage.getItem('userId') || '1');
-        localStorage.setItem('queues', localStorage.getItem('queues') || '[]');
-        localStorage.setItem('filtrosAtendimento', localStorage.getItem('filtrosAtendimento') || JSON.stringify({
-          searchParam: '',
-          pageNumber: 1,
-          status: ['open', 'pending'],
-          showAll: true,
-          count: null,
-          queuesIds: [],
-          withUnreadMessages: false,
-          isNotAssignedUser: false,
-          includeNotQueueDefined: true
-        }));
-        if (!window.location.hash || window.location.hash === '#/' || window.location.hash === '#') {
-          window.location.replace(`${window.location.pathname}${window.location.search}#/dispute/${encodeURIComponent(clientId)}`);
-        }
-      })();
-    </script>
-    <script src="resources/mammoth.browser.min.js"></script>
-    <link href="https://fonts.googleapis.com/css?family=Indie Flower" rel="stylesheet" />
-    <link href="css/vendor.ef5328ce.css" rel="stylesheet" />
-    <link href="css/app.2e91cf55.css" rel="stylesheet" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Modern NinjaCore dispute workspace" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link href="/full-modern.css?v=3.12" rel="stylesheet" />
   </head>
   <body>
-    <div id="q-app"></div>
-    <script src="js/vendor.54ceaedb.js"></script>
-    <script src="js/app.be74860d.js"></script>
+    <main id="fullApp" class="modern-full">
+      <section class="loading-card">
+        <span class="spinner"></span>
+        <strong>Loading FULL modern dispute UI...</strong>
+      </section>
+    </main>
+    <script src="/full-modern.js?v=3.12"></script>
   </body>
 </html>
