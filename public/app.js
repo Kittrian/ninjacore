@@ -49,6 +49,31 @@ const state = {
   activeAffiliateTab: 'creditBuilder',
   clientsRenderLimit: 100,
 };
+
+// Feature module registry - lazy-loaded after initial paint
+const featureModules = {};
+const features = {
+  async integrations() {
+    if (!featureModules.integrations) {
+      const module = await import('./features/integrations.js');
+      featureModules.integrations = module.initIntegrationsFeature(state, {
+        request, byId, setIntegrationMessage, applyIntegrationValues,
+        syncSmartCreditClientTokenInput, renderClientDetail
+      });
+    }
+    return featureModules.integrations;
+  },
+  async affiliates() {
+    if (!featureModules.affiliates) {
+      const module = await import('./features/affiliates.js');
+      featureModules.affiliates = module.initAffiliatesFeature(state, {
+        request, byId, escapeHtml
+      });
+    }
+    return featureModules.affiliates;
+  }
+};
+
 const CLIENTS_RENDER_INITIAL_LIMIT = 100;
 const CLIENTS_RENDER_INCREMENT = 100;
 const CLIENTS_SEARCH_RENDER_LIMIT = 100;
@@ -7025,7 +7050,11 @@ const bindEvents = () => {
     renderClients();
   });
 
-  byId('affiliateLinksLaunch')?.addEventListener('click', openAffiliateLinksDialog);
+  byId('affiliateLinksLaunch')?.addEventListener('click', async () => {
+    const affiliates = await features.affiliates();
+    await affiliates.loadAffiliateLinks();
+    openAffiliateLinksDialog();
+  });
   byId('billingQuickAction')?.addEventListener('click', () => {
     window.location.href = '/payments';
   });
@@ -7533,14 +7562,18 @@ const bootstrapApp = () => {
   setBootLoadingOverlay(true, 'Loading Ninja Tools...');
   loadClients({ showSkeleton: true })
     .then(() => {
-      const backgroundLoad = () => {
-        Promise.allSettled([loadIntegrations(), loadAffiliateLinks()]).then((results) => {
-          const rejected = results.find((entry) => entry.status === 'rejected');
-          if (rejected?.reason?.message) {
-            setFormMessage(rejected.reason.message, true);
-          }
-          setBootLoadingOverlay(false);
-        });
+      const backgroundLoad = async () => {
+        try {
+          const integrations = await features.integrations();
+          await integrations.loadIntegrations();
+
+          const affiliates = await features.affiliates();
+          await affiliates.loadAffiliateLinks();
+        } catch (error) {
+          console.error('[background-load]', error);
+          setFormMessage(error.message, true);
+        }
+        setBootLoadingOverlay(false);
       };
 
       if (typeof window.requestIdleCallback === 'function') {

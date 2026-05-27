@@ -55,8 +55,8 @@ export const initAffiliatesFeature = (globalState, utils) => {
   `).join('');
 
   const bindAffiliateEvents = () => {
-    byId('affiliateLinksLaunch')?.addEventListener('click', openAffiliateLinksDialog);
-    byId('affiliateLinksClose')?.addEventListener('click', closeAffiliateLinksDialog);
+    // Event binding is handled in app.js to avoid duplication
+    // This method is kept for API compatibility
   };
 
   const openAffiliateLinksDialog = () => {
