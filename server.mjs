@@ -11,6 +11,7 @@ import zlib from 'node:zlib';
 import { Server as SocketIOServer } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
+import { matchRoute } from './routes/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -8961,6 +8962,21 @@ const server = createServer((req, res) => {
     }
     if (pathname.startsWith('/full-api/')) {
       await serveFullApiSnapshot(res, pathname);
+      return;
+    }
+
+    // Try route modules (lazy-loaded)
+    const routeMatched = await matchRoute({
+      req, res, pathname, method,
+      utils: {
+        send, readBody, requireAppAuth, getAuthenticatedUsername,
+        isAppAuthenticated, isValidAppCredential, verifyUserCredential,
+        normalizeUsername, createAppUser, parseCookies,
+        readStore, writeStore, getCurrentOwnerKey, seedData,
+        createHash, randomUUID, googleClientId, githubClientId, oauthRedirectUri,
+      }
+    });
+    if (routeMatched) {
       return;
     }
 
