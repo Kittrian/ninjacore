@@ -7578,14 +7578,6 @@ const ndHandleExpiry = async () => {
   }
 };
 
-const ndFetch = async (path, opts = {}) => {
-  const res = await fetch(`${ND_API}${path}`, { credentials: 'include', ...opts });
-  if (res.status === 401) {
-    ndHandleExpiry();
-    throw new Error('Session expired — please log in again.');
-  }
-  return res;
-};
 const ndJson = (path, opts = {}) => ndFetch(path, opts).then((r) => r.json());
 
 const ntEsc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
