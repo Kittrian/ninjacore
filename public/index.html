@@ -25,6 +25,67 @@
 	<script src="/login.js?v=20260527-39" defer></script>
   </head>
   <body>
+    <!-- Performance monitoring -->
+    <script>
+      // Track performance metrics
+      window.perfMarks = {
+        navigationStart: performance.now(),
+      };
+
+      // Mark critical points
+      window.markPerfPoint = (label) => {
+        window.perfMarks[label] = performance.now();
+        const delta = window.perfMarks[label] - window.perfMarks.navigationStart;
+        console.log(`[perf] ${label}: ${delta.toFixed(2)}ms`);
+      };
+
+      // Report Web Vitals
+      if ('web-vital' in window || typeof PerformanceObserver !== 'undefined') {
+        const vitals = {};
+
+        // Observe Largest Contentful Paint (LCP)
+        try {
+          new PerformanceObserver((list) => {
+            const entries = list.getEntries();
+            const lastEntry = entries[entries.length - 1];
+            vitals.lcp = lastEntry.renderTime || lastEntry.loadTime;
+            console.log(`[perf] LCP: ${vitals.lcp.toFixed(2)}ms`);
+          }).observe({ entryTypes: ['largest-contentful-paint'] });
+        } catch (e) {
+          console.debug('[perf] LCP observer not available');
+        }
+
+        // Observe First Input Delay (FID)
+        try {
+          new PerformanceObserver((list) => {
+            list.getEntries().forEach((entry) => {
+              vitals.fid = entry.processingDuration;
+              console.log(`[perf] FID: ${vitals.fid.toFixed(2)}ms`);
+            });
+          }).observe({ entryTypes: ['first-input'] });
+        } catch (e) {
+          console.debug('[perf] FID observer not available');
+        }
+
+        // Observe Cumulative Layout Shift (CLS)
+        try {
+          let clsValue = 0;
+          new PerformanceObserver((list) => {
+            list.getEntries().forEach((entry) => {
+              if (!entry.hadRecentInput) {
+                clsValue += entry.value;
+                vitals.cls = clsValue;
+                console.log(`[perf] CLS: ${vitals.cls.toFixed(4)}`);
+              }
+            });
+          }).observe({ entryTypes: ['layout-shift'] });
+        } catch (e) {
+          console.debug('[perf] CLS observer not available');
+        }
+
+        window.getWebVitals = () => vitals;
+      }
+    </script>
     <form class="login-form" style="display: block;">
       <div class="segment">
         <h1>Sign up</h1>
