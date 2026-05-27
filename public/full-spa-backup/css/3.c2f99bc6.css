@@ -1,0 +1,7 @@
+.menu-link-active-item-top {
+  border-left: 4px solid rgb(21, 120, 173);
+  border-top-right-radius: 20px;
+  border-bottom-right-radius: 20px;
+  position: relative;
+  height: 100%;
+}

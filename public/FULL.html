@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <base href="/full-zip/" />
+    <base href="/full-spa-backup/" />
     <title>NinjaCore FULL Dispute</title>
     <meta charset="utf-8" />
     <meta name="description" content="Bureau Credit Report & Scores | Dispute - Ninja" />
@@ -17,30 +17,34 @@
       (() => {
         const params = new URLSearchParams(window.location.search);
         const clientId = params.get('clientId') || params.get('client') || params.get('id') || localStorage.getItem('ntSelectedClientId') || '592';
-        if (!localStorage.getItem('token')) {
-          localStorage.setItem('token', JSON.stringify('full-zip-static-token'));
-        }
-        if (!localStorage.getItem('usuario')) {
-          localStorage.setItem('usuario', JSON.stringify({
-            id: 1,
-            userId: 1,
-            tenantId: 1,
-            name: 'Full UI',
-            username: 'Full UI',
-            email: 'full@ninjacore.local',
-            profile: 'admin',
-            status: 'online'
-          }));
-        }
-        if (!localStorage.getItem('username')) {
-          localStorage.setItem('username', 'Full UI');
-        }
-        if (!localStorage.getItem('userId')) {
-          localStorage.setItem('userId', '1');
-        }
-        if (!localStorage.getItem('profile')) {
-          localStorage.setItem('profile', 'admin');
-        }
+        const user = {
+          id: 1,
+          userId: 1,
+          tenantId: 1,
+          name: 'Full UI',
+          username: 'Full UI',
+          email: 'full@ninjacore.local',
+          profile: 'admin',
+          status: 'online',
+          configs: {}
+        };
+        localStorage.setItem('token', localStorage.getItem('token') || JSON.stringify('full-backup-static-token'));
+        localStorage.setItem('usuario', localStorage.getItem('usuario') || JSON.stringify(user));
+        localStorage.setItem('username', localStorage.getItem('username') || 'Full UI');
+        localStorage.setItem('profile', localStorage.getItem('profile') || 'admin');
+        localStorage.setItem('userId', localStorage.getItem('userId') || '1');
+        localStorage.setItem('queues', localStorage.getItem('queues') || '[]');
+        localStorage.setItem('filtrosAtendimento', localStorage.getItem('filtrosAtendimento') || JSON.stringify({
+          searchParam: '',
+          pageNumber: 1,
+          status: ['open', 'pending'],
+          showAll: true,
+          count: null,
+          queuesIds: [],
+          withUnreadMessages: false,
+          isNotAssignedUser: false,
+          includeNotQueueDefined: true
+        }));
         if (!window.location.hash || window.location.hash === '#/' || window.location.hash === '#') {
           window.location.replace(`${window.location.pathname}${window.location.search}#/dispute/${encodeURIComponent(clientId)}`);
         }
@@ -53,7 +57,7 @@
   </head>
   <body>
     <div id="q-app"></div>
-    <script src="js/vendor.c3660414.js"></script>
-    <script src="js/app.e903ffdd.js"></script>
+    <script src="js/vendor.54ceaedb.js"></script>
+    <script src="js/app.be74860d.js"></script>
   </body>
 </html>
