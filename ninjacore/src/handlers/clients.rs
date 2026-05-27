@@ -128,7 +128,7 @@ pub async fn list_clients(
             )
             .await?;
         let rows = crate::db::take_many::<ClientListRow>(&mut resp, 0)?;
-        let items: Vec<ClientListItem> = rows
+        let mut items: Vec<ClientListItem> = rows
             .into_iter()
             .map(|row| {
                 let days_left = compute_days_left(&row);
@@ -145,6 +145,15 @@ pub async fn list_clients(
                 }
             })
             .collect();
+        // Most past due first: smallest days_left first (negatives float to top),
+        // rows with no computable days_left go last.
+        items.sort_by(|a, b| match (a.days_left, b.days_left) {
+            (Some(x), Some(y)) => x.cmp(&y),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        });
+        items.truncate(100);
         Ok::<Vec<ClientListItem>, AppError>(items)
     };
     let statuses_fut = load_taxonomy(&state, "taxonomy.client_statuses");
