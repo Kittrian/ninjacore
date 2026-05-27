@@ -24,6 +24,8 @@ export type ClientListItem = {
   monitoringAgency: string;
   reportDate: string;
   updatedAt?: string;
+  /** Days until next credit-report import. Negative = overdue. */
+  daysLeft?: number | null;
 };
 
 export type ClientDetail = ClientListItem & {

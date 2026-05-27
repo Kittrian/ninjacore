@@ -47,11 +47,11 @@ const state = {
     creditMonitoring: [],
   },
   activeAffiliateTab: 'creditBuilder',
-  clientsRenderLimit: 80,
+  clientsRenderLimit: 100,
 };
-const CLIENTS_RENDER_INITIAL_LIMIT = 80;
-const CLIENTS_RENDER_INCREMENT = 120;
-const CLIENTS_SEARCH_RENDER_LIMIT = 120;
+const CLIENTS_RENDER_INITIAL_LIMIT = 100;
+const CLIENTS_RENDER_INCREMENT = 100;
+const CLIENTS_SEARCH_RENDER_LIMIT = 100;
 
 const affiliateMonitoringOrder = ['identityiq', 'myscoreiq', 'smartcredit', 'myfreescorenow'];
 const affiliateMonitoringFallbacks = {
@@ -991,15 +991,26 @@ const updateClientMonitoringCredentialLayout = () => {
 
   const agency = normalizeMonitoringAgency(form.monitoringAgency?.value || '');
   const useTokenOnly = agency === 'smartcredit' || agency === 'myfreescorenow';
+  const useSecretOnly = agency === 'identityiq' || agency === 'myscoreiq';
+  const tokenHasValue = Boolean(String(form.tokenId?.value || '').trim());
   const secretKeyField = form.querySelector('.add-client-secret-key-field');
   const tokenField = form.querySelector('.add-client-token-field');
 
+  // Secret Key visibility:
+  //   hidden when agency is token-only (smartcredit/myfreescorenow)
+  //   hidden when the TOKEN field has any value (user-typed override)
+  //   otherwise visible
   if (secretKeyField) {
-    secretKeyField.hidden = useTokenOnly;
+    secretKeyField.hidden = useTokenOnly || tokenHasValue;
   }
 
+  // TOKEN field visibility:
+  //   hidden when agency is secret-only (identityiq/myscoreiq)
+  //   otherwise visible
   if (tokenField) {
-    tokenField.classList.toggle('token-in-secret-slot', useTokenOnly);
+    tokenField.hidden = useSecretOnly;
+    // Shift token left into the secret-key slot whenever secret is hidden.
+    tokenField.classList.toggle('token-in-secret-slot', useTokenOnly || tokenHasValue);
   }
 };
 
@@ -1409,7 +1420,7 @@ const populateAddClientFormFromClient = (client) => {
   form.monitoringAgency.value = client.monitoringAgency || '';
   form.monitoringUsername.value = client.monitoringUsername || '';
   form.monitoringPassword.value = client.monitoringPassword || '';
-  form.secretKey.value = client.secretKey || '';
+  if (form.secretKey) form.secretKey.value = client.secretKey || '';
   form.tokenId.value = client.tokenId || '';
   form.portalPassword.value = client.portalPassword || '';
   form.language.value = client.language || 'English';
@@ -1441,7 +1452,7 @@ const populateAddClientFormFromClient = (client) => {
   addClientPortalPasswordManual = true;
   addClientSecretKeyManual = true;
   lastDerivedPortalPassword = form.portalPassword.value.trim();
-  lastDerivedSecretKey = form.secretKey.value.trim();
+  lastDerivedSecretKey = form.secretKey ? form.secretKey.value.trim() : '';
   updateClientMonitoringCredentialLayout();
 };
 
@@ -2994,6 +3005,18 @@ const sortClients = (clients) => {
   const key = state.sortKey;
 
   return [...clients].sort((left, right) => {
+    // Primary tier: overdue (daysUntilNextImport < 0) always floats above
+    // non-overdue, regardless of which column the user is sorting by.
+    const leftDays = left.nextImport?.daysUntilNextImport;
+    const rightDays = right.nextImport?.daysUntilNextImport;
+    const leftOverdue = Number.isFinite(leftDays) && leftDays < 0;
+    const rightOverdue = Number.isFinite(rightDays) && rightDays < 0;
+    if (leftOverdue !== rightOverdue) return leftOverdue ? -1 : 1;
+    // Within the overdue tier, always sort most-negative-first (ignore column).
+    if (leftOverdue && rightOverdue && leftDays !== rightDays) {
+      return leftDays - rightDays;
+    }
+
     if (key === 'nextImport') {
       const leftValue = left.nextImport?.daysUntilNextImport;
       const rightValue = right.nextImport?.daysUntilNextImport;
@@ -4726,8 +4749,16 @@ const renderClientDetail = (client) => {
     securityFieldLabel.textContent = usingIdentity ? 'Secret Key' : 'Token';
     securityCodeInput.placeholder = usingIdentity ? 'Secret Key' : 'Token';
     securityCodeInput.value = usingIdentity ? securityValues.identityiq : securityValues.token;
+    // Tokens (SmartCredit / MyFreeScoreNow) aren't true passwords; rendering
+    // them as type=password trips password managers that block paste.
+    securityCodeInput.type = usingIdentity ? 'password' : 'text';
     if (securityCodeToggleButton) {
-      securityCodeToggleButton.setAttribute('aria-label', usingIdentity ? 'Show secret key' : 'Show token');
+      securityCodeToggleButton.setAttribute('aria-label', usingIdentity ? 'Show secret key' : 'Hide token');
+      securityCodeToggleButton.setAttribute(
+        'aria-pressed',
+        usingIdentity ? 'false' : 'true',
+      );
+      securityCodeToggleButton.textContent = usingIdentity ? '◐' : '◑';
     }
     updateMonitoringLinkIndicator(selectedAgency);
   };
@@ -5461,6 +5492,7 @@ const renderClientDetail = (client) => {
       if (state.selectedClientId === client.id && !credentialFieldFocused) {
         renderClientDetail(payload.client);
       }
+      syncSmartCreditClientTokenInput();
     } catch (error) {
       setFormMessage(error.message, true);
     }
@@ -5662,6 +5694,7 @@ const loadClients = async ({ showSkeleton = false } = {}) => {
     setWidgetRefreshHeader(null);
     updateBrowserTabTitle(null);
   }
+  syncSmartCreditClientTokenInput();
 };
 
 const renderClientDetailLoading = () => {
@@ -5728,6 +5761,7 @@ const loadClientDetail = async (clientId) => {
   }
   renderClientDetail(liveClient || payload.client);
   renderClients();
+  syncSmartCreditClientTokenInput();
 };
 
 const deleteClient = async (clientId) => {
@@ -6319,7 +6353,14 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
     const detailShell = document.getElementById('clientDetail');
     const currentMonitoringUsername = String(detailShell?.querySelector('.monitoring-username-input')?.value || '').trim();
     const currentMonitoringPassword = String(detailShell?.querySelector('.monitoring-password-input')?.value || '').trim();
-    const currentMonitoringAgency = selectedClient?.monitoringAgency || '';
+    const activeAgencyToggle = detailShell?.querySelector('.agency-toggle.is-active');
+    const currentMonitoringAgency = String(
+      activeAgencyToggle?.dataset.agency || selectedClient?.monitoringAgency || '',
+    ).trim();
+    const normalizedActiveAgency = normalizeMonitoringAgency(currentMonitoringAgency);
+    const usesTokenField = !normalizedActiveAgency.includes('identity') && !normalizedActiveAgency.includes('iiq');
+    const securityInputValue = String(detailShell?.querySelector('.security-code-input')?.value || '').trim();
+    const currentMonitoringToken = usesTokenField ? securityInputValue : '';
 
     const payload = await request(`/api/clients/${state.selectedClientId}/refresh-report`, {
       method: 'POST',
@@ -6328,6 +6369,8 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
         monitoringAgency: currentMonitoringAgency,
         monitoringUsername: currentMonitoringUsername,
         monitoringPassword: currentMonitoringPassword,
+        monitoringToken: currentMonitoringToken,
+        tokenId: currentMonitoringToken,
       }),
     });
 
@@ -6398,11 +6441,34 @@ const applyIntegrationValues = (formId, values = {}) => {
   if (form.pid) {
     form.pid.value = values.pid || '';
   }
-  if (form.tokenId) {
+  // tokenId on the SmartCredit card is NOT operator-wide; it shows/edits the
+  // currently selected client's per-client monitoring token (DB col
+  // monitoring_token, JSON key tokenId). Skip it here and let
+  // syncSmartCreditClientTokenInput() drive that input.
+  if (form.tokenId && formId !== 'smartCreditIntegrationForm') {
     form.tokenId.value = values.tokenId || '';
   }
   if (form.apiSecret) {
     form.apiSecret.value = values.apiSecret || '';
+  }
+};
+
+// Front-page SmartCredit card's TOKEN input edits the currently selected
+// client's per-client token. If no client is selected, the input is disabled.
+const syncSmartCreditClientTokenInput = () => {
+  const form = byId('smartCreditIntegrationForm');
+  if (!form || !form.tokenId) return;
+  const selected = state.selectedClientId
+    ? state.clients.find((c) => c.id === state.selectedClientId)
+    : null;
+  if (selected) {
+    form.tokenId.value = selected.tokenId || '';
+    form.tokenId.disabled = false;
+    form.tokenId.placeholder = 'Selected client token';
+  } else {
+    form.tokenId.value = '';
+    form.tokenId.disabled = true;
+    form.tokenId.placeholder = 'Select a client first';
   }
 };
 
@@ -6555,6 +6621,7 @@ const loadIntegrations = async () => {
     || state.integrations.smartcredit
     || { tokenId: '', apiSecret: '' };
   applyIntegrationValues('smartCreditIntegrationForm', smartCreditDefault);
+  syncSmartCreditClientTokenInput();
   if (state.selectedClientId) {
     const selectedClient = state.clients.find((client) => client.id === state.selectedClientId);
     if (selectedClient) {
@@ -6700,6 +6767,10 @@ const bindEvents = () => {
     addClientSecretKeyManual = true;
   });
   document.querySelector('#clientForm select[name="monitoringAgency"]')?.addEventListener('change', () => {
+    updateClientMonitoringCredentialLayout();
+  });
+  // Live-toggle Secret Key visibility when TOKEN content changes.
+  document.querySelector('#clientForm input[name="tokenId"]')?.addEventListener('input', () => {
     updateClientMonitoringCredentialLayout();
   });
   document.querySelectorAll('#clientForm [data-password-toggle]').forEach((button) => {
@@ -7119,16 +7190,21 @@ const bindEvents = () => {
 
     try {
       const form = event.currentTarget;
-      const payload = await request('/api/integrations/smartcredit35540', {
-        method: 'PUT',
-        body: JSON.stringify({
-          tokenId: form.tokenId.value,
-          apiSecret: form.apiSecret.value,
-        }),
+      // Per-client only: write tokenId to the selected client.
+      const clientId = state.selectedClientId;
+      const tokenValue = String(form.tokenId.value || '').trim();
+      if (!clientId) {
+        setIntegrationMessage('Select a client first to save a token.', true);
+        return;
+      }
+      await request(`/api/clients/${clientId}/profile`, {
+        method: 'PATCH',
+        body: JSON.stringify({ tokenId: tokenValue }),
       });
-      state.integrations.smartcredit35540 = payload.integration;
-      applyIntegrationValues('smartCreditIntegrationForm', payload.integration);
-      setIntegrationMessage('SmartCredit integration saved.');
+      const c = state.clients.find((x) => x.id === clientId);
+      if (c) c.tokenId = tokenValue;
+      setIntegrationMessage('Client token saved.');
+      syncSmartCreditClientTokenInput();
     } catch (error) {
       setIntegrationMessage(error.message, true);
     }

@@ -28,6 +28,7 @@ use crate::state::AppState;
 
 /// Shape returned for client list rows (matches `toClientListItem` from server.mjs).
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClientListItem {
     pub id: String,
     pub first_name: String,
@@ -37,32 +38,125 @@ pub struct ClientListItem {
     #[serde(default)] pub email: Option<String>,
     #[serde(default)] pub phone: Option<String>,
     #[serde(default)] pub updated_at: Option<String>,
+    /// Days until next credit-report import. Negative = overdue.
+    /// Computed server-side from next_import_mode + related anchor fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub days_left: Option<i64>,
+}
+
+/// Raw client row used to compute days_left before serializing.
+#[derive(Debug, Deserialize)]
+struct ClientListRow {
+    id: String,
+    #[serde(default)] first_name: Option<String>,
+    #[serde(default)] last_name: Option<String>,
+    #[serde(default)] status: Option<String>,
+    #[serde(default)] phase: Option<String>,
+    #[serde(default)] email: Option<String>,
+    #[serde(default)] phone: Option<String>,
+    #[serde(default)] updated_at: Option<String>,
+    #[serde(default)] next_import_mode: Option<String>,
+    #[serde(default)] next_import_int: Option<Value>,
+    #[serde(default)] manual_next_import_start_days: Option<Value>,
+    #[serde(default)] manual_next_import_set_date: Option<String>,
+    #[serde(default)] refresh_next_import_start_date: Option<String>,
+    #[serde(default)] report_date: Option<String>,
+}
+
+fn parse_iso_date(s: &str) -> Option<time::Date> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() { return None; }
+    // Accept YYYY-MM-DD or full ISO timestamps; take first 10 chars.
+    let head: String = trimmed.chars().take(10).collect();
+    time::Date::parse(&head, &time::macros::format_description!("[year]-[month]-[day]")).ok()
+}
+
+fn parse_i64(v: &Value) -> Option<i64> {
+    match v {
+        Value::Number(n) => n.as_i64(),
+        Value::String(s) => s.trim().parse::<i64>().ok(),
+        _ => None,
+    }
+}
+
+fn today_utc() -> time::Date {
+    time::OffsetDateTime::now_utc().date()
+}
+
+fn compute_days_left(row: &ClientListRow) -> Option<i64> {
+    let mode = row.next_import_mode.as_deref().unwrap_or("manual").to_ascii_lowercase();
+    let today = today_utc();
+    if mode == "refresh-success" {
+        let anchor = row
+            .refresh_next_import_start_date
+            .as_deref()
+            .and_then(parse_iso_date)
+            .or_else(|| row.report_date.as_deref().and_then(parse_iso_date))
+            .unwrap_or(today);
+        let elapsed = (today - anchor).whole_days().max(0);
+        return Some(35 - elapsed);
+    }
+    // manual mode
+    let start_days = row
+        .manual_next_import_start_days
+        .as_ref()
+        .and_then(parse_i64)
+        .or_else(|| row.next_import_int.as_ref().and_then(parse_i64))?;
+    let anchor = row
+        .manual_next_import_set_date
+        .as_deref()
+        .and_then(parse_iso_date)
+        .unwrap_or(today);
+    let elapsed = (today - anchor).whole_days().max(0);
+    Some(start_days - elapsed)
 }
 
 pub async fn list_clients(
     _user: AuthUser,
     State(state): State<AppState>,
 ) -> AppResult<Json<Value>> {
-    let mut __resp = state
-        .db
-        .query(
-            "SELECT id, first_name, last_name, status, phase, email, phone, updated_at \
-             FROM clients WHERE string::lowercase(status) = 'client' ORDER BY last_name, first_name",
-        )
-        .await?;
-    let clients: Vec<ClientListItem> = crate::db::take_many(&mut __resp, 0)?;
+    // Fan out the three independent reads concurrently on the Tokio runtime.
+    let clients_fut = async {
+        let mut resp = state
+            .db
+            .query(
+                "SELECT id, first_name, last_name, status, phase, email, phone, updated_at, \
+                        next_import_mode, next_import_int, \
+                        manual_next_import_start_days, manual_next_import_set_date, \
+                        refresh_next_import_start_date, report_date \
+                 FROM clients WHERE status = 'Client' ORDER BY last_name, first_name",
+            )
+            .await?;
+        let rows = crate::db::take_many::<ClientListRow>(&mut resp, 0)?;
+        let items: Vec<ClientListItem> = rows
+            .into_iter()
+            .map(|row| {
+                let days_left = compute_days_left(&row);
+                ClientListItem {
+                    id: row.id,
+                    first_name: row.first_name.unwrap_or_default(),
+                    last_name: row.last_name.unwrap_or_default(),
+                    status: row.status.unwrap_or_default(),
+                    phase: row.phase,
+                    email: row.email,
+                    phone: row.phone,
+                    updated_at: row.updated_at,
+                    days_left,
+                }
+            })
+            .collect();
+        Ok::<Vec<ClientListItem>, AppError>(items)
+    };
+    let statuses_fut = load_taxonomy(&state, "taxonomy.client_statuses");
+    let phases_fut = load_taxonomy(&state, "taxonomy.client_phases");
 
-    let statuses = load_taxonomy(&state, "taxonomy.client_statuses")
-        .await
-        .unwrap_or_else(default_statuses);
-    let phases = load_taxonomy(&state, "taxonomy.client_phases")
-        .await
-        .unwrap_or_else(default_phases);
+    let (clients_res, statuses_res, phases_res) =
+        tokio::join!(clients_fut, statuses_fut, phases_fut);
 
     Ok(Json(json!({
-        "statuses": statuses,
-        "phases": phases,
-        "clients": clients,
+        "statuses": statuses_res.unwrap_or_else(default_statuses),
+        "phases": phases_res.unwrap_or_else(default_phases),
+        "clients": clients_res?,
     })))
 }
 
@@ -253,7 +347,7 @@ pub async fn patch_profile(
     let monitoring_agency = pick("monitoringAgency");
     let monitoring_user = pick("monitoringUsername");
     let monitoring_pass = pick("monitoringPassword");
-    let monitoring_token = pick("monitoringToken");
+    let monitoring_token = pick("tokenId");
     let goal = pick("goal");
     let notes = pick("notes");
     let yearly_income = pick("yearlyIncome");
@@ -356,8 +450,10 @@ pub async fn patch_profile(
     let updated: Option<Value> = crate::db::take_one(&mut __resp, 0)?;
     let client = updated.ok_or(AppError::NotFound)?;
 
-    let statuses = append_taxonomy(&state, "taxonomy.client_statuses", &status).await?;
-    let phases = append_taxonomy(&state, "taxonomy.client_phases", &phase).await?;
+    let (statuses, phases) = tokio::try_join!(
+        append_taxonomy(&state, "taxonomy.client_statuses", &status),
+        append_taxonomy(&state, "taxonomy.client_phases", &phase),
+    )?;
 
     Ok(Json(json!({
         "ok": true,
@@ -376,7 +472,7 @@ pub struct RefreshReportBody {
     #[serde(default)] pub monitoring_agency: Option<String>,
     #[serde(default)] pub monitoring_username: Option<String>,
     #[serde(default)] pub monitoring_password: Option<String>,
-    #[serde(default)] pub monitoring_token: Option<String>,
+    #[serde(default, rename = "tokenId")] pub monitoring_token: Option<String>,
     #[serde(default)] pub secret_key: Option<String>,
 }
 
@@ -393,16 +489,35 @@ pub async fn refresh_report(
     persist_refresh_overrides(&state, &id, &body).await?;
 
     let row = load_client_raw(&state, &id).await?;
-    let camel = client_to_camel(&row);
+    let mut camel = client_to_camel(&row);
+
+    // Prefer the agency the operator submitted with this refresh over whatever
+    // is in the row — the persist may not have settled yet, and the form is
+    // the source of truth for "what to run now".
+    let body_agency = body
+        .monitoring_agency
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if let Some(agency_override) = body_agency {
+        if let Some(obj) = camel.as_object_mut() {
+            obj.insert(
+                "monitoringAgency".into(),
+                Value::String(agency_override.to_string()),
+            );
+        }
+    }
 
     let agency_raw = camel
         .get("monitoringAgency")
         .and_then(Value::as_str)
         .unwrap_or("");
     let runner = agency_runner_type(agency_raw).ok_or_else(|| {
-        AppError::BadRequest(
-            "This client is not set to an IdentityIQ or SmartCredit browser-run service.".into(),
-        )
+        AppError::BadRequest(format!(
+            "This client's monitoring agency ({:?}) is not a supported browser-run service \
+             (IdentityIQ, SmartCredit, MyFreeScoreNow).",
+            agency_raw
+        ))
     })?;
 
     let params = StartParams {
@@ -498,7 +613,7 @@ fn client_to_camel(row: &Value) -> Value {
         "monitoringAgency": f("monitoring_agency"),
         "monitoringUsername": f("monitoring_username"),
         "monitoringPassword": f("monitoring_password"),
-        "monitoringToken": f("monitoring_token"),
+        "tokenId": f("monitoring_token"),
         "secretKey": f("secret_key"),
     })
 }

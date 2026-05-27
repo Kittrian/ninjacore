@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import './globals.css';
+import { Providers } from './providers';
 
 export const metadata: Metadata = {
   title: 'NinjaCore',
@@ -21,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span className="ml-auto text-xs text-white/40">Next.js 15 · Edge · Rust API</span>
           </nav>
         </header>
-        <main className="flex-1">{children}</main>
+        <main className="flex-1"><Providers>{children}</Providers></main>
         <footer className="text-xs text-white/30 text-center py-4">
           ninjacore-web · OpenNext on Cloudflare Workers
         </footer>

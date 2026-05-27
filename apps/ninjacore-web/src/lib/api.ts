@@ -34,7 +34,6 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
     method: opts.method || 'GET',
     headers,
     body: opts.body === undefined ? undefined : typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body),
-    // @ts-expect-error Next.js extends RequestInit with `next`
     next: opts.revalidate !== undefined || opts.tags ? { revalidate: opts.revalidate, tags: opts.tags } : undefined,
   });
 
