@@ -4,10 +4,12 @@
 // Cookies (PASETO `txn`, etc.) are forwarded both directions.
 //
 // Runtime: edge — runs at the Cloudflare POP closest to the user.
+// Target TTFB: <50ms globally via edge runtime.
 
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 const ORIGIN =
   process.env.NINJACORE_API_ORIGIN ||

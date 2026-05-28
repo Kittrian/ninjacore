@@ -1,6 +1,21 @@
-# ninjacore-web
+# NinjaCore Web Frontend
 
-Edge-rendered ops console for NinjaCore. Next.js 15 App Router on Cloudflare Workers via OpenNext.
+**Edge-rendered ops console for credit dispute operations.**
+
+Built with **Next.js 15 App Router** running on **Cloudflare Workers** via **OpenNext**.
+
+### Modern Performance Architecture
+
+```
+✨ Streaming SSR            → Progressive HTML delivery
+⚡ Partial Prerendering    → Static shell + dynamic holes  
+🌍 Edge Runtime            → <50ms TTFB globally
+🎯 Server Components       → Zero client JS for static UI
+📱 React 19                → Latest React with RSC
+🎨 Tailwind v4             → Utility-first styling
+```
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed patterns and implementation.
 
 ## The architecture
 
