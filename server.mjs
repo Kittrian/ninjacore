@@ -8829,7 +8829,7 @@ const findClientForSync = (clients, criteria) => {
   return matches[0] || null;
 };
 
-const serveStatic = async (res, pathname) => {
+const serveStatic = async (res, pathname, queryString = '') => {
   let requested = pathname === '/' ? '/index.html' : pathname;
   if (pathname === '/billing') {
     requested = '/billing.html';
@@ -8862,7 +8862,60 @@ const serveStatic = async (res, pathname) => {
   try {
     const ext = path.extname(filePath);
     const file = await fs.readFile(filePath);
-    send(res, 200, file, contentTypes[ext] ?? 'application/octet-stream');
+    const ctx = requestContext.getStore();
+    const activeOrigin = String(ctx?.requestOrigin || '').trim();
+    const requestHeaders = String(ctx?.requestHeaders || '').trim();
+    const acceptEncoding = String(ctx?.acceptEncoding || '').trim();
+    const ifNoneMatch = String(ctx?.ifNoneMatch || '').trim();
+    const method = String(ctx?.method || '').toUpperCase();
+    const corsHeaders = buildCorsHeaders(activeOrigin, requestHeaders);
+
+    const headers = {
+      'Content-Type': contentTypes[ext] ?? 'application/octet-stream',
+      ...corsHeaders,
+    };
+
+    headers.Vary = 'Accept-Encoding, Origin';
+
+    const hasVersionParam = /v=/.test(queryString);
+    const canEtag = method === 'GET' || method === 'HEAD';
+    let etag = null;
+
+    if (canEtag && file.length >= ETAG_MIN_BYTES) {
+      etag = computeWeakEtag(file);
+      headers.ETag = etag;
+      if (ifNoneMatch && ifNoneMatch === etag) {
+        res.writeHead(304, headers);
+        res.end();
+        return;
+      }
+    }
+
+    if (hasVersionParam) {
+      headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+    } else if (ext === '.html') {
+      headers['Cache-Control'] = 'public, max-age=3600';
+    } else {
+      headers['Cache-Control'] = 'public, max-age=3600';
+    }
+
+    const encoding = file.length >= COMPRESS_MIN_BYTES ? pickEncoding(acceptEncoding) : null;
+    if (encoding) {
+      try {
+        const compressed = compressBuffer(file, encoding);
+        headers['Content-Encoding'] = encoding;
+        headers['Content-Length'] = String(compressed.length);
+        res.writeHead(200, headers);
+        res.end(method === 'HEAD' ? undefined : compressed);
+        return;
+      } catch {
+        // Fall through to uncompressed
+      }
+    }
+
+    headers['Content-Length'] = String(file.length);
+    res.writeHead(200, headers);
+    res.end(method === 'HEAD' ? undefined : file);
   } catch {
     notFound(res);
   }
@@ -8910,16 +8963,24 @@ const server = createServer((req, res) => {
     const originalWriteHead = res.writeHead.bind(res);
     res.writeHead = (statusCode, statusMessageOrHeaders, maybeHeaders) => {
       if (typeof statusMessageOrHeaders === 'string') {
+        const originalHeaders = toHeaderObject(maybeHeaders);
         const mergedHeaders = {
-          ...toHeaderObject(maybeHeaders),
+          ...originalHeaders,
           ...corsHeaders,
         };
+        if (originalHeaders.Vary && corsHeaders.Vary && originalHeaders.Vary !== corsHeaders.Vary) {
+          mergedHeaders.Vary = `${originalHeaders.Vary}, ${corsHeaders.Vary}`.split(', ').filter((v, i, a) => a.indexOf(v) === i).join(', ');
+        }
         return originalWriteHead(statusCode, statusMessageOrHeaders, mergedHeaders);
       }
+      const originalHeaders = toHeaderObject(statusMessageOrHeaders);
       const mergedHeaders = {
-        ...toHeaderObject(statusMessageOrHeaders),
+        ...originalHeaders,
         ...corsHeaders,
       };
+      if (originalHeaders.Vary && corsHeaders.Vary && originalHeaders.Vary !== corsHeaders.Vary) {
+        mergedHeaders.Vary = `${originalHeaders.Vary}, ${corsHeaders.Vary}`.split(', ').filter((v, i, a) => a.indexOf(v) === i).join(', ');
+      }
       return originalWriteHead(statusCode, mergedHeaders);
     };
 
@@ -11780,7 +11841,7 @@ const server = createServer((req, res) => {
     return;
   }
 
-    await serveStatic(res, pathname);
+    await serveStatic(res, pathname, url.search);
     } catch (error) {
       send(res, 500, { error: error?.message || 'Server error.' });
     }
