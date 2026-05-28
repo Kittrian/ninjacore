@@ -8866,7 +8866,21 @@ const serveStatic = async (res, pathname) => {
 
   try {
     const file = await fs.readFile(filePath);
-    send(res, 200, file, contentTypes[ext] ?? 'application/octet-stream');
+    const contentType = contentTypes[ext] ?? 'application/octet-stream';
+
+    const headers = {
+      'Content-Type': contentType,
+      'Content-Length': String(file.length),
+    };
+
+    if (isAsset) {
+      headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+    } else {
+      headers['Cache-Control'] = 'public, max-age=3600';
+    }
+
+    res.writeHead(200, headers);
+    res.end(file);
   } catch {
     notFound(res);
   }
