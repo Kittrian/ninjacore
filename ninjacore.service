@@ -5,7 +5,7 @@ Requires=surrealdb.service
 
 [Service]
 Type=simple
-User=ninjacore
+User=root
 WorkingDirectory=/opt/ninjacore/ninjacore
 Environment="BIND_ADDR=0.0.0.0:8080"
 Environment="SURREAL_URL=http://127.0.0.1:8000"

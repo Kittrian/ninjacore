@@ -1,0 +1,19 @@
+[Unit]
+Description=NinjaCore Next.js Frontend
+After=network.target ninjacore.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ninjacore/apps/ninjacore-web
+Environment="PORT=3100"
+Environment="NODE_ENV=production"
+Environment="NINJACORE_API_ORIGIN=http://127.0.0.1:8080"
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
