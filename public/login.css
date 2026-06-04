@@ -1,29 +1,73 @@
-.auth-active {
+html.auth-active,
+body.auth-active,
+body {
   background: #ebecf0;
   font-family: "Montserrat", "Space Grotesk", sans-serif;
   letter-spacing: -0.2px;
   font-size: 16px;
 }
 
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+html.auth-active body,
+body.auth-active {
+  min-height: 100vh;
+}
+
+.login-form,
+.auth-active .login-form {
+  padding: 16px;
+  width: min(100%, 420px);
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+html.auth-active body,
+body.auth-active {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
 .auth-active div,
-.auth-active p {
+.auth-active p,
+.login-form div,
+.login-form p {
   color: #babecc;
   text-shadow: 1px 1px 1px #fff;
 }
 
-.auth-active .login-form {
-  padding: 16px;
-  width: 320px;
-  margin: 0 auto;
+.login-form {
+  padding-top: clamp(24px, 7vh, 72px);
+  padding-bottom: 32px;
 }
 
+.segment,
 .auth-active .segment {
   padding: 32px 0;
   text-align: center;
 }
 
+.segment h1 {
+  margin: 0;
+  font-size: clamp(3rem, 8vw, 4.5rem);
+  line-height: 0.92;
+}
+
+.login-form label,
+.auth-active label {
+  display: block;
+  margin-bottom: 24px;
+  width: 100%;
+}
+
 .auth-active button,
-.auth-active input {
+.auth-active input,
+.login-form button,
+.login-form input {
   border: 0;
   outline: 0;
   font-size: 16px;
@@ -31,12 +75,6 @@
   padding: 16px;
   background-color: #ebecf0;
   text-shadow: 1px 1px 0 #fff;
-}
-
-.auth-active label {
-  display: block;
-  margin-bottom: 24px;
-  width: 100%;
 }
 
 .auth-active input {
@@ -78,6 +116,15 @@
   display: block;
   width: 100%;
   color: #ae1100;
+}
+
+.login-form .sso-login-buttons {
+  width: 100%;
+}
+
+.login-form .sso-button {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .auth-message {
