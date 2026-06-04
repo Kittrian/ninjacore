@@ -2,8 +2,15 @@
   import '../app.postcss';
   import { page } from '$app/stores';
   import { dev } from '$app/environment';
+  import { onMount } from 'svelte';
+  import { observeVitals } from '$lib/vitals';
 
   let isDark = true;
+
+  onMount(() => {
+    // Start Web Vitals monitoring
+    observeVitals();
+  });
 </script>
 
 <svelte:head>

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { useClient } from '$lib/stores/clients';
-  import { Loader2, ChevronLeft, BarChart3, Users } from 'lucide-svelte';
+  import LetterGenerator from '$components/LetterGenerator.svelte';
+  import { Loader2, ChevronLeft, BarChart3, Users, Mail } from 'lucide-svelte';
 
   const clientQuery = useClient($page.params.id);
 </script>
@@ -116,6 +117,15 @@
           </div>
         </div>
       {/if}
+
+      {/* Letter Generation */}
+      <div class="rounded-lg border border-white/10 bg-white/5 p-6">
+        <div class="flex items-center gap-2 mb-4">
+          <Mail class="w-5 h-5 text-blue-400" />
+          <h2 class="text-xl font-semibold">Generate Letters</h2>
+        </div>
+        <LetterGenerator clientId={client.id} />
+      </div>
     </div>
   {/if}
 </div>
