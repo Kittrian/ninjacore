@@ -42,10 +42,16 @@ export function sendVital(vital: Vital) {
   // Log in development
   if (typeof window !== 'undefined') {
     console.log(`[${vital.name}] ${vital.value.toFixed(0)}ms (${vital.rating})`);
-  }
 
-  // Send to backend (optional)
-  // fetch('/api/vitals', { method: 'POST', body: JSON.stringify(analytics) });
+    // Send to backend
+    fetch('/api/vitals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(analytics),
+    }).catch(() => {
+      // Silently ignore network errors
+    });
+  }
 }
 
 export function observeVitals() {

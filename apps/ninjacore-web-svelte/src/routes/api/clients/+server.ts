@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 
-// Mock data for now - will connect to actual API
+// Fallback mock data when Rust backend is unavailable
 const mockClients = [
   {
     id: '1',
@@ -41,8 +41,47 @@ const mockClients = [
   },
 ];
 
+async function forwardToRustBackend(path: string, options?: RequestInit) {
+  const socketPath = process.env.RUST_API_ORIGIN || 'unix:///tmp/ninjacore.sock';
+
+  // Only attempt Unix socket connection if Rust backend is configured
+  if (!socketPath.startsWith('unix://')) {
+    return null;
+  }
+
+  try {
+    // In Bun, we can use unix:// URLs directly in fetch
+    const url = `http://${socketPath}${path}`;
+    const response = await fetch(url, {
+      method: options?.method || 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+      body: options?.body,
+    } as any);
+
+    if (response.ok) {
+      return response.json();
+    }
+  } catch (err) {
+    // Rust backend not available, fall back to mock data
+    console.warn(`Rust backend unavailable (${socketPath}), using mock data`);
+  }
+
+  return null;
+}
+
 export const GET: RequestHandler = async () => {
   try {
+    // Try to get real data from Rust backend
+    const backendData = await forwardToRustBackend('/api/clients');
+
+    if (backendData) {
+      return json(backendData);
+    }
+
+    // Fall back to mock data
     return json({
       statuses: ['active', 'completed', 'on-hold'],
       phases: ['intake', 'dispute', 'monitoring', 'closed'],
