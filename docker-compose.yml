@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    ports:
+      - "8000:8000"
+    command: start --log debug --user root --pass change-me
+    environment:
+      SURREAL_LOG: debug
+    volumes:
+      - surreal_data:/var/lib/surrealdb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ninjacore-api:
+    build:
+      context: ./ninjacore
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      BIND_ADDR: 0.0.0.0:8080
+      SURREAL_URL: http://surrealdb:8000
+      SURREAL_NS: ninja
+      SURREAL_DB: dispute
+      SURREAL_USER: root
+      SURREAL_PASS: change-me
+      RUST_LOG: ninjacore=debug,tower_http=info,axum=info
+    depends_on:
+      surrealdb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ninjacore-web:
+    build:
+      context: ./apps/ninjacore-web
+      dockerfile: Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      NINJACORE_API_ORIGIN: http://ninjacore-api:8080
+    depends_on:
+      - ninjacore-api
+
+volumes:
+  surreal_data:
