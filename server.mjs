@@ -12,6 +12,16 @@ import { Server as SocketIOServer } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { matchRoute } from './routes/index.mjs';
+import {
+  getCachedAiResult,
+  cacheAiResult,
+  getRedisClient,
+  closeRedisClient,
+  getCachedReportData,
+  cacheReportData,
+  invalidateReportDataCache,
+  memoizeReportFetch
+} from './lib/cache.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -734,6 +744,14 @@ const callGroqRewrite = async ({ prompt = '' } = {}) => {
   if (!groqApiKey) {
     throw new Error('GROQ_API_KEY is missing on server.');
   }
+
+  const promptHash = createHash('sha256').update(String(prompt || '')).digest('hex');
+
+  const cached = await getCachedAiResult(promptHash);
+  if (cached) {
+    return cached.text;
+  }
+
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -755,6 +773,8 @@ const callGroqRewrite = async ({ prompt = '' } = {}) => {
   if (!response.ok || !text) {
     throw new Error(String(payload?.error?.message || payload?.error || `Groq request failed (${response.status})`));
   }
+
+  await cacheAiResult(promptHash, { text });
   return text;
 };
 
@@ -762,6 +782,14 @@ const callAnthropicRewrite = async ({ prompt = '' } = {}) => {
   if (!anthropicApiKey) {
     throw new Error('ANTHROPIC_API_KEY is missing on server.');
   }
+
+  const promptHash = createHash('sha256').update(String(prompt || '')).digest('hex');
+
+  const cached = await getCachedAiResult(promptHash);
+  if (cached) {
+    return cached.text;
+  }
+
   const models = [
     String(process.env.ANTHROPIC_MODEL || '').trim(),
     'claude-sonnet-4-6',
@@ -778,6 +806,7 @@ const callAnthropicRewrite = async ({ prompt = '' } = {}) => {
     'claude-3-haiku-20240307',
   ].filter(Boolean);
 
+  const systemPrompt = 'You are an expert credit dispute letter writer. Keep output specific and ready to use.';
   let lastError = null;
   for (const model of models) {
     try {
@@ -792,7 +821,13 @@ const callAnthropicRewrite = async ({ prompt = '' } = {}) => {
           model,
           max_tokens: 1400,
           temperature: 0.6,
-          system: 'You are an expert credit dispute letter writer. Keep output specific and ready to use.',
+          system: [
+            {
+              type: 'text',
+              text: systemPrompt,
+              cache_control: { type: 'ephemeral' }
+            }
+          ],
           messages: [{ role: 'user', content: String(prompt || '') }],
         }),
       });
@@ -803,6 +838,8 @@ const callAnthropicRewrite = async ({ prompt = '' } = {}) => {
       if (!response.ok || !text) {
         throw new Error(String(payload?.error?.message || payload?.error || `Anthropic request failed (${response.status})`));
       }
+
+      await cacheAiResult(promptHash, { text });
       return text;
     } catch (error) {
       lastError = error;
@@ -7045,7 +7082,7 @@ const fetchAddressSuggestions = async (query = '') => {
   const mapboxToken = String(
     process.env.MAPBOX_TOKEN
     || process.env.MAPBOX_PUBLIC_TOKEN
-    || 'pk.eyJ1IjoiYW50aW9jaDc3IiwiYSI6ImNtcGRnNG82bTA1dGQycG4yd3ZlZTRsaHAifQ.9hEconWR_mjoR11f05oCRQ',
+    || '',
   ).trim();
   if (!mapboxToken) {
     return { provider: 'none', suggestions: [] };
@@ -8502,6 +8539,16 @@ const fetchMyFreeScoreNowCurrentReportWithBearer = async (bearerToken, memberEma
   });
 };
 
+const fetchMyFreeScoreNowCurrentReportWithBearerCached = async (bearerToken, memberEmail, clientToken, clientId) => {
+  return memoizeReportFetch(
+    clientId || `${memberEmail}:${clientToken}`,
+    'myfreescorenow',
+    clientToken,
+    () => fetchMyFreeScoreNowCurrentReportWithBearer(bearerToken, memberEmail, clientToken),
+    1800
+  );
+};
+
 const checkMyFreeScoreNow3bStatus = async (integration, memberEmail, clientToken) => {
   const { token } = await loginMyFreeScoreNow(integration);
   return myFreeScoreNowRequest({
@@ -8829,6 +8876,8 @@ const findClientForSync = (clients, criteria) => {
   return matches[0] || null;
 };
 
+const distDir = path.join(__dirname, 'dist');
+
 const serveStatic = async (res, pathname, queryString = '') => {
   let requested = pathname === '/' ? '/index.html' : pathname;
   if (pathname === '/billing') {
@@ -8852,15 +8901,18 @@ const serveStatic = async (res, pathname, queryString = '') => {
   if (pathname === '/learning' || pathname === '/Learning') {
     requested = '/learning.html';
   }
-  const filePath = path.join(publicDir, requested);
 
-  if (!filePath.startsWith(publicDir)) {
+  const ext = path.extname(requested);
+  const isAsset = ['.js', '.css', '.map'].includes(ext);
+  const baseDir = isAsset ? distDir : publicDir;
+  const filePath = path.join(baseDir, requested);
+
+  if (!filePath.startsWith(baseDir)) {
     notFound(res);
     return;
   }
 
   try {
-    const ext = path.extname(filePath);
     const file = await fs.readFile(filePath);
     const ctx = requestContext.getStore();
     const activeOrigin = String(ctx?.requestOrigin || '').trim();
@@ -11004,7 +11056,7 @@ const server = createServer((req, res) => {
 
         let latestDetails = null;
         try {
-          latestDetails = await fetchMyFreeScoreNowCurrentReportWithBearer(bearerToken, memberEmail, token);
+          latestDetails = await fetchMyFreeScoreNowCurrentReportWithBearerCached(bearerToken, memberEmail, token, client.id);
           debugSteps.push('fetch-3B-json: success');
         } catch (error) {
           debugSteps.push(`fetch-3B-json: failed -> ${error.message}`);

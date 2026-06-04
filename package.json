@@ -9,16 +9,19 @@
     "ai": "^6.0.182",
     "dotenv": "^17.4.2",
     "playwright": "1.59.1",
+    "redis": "^4.6.13",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.3"
   },
   "scripts": {
-    "start": "node server.mjs",
+    "build": "node build.mjs",
+    "start": "npm run build && node server.mjs",
     "deploy:frontend:live": "./scripts/deploy-live.sh frontend",
     "deploy:backend:live": "./scripts/deploy-live.sh backend",
     "deploy:full:live": "./scripts/deploy-live.sh full"
   },
   "devDependencies": {
+    "esbuild": "^0.21.5",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   }
