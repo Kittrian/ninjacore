@@ -1,22 +1,14 @@
 [Unit]
-Description=NinjaCore SvelteKit Frontend (Bun)
+Description=NinjaCore SvelteKit Frontend
 After=network.target
-Wants=ninjacore-api.service
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/user/ninjacore/apps/ninjacore-web-svelte
+WorkingDirectory=/opt/ninjacore/apps/ninjacore-web-svelte
 
-# Bun runtime
-ExecStart=/root/.bun/bin/bun run start
-
-# Performance: Pin to CPU cores 0-3 (Axum uses 4-7)
-CPUAffinity=0-3
-
-# Resource limits
-MemoryLimit=512M
-MemoryAccounting=yes
+# Run the SvelteKit dev server (which serves the built app)
+ExecStart=/usr/bin/node build/index.js
 
 # Auto-restart on failure
 Restart=on-failure
@@ -26,10 +18,11 @@ RestartSec=5s
 StandardOutput=journal
 StandardError=journal
 
-# Environment
+# Environment variables
 Environment="NODE_ENV=production"
-Environment="RUST_API_ORIGIN=unix:///tmp/ninjacore.sock"
-Environment="API_PORT=3100"
+Environment="ORIGIN=http://5.78.214.176:3100"
+Environment="PROTOCOL_HEADER=x-forwarded-proto"
+Environment="HOST_HEADER=x-forwarded-host"
 
 [Install]
 WantedBy=multi-user.target
