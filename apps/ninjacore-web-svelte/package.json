@@ -20,6 +20,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@sveltejs/adapter-node": "^5.5.4",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@types/bun": "latest",
     "autoprefixer": "^10.5.0",

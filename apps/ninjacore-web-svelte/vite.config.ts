@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
-import { sveltekit } from '@sveltejs/vite-plugin-svelte';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
-  plugins: [sveltekit()],
+  plugins: [svelte()],
   server: {
     fs: {
       strict: false,
