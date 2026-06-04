@@ -1,0 +1,32 @@
+{
+  "name": "ninjacore-web-svelte",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "lint": "prettier --write .",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sveltejs/kit": "^2.63.0",
+    "@tanstack/svelte-query": "^6.1.34",
+    "lucide-svelte": "^1.0.1",
+    "svelte": "^5.56.1",
+    "tailwindcss": "^4.3.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@types/bun": "latest",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.15",
+    "prettier": "^3.3.3",
+    "svelte-check": "^4.1.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}
