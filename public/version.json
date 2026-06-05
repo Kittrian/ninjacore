@@ -1,5 +1,5 @@
 {
-  "frontendVersion": "v3.17",
-  "buildVersion": "20260605-13",
-  "appScriptVersion": "v3.17 login shadow cleanup and polish"
+  "frontendVersion": "v3.18",
+  "buildVersion": "20260605-14",
+  "appScriptVersion": "v3.18 removed page nav links"
 }
