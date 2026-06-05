@@ -1013,6 +1013,19 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
 };
 
       (() => {
+        const ensureDashboardAuth = async () => {
+          try {
+            const response = await fetch('/api/auth/status', { credentials: 'include' });
+            const data = response.ok ? await response.json() : null;
+            if (data?.authenticated) {
+              return true;
+            }
+          } catch {
+          }
+          window.location.replace('/');
+          return false;
+        };
+
         const escapeHtml = (value = '') => String(value ?? '')
           .replaceAll('&', '&amp;')
           .replaceAll('<', '&lt;')
@@ -1105,14 +1118,24 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
           });
         };
 
-        window.setTimeout(() => {
+        window.setTimeout(async () => {
+          if (!(await ensureDashboardAuth())) {
+            return;
+          }
+
           const clientsList = document.getElementById('clientsList');
           if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
             return;
           }
 
           fetch('/api/clients', { credentials: 'include' })
-            .then((response) => (response.ok ? response.json() : null))
+            .then((response) => {
+              if (response.status === 401) {
+                window.location.replace('/');
+                return null;
+              }
+              return response.ok ? response.json() : null;
+            })
             .then((data) => {
               if (!data) {
                 return;
@@ -1130,7 +1153,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     </script>
     <script>
       (() => {
-        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260605-03';
+        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260605-04';
         const dashboardHubModeStorageKey = 'tools-ninja-dashboard-hub-mode';
         const heroWidgetFrame = () => document.querySelector('.hero-widget-frame');
         const panes = {
