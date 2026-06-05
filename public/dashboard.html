@@ -1050,38 +1050,214 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
           || 'Client'
         );
 
-        const renderRows = (clients) => clients.map((client) => {
-          const id = pick(client, 'id');
-          const nextImport = pick(client, 'daysLeft', 'days_left', 'nextImportInt', 'next_import_int') || '--';
-          const contact = [pick(client, 'email'), pick(client, 'phone')].filter(Boolean).join(' • ') || 'N/A';
+        const digitsOnly = (value = '') => String(value || '').replace(/\D/g, '');
+
+        const formatPhoneNumber = (value = '') => {
+          const digits = digitsOnly(value);
+          const normalized = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+          if (normalized.length !== 10) {
+            return String(value || '').trim();
+          }
+          return `(${normalized.slice(0, 3)})${normalized.slice(3, 6)}-${normalized.slice(6)}`;
+        };
+
+        const parseDateValue = (value = '') => {
+          const clean = String(value || '').trim();
+          if (!clean) {
+            return null;
+          }
+          const dateOnly = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+          if (dateOnly) {
+            const parsed = new Date(
+              Number.parseInt(dateOnly[1], 10),
+              Number.parseInt(dateOnly[2], 10) - 1,
+              Number.parseInt(dateOnly[3], 10),
+            );
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+          }
+          const parsed = new Date(clean);
+          return Number.isNaN(parsed.getTime()) ? null : parsed;
+        };
+
+        const formatReportDateCell = (reportDate) => {
+          const parsed = parseDateValue(reportDate);
+          if (!parsed) {
+            return '--';
+          }
+          return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        };
+
+        const getClientDaysLeft = (client) => {
+          const raw = client?.nextImport?.daysUntilNextImport
+            ?? client?.daysLeft
+            ?? client?.days_left
+            ?? client?.nextImportInt
+            ?? client?.next_import_int;
+          const parsed = Number.parseInt(String(raw ?? '').trim(), 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const formatNextImport = (days) => (
+          Number.isFinite(days) ? `${days} day${Math.abs(days) === 1 ? '' : 's'}` : '--'
+        );
+
+        const renderDaysLeftCell = (client) => {
+          const days = getClientDaysLeft(client);
+          const classes = ['next-import-edit-button', 'nt-liquid-status-pill'];
+          if (!Number.isFinite(days)) {
+            classes.push('nt-liquid-status-muted');
+            return `<span class="${classes.join(' ')}">--</span>`;
+          }
+          if (days < 0) {
+            classes.push('nt-liquid-status-overdue');
+          } else if (days === 0) {
+            classes.push('nt-liquid-status-due');
+          } else if (days <= 7) {
+            classes.push('nt-liquid-status-warning');
+          } else {
+            classes.push('nt-liquid-status-good');
+          }
+          return `<button class="${classes.join(' ')}" type="button" data-action="next-import" data-next-import-days="${days}" aria-label="Edit days left">${formatNextImport(days)}</button>`;
+        };
+
+        const getMonitoringService = (client = {}) => {
+          const source = `${pick(client, 'monitoringAgency', 'monitoring_agency')} ${pick(client, 'creditReportSource', 'credit_report_source')}`.toLowerCase();
+          if (source.includes('identity')) {
+            return { key: 'identityiq', label: 'IdentityIQ' };
+          }
+          if (source.includes('smart')) {
+            return { key: 'smartcredit', label: 'SmartCredit' };
+          }
+          if (source.includes('myscore')) {
+            return { key: 'myscoreiq', label: 'MyScoreIQ' };
+          }
+          if (source.includes('myfree') || source.includes('mfsn')) {
+            return { key: 'myfreescorenow', label: 'MyFreeScoreNow' };
+          }
+          return { key: 'report', label: 'Credit Report' };
+        };
+
+        const renderMonitoringBadge = (client) => {
+          const service = getMonitoringService(client);
+          const id = encodeURIComponent(pick(client, 'id'));
           return `
-            <tr class="nt-liquid-row" data-dashboard-client-id="${escapeHtml(id)}">
-              <td><strong>${escapeHtml(clientName(client))}</strong></td>
-              <td>${escapeHtml(pick(client, 'status') || 'Client')}</td>
-              <td>${escapeHtml(pick(client, 'phase') || 'None')}</td>
-              <td>${escapeHtml(nextImport)}</td>
-              <td>${escapeHtml(contact)}</td>
-              <td><span class="client-table-action">Open</span></td>
+            <a class="client-table-report monitoring-badge monitoring-${service.key}" href="/api/clients/${id}/report" target="_blank" rel="noreferrer" title="${escapeHtml(service.label)}">
+              <span>${escapeHtml(service.label)}</span>
+            </a>
+          `;
+        };
+
+        const setDashboardMessage = (message, isError = false) => {
+          const node = document.getElementById('formMessage') || document.getElementById('csvImportMessage');
+          if (!node) {
+            return;
+          }
+          node.textContent = message;
+          node.classList.toggle('error', Boolean(isError));
+          node.classList.toggle('muted', !isError);
+        };
+
+        const requestJson = async (path, options = {}) => {
+          const response = await fetch(path, {
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+            ...options,
+          });
+          if (response.status === 401) {
+            window.location.replace('/');
+            throw new Error('Please login first.');
+          }
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || `Request failed (${response.status})`);
+          }
+          return data;
+        };
+
+        const normalizeClient = (client = {}) => ({
+          ...client,
+          id: pick(client, 'id'),
+          firstName: pick(client, 'firstName', 'first_name'),
+          lastName: pick(client, 'lastName', 'last_name'),
+          status: pick(client, 'status') || 'Client',
+          phase: pick(client, 'phase') || 'None',
+          email: pick(client, 'email'),
+          phone: pick(client, 'phone'),
+          reportDate: pick(client, 'reportDate', 'report_date'),
+        });
+
+        const renderRows = (clients, statuses, phases) => clients.map((rawClient) => {
+          const client = normalizeClient(rawClient);
+          const displayName = clientName(client);
+          const email = String(client.email || '').trim();
+          const phoneRaw = String(client.phone || '').trim();
+          const phoneDisplay = formatPhoneNumber(phoneRaw) || phoneRaw;
+          const emailDisplay = email || '--';
+          return `
+            <tr data-client-id="${escapeHtml(client.id)}">
+              <td class="nt-liquid-col-member">
+                <div class="nt-liquid-member-stack">
+                  <button class="nt-liquid-member-link" type="button" data-action="open" title="${escapeHtml(displayName)}">
+                    <span class="nt-liquid-member-name">${escapeHtml(displayName)}</span>
+                  </button>
+                  <button class="nt-liquid-email-copy" type="button" data-action="copy-email" data-email="${escapeHtml(email)}" aria-label="Copy email for ${escapeHtml(displayName)}">
+                    <span class="nt-liquid-email-copy-label">${escapeHtml(emailDisplay)}</span>
+                  </button>
+                </div>
+              </td>
+              <td class="nt-liquid-col-stage">
+                <select class="client-status-select nt-liquid-select" data-action="status" data-client-id="${escapeHtml(client.id)}">
+                  ${statuses.map((status) => `<option value="${escapeHtml(status)}"${status === client.status ? ' selected' : ''}>${escapeHtml(status)}</option>`).join('')}
+                </select>
+              </td>
+              <td class="nt-liquid-col-phone">
+                ${phoneRaw ? `
+                  <button class="nt-liquid-phone-copy" type="button" data-action="copy-phone" data-phone="${escapeHtml(phoneRaw)}" aria-label="Copy phone for ${escapeHtml(displayName)}">
+                    <span class="nt-liquid-phone-copy-label">${escapeHtml(phoneDisplay)}</span>
+                  </button>
+                ` : ''}
+              </td>
+              <td class="nt-liquid-col-phase">
+                <select class="client-phase-select nt-liquid-select" data-action="phase" data-client-id="${escapeHtml(client.id)}">
+                  ${phases.map((phase) => `<option value="${escapeHtml(phase)}"${phase === client.phase ? ' selected' : ''}>${escapeHtml(phase)}</option>`).join('')}
+                </select>
+              </td>
+              <td class="nt-liquid-col-monitor">${renderMonitoringBadge(client)}</td>
+              <td class="nt-liquid-col-days">${renderDaysLeftCell(rawClient)}</td>
+              <td class="nt-liquid-col-report">${formatReportDateCell(client.reportDate)}</td>
+              <td class="nt-liquid-col-actions">
+                <div class="nt-liquid-actions-row">
+                  <button class="client-table-edit nt-liquid-edit-button" type="button" data-action="edit" aria-label="Edit client">Edit</button>
+                  <button class="client-table-delete nt-liquid-delete-button" type="button" data-action="delete" aria-label="Delete client">X</button>
+                </div>
+              </td>
             </tr>
           `;
         }).join('');
 
-        const renderGlassClientsFallback = (clients) => {
+        const renderGlassClientsFallback = (clients, options = {}) => {
           const clientsList = document.getElementById('clientsList');
           if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
             return;
           }
 
-          const rows = renderRows(clients);
+          const statuses = Array.isArray(options.statuses) && options.statuses.length ? options.statuses : ['Client', 'Lead', 'Prospect', 'Inactive'];
+          const phases = Array.isArray(options.phases) && options.phases.length ? options.phases : ['None', 'Round 1', 'Round 2', 'Round 3', 'Complete'];
+          const rows = renderRows(clients, statuses, phases);
           clientsList.style.setProperty('--nt-clients-custom-bg', "url('/assets/clients-glass-bg.png')");
+          const countLabel = `${clients.length} client${clients.length === 1 ? '' : 's'}`;
           clientsList.innerHTML = `
             <div class="nt-liquid-table-shell">
               <div class="nt-liquid-table-toolbar">
+                <span class="nt-liquid-toolbar-title">Clients</span>
+                <span class="nt-liquid-toolbar-count" id="clientsTableCount">${escapeHtml(countLabel)}</span>
                 <div class="nt-liquid-table-search">
                   <span class="nt-liquid-table-search-icon">🔍</span>
                   <input id="clientsTableSearchInput" class="nt-liquid-table-search-input" type="search" placeholder="Search clients..." aria-label="Search clients">
                 </div>
-                <span class="nt-liquid-table-count">${clients.length} Clients</span>
+                <div class="nt-liquid-toolbar-buttons">
+                  <button id="clientsTableImportTrigger" class="nt-liquid-toolbar-btn nt-liquid-import-btn" type="button">Import</button>
+                </div>
               </div>
               <div class="nt-liquid-table-scroll">
                 <table class="nt-liquid-table">
@@ -1089,19 +1265,26 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
                     <tr>
                       <th>Client</th>
                       <th>Status</th>
+                      <th>Phone</th>
                       <th>Phase</th>
-                      <th>Next Import</th>
-                      <th>Contact</th>
-                      <th>Action</th>
+                      <th>Monitoring</th>
+                      <th>Days Left</th>
+                      <th>Report Date</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    ${rows || '<tr class="nt-liquid-empty-row"><td colspan="6">No clients saved yet.</td></tr>'}
+                    ${rows || '<tr class="nt-liquid-empty-row"><td class="nt-liquid-empty-cell" colspan="8">No clients saved yet.</td></tr>'}
                   </tbody>
                 </table>
               </div>
             </div>
           `;
+
+          const refreshRows = (nextClients) => {
+            clientsList.querySelector('.nt-liquid-table tbody').innerHTML = renderRows(nextClients, statuses, phases)
+              || '<tr class="nt-liquid-empty-row"><td class="nt-liquid-empty-cell" colspan="8">No clients match your search.</td></tr>';
+          };
 
           const searchInput = clientsList.querySelector('#clientsTableSearchInput');
           searchInput?.addEventListener('input', () => {
@@ -1113,9 +1296,164 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
               pick(client, 'email'),
               pick(client, 'phone'),
             ].some((value) => value.toLowerCase().includes(query)));
-            clientsList.querySelector('.nt-liquid-table tbody').innerHTML = renderRows(filtered)
-              || '<tr class="nt-liquid-empty-row"><td colspan="6">No clients match your search.</td></tr>';
+            refreshRows(filtered);
+            bindClientTableActions();
           });
+
+          clientsList.querySelector('#clientsTableImportTrigger')?.addEventListener('click', () => {
+            document.getElementById('clientsCsv')?.click();
+          });
+
+          const bindClientTableActions = () => {
+            clientsList.querySelectorAll('[data-action="open"], [data-action="edit"]').forEach((button) => {
+              button.addEventListener('click', (event) => {
+                const clientId = event.currentTarget.closest('tr')?.dataset.clientId;
+                if (!clientId) {
+                  return;
+                }
+                const client = clients.find((entry) => String(pick(entry, 'id')) === String(clientId));
+                if (client && typeof window.openEditDialog === 'function') {
+                  window.openEditDialog(clientId);
+                  return;
+                }
+                document.getElementById('clientHubAddPane')?.removeAttribute('hidden');
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="delete"]').forEach((button) => {
+              button.addEventListener('click', async (event) => {
+                const clientId = event.currentTarget.closest('tr')?.dataset.clientId;
+                if (!clientId || !window.confirm('Delete this client?')) {
+                  return;
+                }
+                try {
+                  await requestJson(`/api/clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
+                  const index = clients.findIndex((entry) => String(pick(entry, 'id')) === String(clientId));
+                  if (index !== -1) {
+                    clients.splice(index, 1);
+                  }
+                  refreshRows(clients);
+                  bindClientTableActions();
+                  setDashboardMessage('Client deleted.');
+                } catch (error) {
+                  setDashboardMessage(error.message, true);
+                }
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="copy-phone"]').forEach((button) => {
+              button.addEventListener('click', async (event) => {
+                const targetButton = event.currentTarget;
+                const phone = String(targetButton.dataset.phone || '').trim();
+                if (!phone) {
+                  return;
+                }
+                try {
+                  await navigator.clipboard.writeText(phone);
+                  targetButton.classList.add('is-copied');
+                  const labelNode = targetButton.querySelector('.nt-liquid-phone-copy-label');
+                  if (labelNode) labelNode.textContent = 'Copied';
+                  window.setTimeout(() => {
+                    targetButton.classList.remove('is-copied');
+                    if (labelNode) labelNode.textContent = formatPhoneNumber(phone) || phone;
+                  }, 1200);
+                  setDashboardMessage(`Copied ${formatPhoneNumber(phone) || phone} to clipboard.`);
+                } catch {
+                  setDashboardMessage('Could not copy phone number.', true);
+                }
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="copy-email"]').forEach((button) => {
+              button.addEventListener('click', async (event) => {
+                const targetButton = event.currentTarget;
+                const email = String(targetButton.dataset.email || '').trim();
+                if (!email) {
+                  return;
+                }
+                try {
+                  await navigator.clipboard.writeText(email);
+                  targetButton.classList.add('is-copied');
+                  const labelNode = targetButton.querySelector('.nt-liquid-email-copy-label');
+                  if (labelNode) labelNode.textContent = 'Copied';
+                  window.setTimeout(() => {
+                    targetButton.classList.remove('is-copied');
+                    if (labelNode) labelNode.textContent = email;
+                  }, 1200);
+                  setDashboardMessage(`Copied ${email} to clipboard.`);
+                } catch {
+                  setDashboardMessage('Could not copy email.', true);
+                }
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="status"]').forEach((select) => {
+              select.addEventListener('change', async (event) => {
+                const { clientId } = event.currentTarget.dataset;
+                const status = event.currentTarget.value;
+                try {
+                  await requestJson(`/api/clients/${encodeURIComponent(clientId)}/status`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ status }),
+                  });
+                  const client = clients.find((entry) => String(pick(entry, 'id')) === String(clientId));
+                  if (client) client.status = status;
+                  setDashboardMessage('Client status updated.');
+                } catch (error) {
+                  setDashboardMessage(error.message, true);
+                }
+              });
+            });
+
+            clientsList.querySelectorAll('[data-action="phase"]').forEach((select) => {
+              select.addEventListener('change', async (event) => {
+                const { clientId } = event.currentTarget.dataset;
+                const phase = event.currentTarget.value;
+                try {
+                  await requestJson(`/api/clients/${encodeURIComponent(clientId)}/phase`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ phase }),
+                  });
+                  const client = clients.find((entry) => String(pick(entry, 'id')) === String(clientId));
+                  if (client) client.phase = phase;
+                  setDashboardMessage('Client phase updated.');
+                } catch (error) {
+                  setDashboardMessage(error.message, true);
+                }
+              });
+            });
+
+            clientsList.querySelectorAll('[data-action="next-import"]').forEach((button) => {
+              button.addEventListener('click', async (event) => {
+                const clientId = event.currentTarget.closest('tr')?.dataset.clientId;
+                const currentDays = Number.parseInt(event.currentTarget.dataset.nextImportDays || '', 10);
+                const input = window.prompt('Set Next Import days for this client', Number.isFinite(currentDays) ? String(currentDays) : '');
+                if (!clientId || input === null) {
+                  return;
+                }
+                const days = Number.parseInt(String(input).trim(), 10);
+                if (!Number.isFinite(days)) {
+                  setDashboardMessage('Please enter a valid number of days.', true);
+                  return;
+                }
+                try {
+                  await requestJson(`/api/clients/${encodeURIComponent(clientId)}/next-import`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ days }),
+                  });
+                  const client = clients.find((entry) => String(pick(entry, 'id')) === String(clientId));
+                  if (client) client.daysLeft = days;
+                  refreshRows(clients);
+                  bindClientTableActions();
+                  setDashboardMessage(`Next Import updated to ${formatNextImport(days)}.`);
+                } catch (error) {
+                  setDashboardMessage(error.message, true);
+                }
+              }, { once: true });
+            });
+          };
+
+          bindClientTableActions();
         };
 
         window.setTimeout(async () => {
@@ -1145,7 +1483,10 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
                 : Array.isArray(data.results)
                   ? data.results
                   : [];
-              renderGlassClientsFallback(clients);
+              renderGlassClientsFallback(clients, {
+                statuses: data.statuses,
+                phases: data.phases,
+              });
             })
             .catch((error) => console.error('Clients glass fallback failed:', error));
         }, 900);
@@ -1153,7 +1494,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     </script>
     <script>
       (() => {
-        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260605-04';
+        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260605-05';
         const dashboardHubModeStorageKey = 'tools-ninja-dashboard-hub-mode';
         const heroWidgetFrame = () => document.querySelector('.hero-widget-frame');
         const panes = {
