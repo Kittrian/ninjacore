@@ -1736,6 +1736,183 @@ const normalizeDobInput = (value) => {
   return raw;
 };
 
+const getClientProfileValue = (row = {}, ...keys) => {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value == null) continue;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (value.length) return value;
+      continue;
+    }
+    return value;
+  }
+  return '';
+};
+
+const getClientProfileIdentity = (row = {}) => {
+  const ownerKey = normalizeLookupValue(getClientProfileValue(row, 'owner_key', 'ownerKey'));
+  const clientId = String(getClientProfileValue(row, 'client_id', 'clientId')).trim();
+  const recordId = String(getClientProfileValue(row, 'id', 'recordId')).trim();
+  const firstName = normalizeLookupValue(getClientProfileValue(row, 'first_name', 'firstName'));
+  const lastName = normalizeLookupValue(getClientProfileValue(row, 'last_name', 'lastName'));
+  const email = normalizeLookupValue(getClientProfileValue(row, 'email'));
+  const phone = normalizeLookupPhone(getClientProfileValue(row, 'phone'));
+  const ssnDigits = String(getClientProfileValue(row, 'ssn')).replace(/\D/g, '').slice(0, 9);
+  const dob = normalizeDobInput(getClientProfileValue(row, 'dob'));
+  const nameKey = firstName && lastName ? `${ownerKey}|${firstName}|${lastName}` : '';
+  return {
+    ownerKey,
+    clientId,
+    recordId,
+    firstName,
+    lastName,
+    email,
+    phone,
+    ssnDigits,
+    dob,
+    nameKey,
+    emailNameKey: nameKey && email ? `${nameKey}|${email}` : '',
+    phoneNameKey: nameKey && phone ? `${nameKey}|${phone}` : '',
+  };
+};
+
+const getClientProfileCompletenessScore = (row = {}) => {
+  const values = [
+    getClientProfileValue(row, 'email'),
+    getClientProfileValue(row, 'phone'),
+    getClientProfileValue(row, 'ssn'),
+    getClientProfileValue(row, 'dob'),
+    getClientProfileValue(row, 'address'),
+    getClientProfileValue(row, 'monitoring_username', 'monitoringUsername'),
+    getClientProfileValue(row, 'monitoring_password', 'monitoringPassword'),
+    getClientProfileValue(row, 'portal_password', 'portalPassword'),
+    getClientProfileValue(row, 'secret_key', 'secretKey'),
+    getClientProfileValue(row, 'notes'),
+    getClientProfileValue(row, 'goal'),
+  ];
+  return values.reduce((score, value) => {
+    if (Array.isArray(value)) return score + (value.length ? 2 : 0);
+    return score + (String(value || '').trim() ? 1 : 0);
+  }, 0);
+};
+
+const compareClientProfilePriority = (left = {}, right = {}) => {
+  const leftScore = getClientProfileCompletenessScore(left);
+  const rightScore = getClientProfileCompletenessScore(right);
+  if (leftScore !== rightScore) return rightScore - leftScore;
+
+  const leftId = String(getClientProfileValue(left, 'client_id', 'clientId')).trim();
+  const rightId = String(getClientProfileValue(right, 'client_id', 'clientId')).trim();
+  const leftNumeric = /^\d+$/.test(leftId);
+  const rightNumeric = /^\d+$/.test(rightId);
+  if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+  if (leftNumeric && rightNumeric) return Number.parseInt(leftId, 10) - Number.parseInt(rightId, 10);
+
+  const leftCreated = Date.parse(String(getClientProfileValue(left, 'created_at', 'createdAt', 'updated_at', 'updatedAt') || '')) || 0;
+  const rightCreated = Date.parse(String(getClientProfileValue(right, 'created_at', 'createdAt', 'updated_at', 'updatedAt') || '')) || 0;
+  if (leftCreated !== rightCreated) return leftCreated - rightCreated;
+  return leftId.localeCompare(rightId);
+};
+
+const mergeClientProfileRows = (rows = []) => {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const ordered = [...rows].sort(compareClientProfilePriority);
+  const merged = { ...ordered[0] };
+  for (const row of ordered.slice(1)) {
+    for (const [key, value] of Object.entries(row || {})) {
+      if (key === 'id' || key === 'client_id' || key === 'clientId') continue;
+      const current = merged[key];
+      if (Array.isArray(current)) {
+        if (!current.length && Array.isArray(value) && value.length) merged[key] = value;
+        continue;
+      }
+      if (String(current ?? '').trim()) continue;
+      if (Array.isArray(value)) {
+        if (value.length) merged[key] = value;
+        continue;
+      }
+      if (String(value ?? '').trim()) merged[key] = value;
+    }
+  }
+  return merged;
+};
+
+const canCollapseClientProfileCluster = (rows = []) => {
+  if (!Array.isArray(rows) || rows.length <= 1) return rows.length === 1;
+  const identities = rows.map((row) => getClientProfileIdentity(row));
+  const ssns = new Set(identities.map((item) => item.ssnDigits).filter(Boolean));
+  const emails = new Set(identities.map((item) => item.email).filter(Boolean));
+  const phones = new Set(identities.map((item) => item.phone).filter(Boolean));
+  const dobs = new Set(identities.map((item) => item.dob).filter(Boolean));
+  return ssns.size <= 1 && emails.size <= 1 && phones.size <= 1 && dobs.size <= 1;
+};
+
+const collapseSurrealClientRows = (rows = []) => {
+  const byName = new Map();
+  for (const row of rows) {
+    const identity = getClientProfileIdentity(row);
+    if (!identity.clientId) continue;
+    if (!identity.nameKey) {
+      byName.set(`id:${identity.clientId}`, [row]);
+      continue;
+    }
+    const list = byName.get(identity.nameKey) || [];
+    list.push(row);
+    byName.set(identity.nameKey, list);
+  }
+
+  const map = new Map();
+  const duplicateRecordIds = [];
+  const canonicalBySsn = new Map();
+  const canonicalByEmailName = new Map();
+  const canonicalByPhoneName = new Map();
+  const canonicalByNameOnly = new Map();
+
+  for (const [clusterKey, clusterRows] of byName.entries()) {
+    if (!clusterRows.length) continue;
+    if (!clusterKey.startsWith('id:') && canCollapseClientProfileCluster(clusterRows)) {
+      const canonical = mergeClientProfileRows(clusterRows);
+      const identity = getClientProfileIdentity(canonical);
+      if (!identity.clientId) continue;
+      map.set(identity.clientId, canonical);
+      if (identity.ssnDigits) canonicalBySsn.set(identity.ssnDigits, identity.clientId);
+      if (identity.emailNameKey) canonicalByEmailName.set(identity.emailNameKey, identity.clientId);
+      if (identity.phoneNameKey) canonicalByPhoneName.set(identity.phoneNameKey, identity.clientId);
+      canonicalByNameOnly.set(identity.nameKey, identity.clientId);
+      for (const row of clusterRows) {
+        const duplicateRecordId = String(getClientProfileValue(row, 'id', 'recordId')).trim();
+        const duplicateClientId = String(getClientProfileValue(row, 'client_id', 'clientId')).trim();
+        if (duplicateClientId === identity.clientId) continue;
+        if (duplicateRecordId) duplicateRecordIds.push(duplicateRecordId);
+      }
+      continue;
+    }
+
+    for (const row of clusterRows) {
+      const identity = getClientProfileIdentity(row);
+      if (!identity.clientId) continue;
+      map.set(identity.clientId, row);
+      if (identity.ssnDigits) canonicalBySsn.set(identity.ssnDigits, identity.clientId);
+      if (identity.emailNameKey && !canonicalByEmailName.has(identity.emailNameKey)) canonicalByEmailName.set(identity.emailNameKey, identity.clientId);
+      if (identity.phoneNameKey && !canonicalByPhoneName.has(identity.phoneNameKey)) canonicalByPhoneName.set(identity.phoneNameKey, identity.clientId);
+    }
+  }
+
+  return {
+    map,
+    duplicateRecordIds,
+    canonicalBySsn,
+    canonicalByEmailName,
+    canonicalByPhoneName,
+    canonicalByNameOnly,
+  };
+};
+
 const hasOwnField = (source, key) => Object.prototype.hasOwnProperty.call(source || {}, key);
 const readOptionalStringField = (source, key, fallback = '') => (
   hasOwnField(source, key)
@@ -5696,14 +5873,15 @@ const loadClientProfilesMap = async (ownerKey = getCurrentOwnerKey()) => {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const rows = await surql(`SELECT client_id AS clientId, first_name AS firstName, last_name AS lastName, email, dob, ssn, address, phone, spouse_client_id AS spouseClientId, spouse_client_label AS spouseClientLabel, assigned_to AS assignedTo, ninja_assigned AS ninjaAssigned, affiliate_assigned AS affiliateAssigned, status, phase, monitoring_agency AS monitoringAgency, monitoring_username AS monitoringUsername, monitoring_password AS monitoringPassword, secret_key AS secretKey, monitoring_token AS monitoringToken, portal_password AS portalPassword, portal_enabled AS portalEnabled, language, goal, notes, yearly_income AS yearlyIncome, housing_payment AS housingPayment, debt_monthly_payments AS debtMonthlyPayments, next_import_int AS nextImportInt, next_import_label AS nextImportLabel, next_import_mode AS nextImportMode, manual_next_import_start_days AS manualNextImportStartDays, manual_next_import_set_date AS manualNextImportSetDate, refresh_next_import_start_date AS refreshNextImportStartDate, documents_json AS documentsJson, report_date AS reportDate FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools"`);
-      const map = new Map(rows.map((row) => {
+      const rows = await surql(`SELECT id, client_id AS clientId, first_name AS firstName, last_name AS lastName, email, dob, ssn, address, phone, spouse_client_id AS spouseClientId, spouse_client_label AS spouseClientLabel, assigned_to AS assignedTo, ninja_assigned AS ninjaAssigned, affiliate_assigned AS affiliateAssigned, status, phase, monitoring_agency AS monitoringAgency, monitoring_username AS monitoringUsername, monitoring_password AS monitoringPassword, secret_key AS secretKey, monitoring_token AS monitoringToken, portal_password AS portalPassword, portal_enabled AS portalEnabled, language, goal, notes, yearly_income AS yearlyIncome, housing_payment AS housingPayment, debt_monthly_payments AS debtMonthlyPayments, next_import_int AS nextImportInt, next_import_label AS nextImportLabel, next_import_mode AS nextImportMode, manual_next_import_start_days AS manualNextImportStartDays, manual_next_import_set_date AS manualNextImportSetDate, refresh_next_import_start_date AS refreshNextImportStartDate, documents_json AS documentsJson, report_date AS reportDate, created_at AS createdAt, updated_at AS updatedAt FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools"`);
+      const collapsed = collapseSurrealClientRows(rows);
+      const map = new Map([...collapsed.map.entries()].map(([clientId, row]) => {
         let documents = null;
         try {
           const parsed = JSON.parse(String(row.documentsJson || '[]'));
           documents = Array.isArray(parsed) ? parsed : null;
         } catch { documents = null; }
-        return [row.clientId, { ...row, documents }];
+        return [clientId, { ...row, documents }];
       }));
       profileMapCache.set(normalizedOwner, { map, loadedAt: Date.now() });
       return map;
@@ -5792,18 +5970,8 @@ const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKe
     ? clients.filter((c) => onlyIds.has(String(c.id || '').trim()))
     : clients;
   if (onlyIds && filteredClients.length === 0) return;
-  const existingRows = await surql(`SELECT client_id, first_name, last_name, email, ssn FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools"`);
-  const canonicalBySsn = new Map();
-  const canonicalByEmailName = new Map();
-  for (const row of existingRows) {
-    const rowClientId = String(row.client_id || '').trim();
-    const canonicalId = (/^\d+$/.test(rowClientId) && rowClientId) || '';
-    if (!canonicalId) continue;
-    const ssnDigits = String(row.ssn || '').replace(/\D/g, '');
-    if (ssnDigits.length >= 9) canonicalBySsn.set(ssnDigits.slice(0, 9), canonicalId);
-    const emailNameKey = `${String(row.email || '').trim().toLowerCase()}|${String(row.first_name || '').trim().toLowerCase()}|${String(row.last_name || '').trim().toLowerCase()}`;
-    if (String(row.email || '').trim()) canonicalByEmailName.set(emailNameKey, canonicalId);
-  }
+  const existingRows = await surql(`SELECT id, client_id, owner_key, first_name, last_name, email, phone, dob, ssn, created_at, updated_at FROM clients WHERE owner_key = "${sEsc(normalizedOwner)}" AND source_db = "ninjatools"`);
+  const collapsed = collapseSurrealClientRows(existingRows);
   const updatedAt = new Date().toISOString();
   const syncedTargetIdsInPass = new Set();
   for (const client of filteredClients) {
@@ -5813,9 +5981,18 @@ const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKe
     if (targetClientId.startsWith('client-')) {
       const ssnDigits = String(normalizedSsn || '').replace(/\D/g, '');
       const ssnKey = ssnDigits.length >= 9 ? ssnDigits.slice(0, 9) : '';
-      const emailNameKey = `${String(client.email || '').trim().toLowerCase()}|${String(client.firstName || '').trim().toLowerCase()}|${String(client.lastName || '').trim().toLowerCase()}`;
-      const canonicalId = (ssnKey && canonicalBySsn.get(ssnKey))
-        || (String(client.email || '').trim() ? canonicalByEmailName.get(emailNameKey) : '')
+      const firstName = normalizeLookupValue(client.firstName || '');
+      const lastName = normalizeLookupValue(client.lastName || '');
+      const nameKey = firstName && lastName ? `${normalizedOwner}|${firstName}|${lastName}` : '';
+      const email = normalizeLookupValue(client.email || '');
+      const phone = normalizeLookupPhone(client.phone || '');
+      const emailNameKey = nameKey && email ? `${nameKey}|${email}` : '';
+      const phoneNameKey = nameKey && phone ? `${nameKey}|${phone}` : '';
+      const shouldAllowNameOnlyMatch = nameKey && !ssnKey && !email && !phone;
+      const canonicalId = (ssnKey && collapsed.canonicalBySsn.get(ssnKey))
+        || (emailNameKey && collapsed.canonicalByEmailName.get(emailNameKey))
+        || (phoneNameKey && collapsed.canonicalByPhoneName.get(phoneNameKey))
+        || (shouldAllowNameOnlyMatch ? collapsed.canonicalByNameOnly.get(nameKey) : '')
         || '';
       if (canonicalId) targetClientId = canonicalId;
     }
