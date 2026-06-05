@@ -1717,11 +1717,16 @@ const getSmartCreditIntegrationKey = () => 'smartcredit35540';
 const request = async (url, options = {}) => {
   const response = await fetch(`${apiBase}${url}`, {
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',  // GOTCHA #10: send cookies with every request
     ...options,
   });
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: 'Request failed' }));
+    // 401 mid-session = session expired → signal login.js to force re-login
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent('toolsninja:session-expired'));
+    }
     throw new Error(payload.error || 'Request failed');
   }
 
