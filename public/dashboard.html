@@ -1186,6 +1186,161 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
           reportDate: pick(client, 'reportDate', 'report_date'),
         });
 
+        const getReportJsonCandidate = (client = {}) => {
+          const directCandidates = [
+            client.latestReportJson,
+            client.latest_report_json,
+            client.creditReportJson,
+            client.credit_report_json,
+            client.reportJson,
+            client.report_json,
+            client.reportJsonRaw,
+            client.report_json_raw,
+            client.creditReport?.json,
+            client.credit_report?.json,
+            client.report?.json,
+          ];
+          return directCandidates.find((candidate) => candidate !== undefined && candidate !== null && String(candidate).trim?.() !== '');
+        };
+
+        const parseReportJsonValue = (value) => {
+          if (value === undefined || value === null || value === '') {
+            return null;
+          }
+          if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+              return null;
+            }
+            try {
+              return JSON.parse(trimmed);
+            } catch {
+              return trimmed;
+            }
+          }
+          return value;
+        };
+
+        const reportHistoryDate = (entry = {}) => pick(entry, 'reportDate', 'report_date', 'createdAt', 'created_at', 'updatedAt', 'updated_at', 'date');
+
+        const pickLatestReportHistoryEntry = (entries = []) => entries
+          .filter(Boolean)
+          .slice()
+          .sort((left, right) => new Date(reportHistoryDate(right) || 0) - new Date(reportHistoryDate(left) || 0))[0];
+
+        const loadLatestReportJson = async (clientId, client) => {
+          const directValue = parseReportJsonValue(getReportJsonCandidate(client));
+          if (directValue !== null) {
+            return {
+              value: directValue,
+              source: 'client',
+              reportDate: pick(client, 'reportDate', 'report_date'),
+            };
+          }
+
+          try {
+            const historyData = await requestJson(`/api/clients/${encodeURIComponent(clientId)}/report-history`);
+            const history = Array.isArray(historyData.history)
+              ? historyData.history
+              : Array.isArray(historyData.reports)
+                ? historyData.reports
+                : Array.isArray(historyData)
+                  ? historyData
+                  : [];
+            const latest = pickLatestReportHistoryEntry(history);
+            const historyValue = parseReportJsonValue(getReportJsonCandidate(latest || {}));
+            if (historyValue !== null) {
+              return {
+                value: historyValue,
+                source: 'history',
+                reportDate: reportHistoryDate(latest),
+              };
+            }
+          } catch {}
+
+          return {
+            value: null,
+            source: 'none',
+            reportDate: pick(client, 'reportDate', 'report_date'),
+          };
+        };
+
+        const formatReportJsonForDisplay = (value) => {
+          if (value === null || value === undefined || value === '') {
+            return 'No recent credit report JSON found for this client.';
+          }
+          if (typeof value === 'string') {
+            return value;
+          }
+          return JSON.stringify(value, null, 2);
+        };
+
+        const renderDashboardClientDetail = (client, reportState) => {
+          const normalizedClient = normalizeClient(client);
+          const displayName = clientName(normalizedClient);
+          const email = String(normalizedClient.email || '').trim();
+          const phoneRaw = String(normalizedClient.phone || '').trim();
+          const phoneDisplay = formatPhoneNumber(phoneRaw) || phoneRaw || '--';
+          const reportDate = reportState.reportDate || normalizedClient.reportDate || '';
+          const reportText = formatReportJsonForDisplay(reportState.value);
+          const hasReportJson = reportState.value !== null && reportState.value !== undefined && reportState.value !== '';
+          return `
+            <div class="detail-header">
+              <div>
+                <p class="muted">Selected Client</p>
+                <h3>${escapeHtml(displayName)}</h3>
+              </div>
+              <span class="status-pill">${escapeHtml(normalizedClient.status || 'Client')}</span>
+            </div>
+            <div class="detail-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0;">
+              <div><p class="muted">Email</p><strong>${escapeHtml(email || '--')}</strong></div>
+              <div><p class="muted">Phone</p><strong>${escapeHtml(phoneDisplay)}</strong></div>
+              <div><p class="muted">Phase</p><strong>${escapeHtml(normalizedClient.phase || 'None')}</strong></div>
+              <div><p class="muted">Report Date</p><strong>${escapeHtml(formatReportDateCell(reportDate).replace(/<[^>]+>/g, '') || '--')}</strong></div>
+            </div>
+            <div class="detail-section">
+              <div class="detail-header">
+                <div>
+                  <p class="muted">Most Recent Credit Report</p>
+                  <h4>Latest Credit Report JSON</h4>
+                </div>
+                <button class="secondary" type="button" data-action="copy-report-json"${hasReportJson ? '' : ' disabled'}>Copy JSON</button>
+              </div>
+              <pre class="dashboard-report-json" style="max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:rgba(3,8,23,.72);border:1px solid rgba(148,163,184,.22);border-radius:16px;padding:14px;color:#e5edf7;font-size:12px;line-height:1.45;">${escapeHtml(reportText)}</pre>
+            </div>
+          `;
+        };
+
+        const loadDashboardClientDetail = async (clientId) => {
+          const detail = document.getElementById('clientDetail');
+          if (!detail || !clientId) {
+            return;
+          }
+          detail.innerHTML = '<p class="muted">Loading client and latest credit report JSON...</p>';
+          try {
+            const data = await requestJson(`/api/clients/${encodeURIComponent(clientId)}`);
+            const client = data.client || data.result || data;
+            const reportState = await loadLatestReportJson(clientId, client);
+            detail.innerHTML = renderDashboardClientDetail(client, reportState);
+            detail.querySelector('[data-action="copy-report-json"]')?.addEventListener('click', async (event) => {
+              try {
+                await navigator.clipboard.writeText(formatReportJsonForDisplay(reportState.value));
+                event.currentTarget.textContent = 'Copied';
+                window.setTimeout(() => {
+                  event.currentTarget.textContent = 'Copy JSON';
+                }, 1200);
+                setDashboardMessage('Copied latest credit report JSON.');
+              } catch {
+                setDashboardMessage('Could not copy report JSON.', true);
+              }
+            });
+            detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          } catch (error) {
+            detail.innerHTML = `<p class="muted">Could not load this client.</p><p>${escapeHtml(error.message)}</p>`;
+            setDashboardMessage(error.message, true);
+          }
+        };
+
         const renderRows = (clients, statuses, phases) => clients.map((rawClient) => {
           const client = normalizeClient(rawClient);
           const displayName = clientName(client);
@@ -1305,14 +1460,23 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
           });
 
           const bindClientTableActions = () => {
-            clientsList.querySelectorAll('[data-action="open"], [data-action="edit"]').forEach((button) => {
+            clientsList.querySelectorAll('[data-action="open"]').forEach((button) => {
               button.addEventListener('click', (event) => {
                 const clientId = event.currentTarget.closest('tr')?.dataset.clientId;
                 if (!clientId) {
                   return;
                 }
-                const client = clients.find((entry) => String(pick(entry, 'id')) === String(clientId));
-                if (client && typeof window.openEditDialog === 'function') {
+                loadDashboardClientDetail(clientId);
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="edit"]').forEach((button) => {
+              button.addEventListener('click', (event) => {
+                const clientId = event.currentTarget.closest('tr')?.dataset.clientId;
+                if (!clientId) {
+                  return;
+                }
+                if (typeof window.openEditDialog === 'function') {
                   window.openEditDialog(clientId);
                   return;
                 }
@@ -1494,7 +1658,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     </script>
     <script>
       (() => {
-        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260605-05';
+        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260605-06';
         const dashboardHubModeStorageKey = 'tools-ninja-dashboard-hub-mode';
         const heroWidgetFrame = () => document.querySelector('.hero-widget-frame');
         const panes = {
