@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { Buffer } from 'node:buffer';
-import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, createPrivateKey, createSign, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { promises as fs } from 'node:fs';
 import https from 'node:https';
@@ -49,6 +49,7 @@ const googleClientSecret = String(process.env.GOOGLE_CLIENT_SECRET || '').trim()
 const githubClientId = String(process.env.GITHUB_CLIENT_ID || '').trim();
 const githubClientSecret = String(process.env.GITHUB_CLIENT_SECRET || '').trim();
 const oauthRedirectUri = String(process.env.OAUTH_REDIRECT_URI || 'https://api.ninjadispute.com/api/auth/callback').trim();
+const defaultGhlLocationId = String(process.env.GHL_DEFAULT_LOCATION_ID || 'BTUVP8XCPh6i633PAvD4').trim();
 
 let initialS3MirrorQueued = false;
 const storageReadyByOwner = new Map();
@@ -274,7 +275,7 @@ const paymentFrequencyOptions = [
   { value: 'custom', label: 'Custom Days' },
 ];
 
-const allowedIntegrationServices = new Set(['smartcredit35540', 'smartcredit68951', 'myfreescorenow', 'gohighlevel', 'billing', 'ninjadispute', 'contabo']);
+const allowedIntegrationServices = new Set(['smartcredit35540', 'smartcredit68951', 'myfreescorenow', 'gohighlevel', 'billing', 'ninjadispute', 'contabo', 'ultazap']);
 const defaultIntegrations = {
   smartcredit35540: {
     tokenId: '1c03c715-bb56-4574-b098-97f596a06308',
@@ -293,6 +294,10 @@ const defaultIntegrations = {
     outboundWebhookUrl: '',
     apiToken: '',
     locationId: '',
+    customFieldCreditMonitoringKey: '',
+    customFieldPasswordKey: '',
+    customFieldSecretKey: '',
+    customFieldPortalPasswordKey: '',
   },
   billing: {
     failedPaymentsWebhookUrl: String(process.env.GHL_FAILED_PAYMENTS_WEBHOOK_URL || '').trim(),
@@ -313,6 +318,18 @@ const defaultIntegrations = {
     s3StorageName: String(process.env.CONTABO_S3_STORAGE_NAME || '').trim(),
     s3Endpoint: String(storageS3EndpointEnv || process.env.CONTABO_S3_ENDPOINT || 'https://usc1.contabostorage.com').trim(),
     s3Bucket: String(storageS3BucketEnv || process.env.CONTABO_S3_BUCKET || 'id-docs').trim(),
+  },
+  ultazap: {
+    enabled: String(process.env.ULTA_ZAP_ENABLED || '').trim().toLowerCase() === 'true',
+    airtableToken: String(process.env.ULTA_ZAP_AIRTABLE_TOKEN || '').trim(),
+    airtableBaseId: String(process.env.ULTA_ZAP_AIRTABLE_BASE_ID || 'appmye1ShMwAPPGNM').trim(),
+    airtableTableId: String(process.env.ULTA_ZAP_AIRTABLE_TABLE_ID || 'tbl7O2USkxjDlK2tw').trim(),
+    airtableFieldMapJson: String(process.env.ULTA_ZAP_AIRTABLE_FIELD_MAP_JSON || '').trim(),
+    googleServiceAccountEmail: String(process.env.ULTA_ZAP_GOOGLE_SERVICE_ACCOUNT_EMAIL || '').trim(),
+    googleServiceAccountPrivateKey: String(process.env.ULTA_ZAP_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || '').trim(),
+    googleSpreadsheetId: String(process.env.ULTA_ZAP_GOOGLE_SPREADSHEET_ID || '1-7TOH4oGUELRT6tE9ao1z5HmEjeiSBbhk9EPX5KWNK4').trim(),
+    googleWorksheetId: String(process.env.ULTA_ZAP_GOOGLE_WORKSHEET_ID || '254012347').trim(),
+    googleContactsEnabled: String(process.env.ULTA_ZAP_GOOGLE_CONTACTS_ENABLED || 'true').trim().toLowerCase() !== 'false',
   },
 };
 const affiliateMonitoringDefaults = [
@@ -859,6 +876,10 @@ const normalizeIntegrationPayload = (payload = {}, service = '') => {
       outboundWebhookUrl: String(payload.outboundWebhookUrl ?? defaults.outboundWebhookUrl ?? '').trim(),
       apiToken: String(payload.apiToken ?? defaults.apiToken ?? '').trim(),
       locationId: String(payload.locationId ?? defaults.locationId ?? '').trim(),
+      customFieldCreditMonitoringKey: String(payload.customFieldCreditMonitoringKey ?? defaults.customFieldCreditMonitoringKey ?? '').trim(),
+      customFieldPasswordKey: String(payload.customFieldPasswordKey ?? defaults.customFieldPasswordKey ?? '').trim(),
+      customFieldSecretKey: String(payload.customFieldSecretKey ?? defaults.customFieldSecretKey ?? '').trim(),
+      customFieldPortalPasswordKey: String(payload.customFieldPortalPasswordKey ?? defaults.customFieldPortalPasswordKey ?? '').trim(),
     };
   }
   if (normalizedService === 'billing') {
@@ -885,6 +906,21 @@ const normalizeIntegrationPayload = (payload = {}, service = '') => {
       s3StorageName: String(payload.s3StorageName ?? defaults.s3StorageName ?? '').trim(),
       s3Endpoint: String(payload.s3Endpoint ?? defaults.s3Endpoint ?? 'https://usc1.contabostorage.com').trim().replace(/\/+$/g, ''),
       s3Bucket: String(payload.s3Bucket ?? defaults.s3Bucket ?? 'id-docs').trim(),
+    };
+  }
+  if (normalizedService === 'ultazap') {
+    return {
+      enabled: payload.enabled === true || String(payload.enabled ?? defaults.enabled ?? '').trim().toLowerCase() === 'true',
+      airtableToken: String(payload.airtableToken ?? defaults.airtableToken ?? '').trim(),
+      airtableBaseId: String(payload.airtableBaseId ?? defaults.airtableBaseId ?? '').trim(),
+      airtableTableId: String(payload.airtableTableId ?? defaults.airtableTableId ?? '').trim(),
+      airtableFieldMapJson: String(payload.airtableFieldMapJson ?? defaults.airtableFieldMapJson ?? '').trim(),
+      googleServiceAccountEmail: String(payload.googleServiceAccountEmail ?? defaults.googleServiceAccountEmail ?? '').trim(),
+      googleServiceAccountPrivateKey: String(payload.googleServiceAccountPrivateKey ?? defaults.googleServiceAccountPrivateKey ?? '').trim(),
+      googleSpreadsheetId: String(payload.googleSpreadsheetId ?? defaults.googleSpreadsheetId ?? '').trim(),
+      googleWorksheetId: String(payload.googleWorksheetId ?? defaults.googleWorksheetId ?? '').trim(),
+      googleContactsEnabled: payload.googleContactsEnabled === true
+        || String(payload.googleContactsEnabled ?? defaults.googleContactsEnabled ?? '').trim().toLowerCase() === 'true',
     };
   }
   return {
@@ -1734,6 +1770,381 @@ const normalizeDobInput = (value) => {
   }
 
   return raw;
+};
+
+const parseCombinedAddress = (value = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return { street: '', city: '', state: '', zip: '' };
+  }
+
+  const cleaned = raw
+    .replace(/,\s*(United States(?: of America)?|USA)\s*$/i, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  const parseLocality = (localityValue = '') => {
+    const locality = String(localityValue || '').trim().replace(/\s+/g, ' ');
+    if (!locality) return { city: '', state: '', zip: '' };
+    const fullMatch = locality.match(/^(.*?)[,\s]+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+    if (fullMatch) {
+      return {
+        city: String(fullMatch[1] || '').trim().replace(/,$/, ''),
+        state: String(fullMatch[2] || '').trim().toUpperCase(),
+        zip: String(fullMatch[3] || '').trim(),
+      };
+    }
+    const stateOnly = locality.match(/^(.*?)[,\s]+([A-Za-z]{2})$/);
+    if (stateOnly) {
+      return {
+        city: String(stateOnly[1] || '').trim().replace(/,$/, ''),
+        state: String(stateOnly[2] || '').trim().toUpperCase(),
+        zip: '',
+      };
+    }
+    return { city: locality.replace(/,$/, ''), state: '', zip: '' };
+  };
+
+  if (cleaned.includes('|')) {
+    const [streetPart, localityPart] = cleaned.split('|');
+    const street = String(streetPart || '').trim().replace(/,$/, '');
+    const parsedLocality = parseLocality(localityPart || '');
+    return { street, city: parsedLocality.city, state: parsedLocality.state, zip: parsedLocality.zip };
+  }
+
+  const stateZipMatch = cleaned.match(/,\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)(?:\s*,.*)?$/);
+  if (stateZipMatch && Number.isInteger(stateZipMatch.index)) {
+    const state = String(stateZipMatch[1] || '').trim().toUpperCase();
+    const zip = String(stateZipMatch[2] || '').trim();
+    const prefix = cleaned.slice(0, stateZipMatch.index).replace(/,\s*$/, '').trim();
+    const parts = prefix.split(',').map((part) => String(part || '').trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const city = parts.pop() || '';
+      const street = parts.join(', ');
+      return { street, city, state, zip };
+    }
+    return { street: prefix, city: '', state, zip };
+  }
+
+  const stateOnlyMatch = cleaned.match(/,\s*([A-Za-z]{2})(?:\s*,.*)?$/);
+  if (stateOnlyMatch && Number.isInteger(stateOnlyMatch.index)) {
+    const state = String(stateOnlyMatch[1] || '').trim().toUpperCase();
+    const prefix = cleaned.slice(0, stateOnlyMatch.index).replace(/,\s*$/, '').trim();
+    const parts = prefix.split(',').map((part) => String(part || '').trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const city = parts.pop() || '';
+      const street = parts.join(', ');
+      return { street, city, state, zip: '' };
+    }
+    return { street: prefix, city: '', state, zip: '' };
+  }
+
+  return { street: cleaned, city: '', state: '', zip: '' };
+};
+
+const formatPhoneTenDigits = (value = '') => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return digits.slice(1);
+  }
+  if (digits.length >= 10) {
+    return digits.slice(-10);
+  }
+  return digits;
+};
+
+const base64UrlEncode = (value) => Buffer.from(String(value || ''), 'utf8')
+  .toString('base64')
+  .replace(/\+/g, '-')
+  .replace(/\//g, '_')
+  .replace(/=+$/g, '');
+
+const normalizePrivateKeyInput = (value = '') => String(value || '')
+  .replace(/\\n/g, '\n')
+  .trim();
+
+const parseAirtableFieldMap = (value = '') => {
+  const parsed = parseJsonTextSafe(value);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+};
+
+const buildUltaZapAirtableFields = (client) => {
+  const address = parseCombinedAddress(client.address || '');
+  return {
+    fldGE3lTA5UWuJkLA: client.phone || '',
+    fldwRqQQelrcxccK5: client.firstName || '',
+    fld7zwXpZt9BGVoV0: client.lastName || '',
+    fld8tdNpZqSoP4ros: client.email || '',
+    fld1EU5QaUaSf1Blt: `${address.street || ''}${address.city || ''}${address.state || ''}${address.zip || ''}`,
+    fldezxXwAV7kTwCM3: client.dob || '',
+    fld0Mbky3WFpKq9Jh: client.ssn || '',
+    fldvyZjOvRBf3xHrQ: '',
+    fld4NgYvm0LmcRuHd: '',
+    fldQAGieyB0Z5Wyjb: '',
+    fldTRPFLlz0vD3yxB: client.monitoringPassword || '',
+    fld2Bzo10FfVC7ZRt: client.monitoringAgency || '',
+    fldTyIdM2UC1xqIVF: client.notes || '',
+    fldDxHWjC1H9Gzkj6: client.portalPassword || '',
+    fldaAgMFmamXugCJw: client.secretKey || '',
+  };
+};
+
+const buildUltaZapNotes = (client, formattedDob = '') => [
+  `DOB : ${formattedDob || client.dob || ''}`,
+  `SSN : ${client.ssn || ''}`,
+  `Monitoring = ${client.monitoringAgency || ''}`,
+].join('\n');
+
+const buildGoHighLevelContactNote = (client, formattedDob = '') => {
+  const lines = [
+    `DOB : ${formattedDob || normalizeDobInput(client.dob || '') || ''}`,
+    `SSN : ${normalizeSsnInput(client.ssn || '') || ''}`,
+    `Monitoring = ${client.monitoringAgency || ''}`,
+    client.monitoringUsername ? `Monitoring Username : ${client.monitoringUsername}` : '',
+    client.monitoringPassword ? `Monitoring Password : ${client.monitoringPassword}` : '',
+    client.secretKey ? `Secret Key : ${client.secretKey}` : '',
+    client.portalPassword ? `Portal Password : ${client.portalPassword}` : '',
+    client.notes ? `Notes : ${client.notes}` : '',
+  ];
+  return lines.map((line) => String(line || '').trim()).filter(Boolean).join('\n');
+};
+
+const buildGoogleBirthdayObject = (value = '') => {
+  const normalized = normalizeDobInput(value);
+  const match = normalized.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (!match) return null;
+  return {
+    month: Number.parseInt(match[1], 10),
+    day: Number.parseInt(match[2], 10),
+    year: Number.parseInt(match[3], 10),
+  };
+};
+
+const getGoogleServiceAccountAccessToken = async (integration, scopes = []) => {
+  const clientEmail = String(integration.googleServiceAccountEmail || '').trim();
+  const privateKeyPem = normalizePrivateKeyInput(integration.googleServiceAccountPrivateKey || '');
+  if (!clientEmail || !privateKeyPem || !Array.isArray(scopes) || scopes.length === 0) {
+    throw new Error('Google service account credentials are incomplete.');
+  }
+
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const expiresAt = issuedAt + 3600;
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = {
+    iss: clientEmail,
+    scope: scopes.join(' '),
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: expiresAt,
+    iat: issuedAt,
+  };
+  const unsignedJwt = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(payload))}`;
+  const signer = createSign('RSA-SHA256');
+  signer.update(unsignedJwt);
+  signer.end();
+  const privateKey = createPrivateKey(privateKeyPem);
+  const signature = signer.sign(privateKey).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const assertion = `${unsignedJwt}.${signature}`;
+
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+  });
+  const tokenText = await tokenRes.text().catch(() => '');
+  const tokenJson = parseJsonTextSafe(tokenText) || {};
+  if (!tokenRes.ok || !tokenJson.access_token) {
+    throw new Error(String(tokenJson.error_description || tokenJson.error || `Google token exchange failed (${tokenRes.status}).`));
+  }
+  return String(tokenJson.access_token || '').trim();
+};
+
+const getGoogleWorksheetTitle = async (accessToken, spreadsheetId, worksheetId) => {
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets(properties(sheetId,title))`, {
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      accept: 'application/json',
+    },
+  });
+  const text = await res.text().catch(() => '');
+  const json = parseJsonTextSafe(text) || {};
+  if (!res.ok) {
+    throw new Error(String(json.error?.message || `Google Sheets metadata fetch failed (${res.status}).`));
+  }
+  const targetSheetId = Number.parseInt(String(worksheetId || '').trim(), 10);
+  const match = Array.isArray(json.sheets)
+    ? json.sheets.find((sheet) => Number(sheet?.properties?.sheetId) === targetSheetId)
+    : null;
+  if (!match?.properties?.title) {
+    throw new Error(`Google Sheets worksheet ${worksheetId} was not found.`);
+  }
+  return String(match.properties.title || '').trim();
+};
+
+const appendGoogleSheetRow = async (integration, client, formattedPhone, formattedDob) => {
+  const accessToken = await getGoogleServiceAccountAccessToken(integration, ['https://www.googleapis.com/auth/spreadsheets']);
+  const spreadsheetId = String(integration.googleSpreadsheetId || '').trim();
+  const worksheetId = String(integration.googleWorksheetId || '').trim();
+  if (!spreadsheetId || !worksheetId) {
+    throw new Error('Google Sheets target is not configured.');
+  }
+  const sheetTitle = await getGoogleWorksheetTitle(accessToken, spreadsheetId, worksheetId);
+  const range = `${sheetTitle}!A:J`;
+  const values = [[
+    client.firstName || '',
+    client.lastName || '',
+    client.email || '',
+    formattedPhone,
+    client.address || '',
+    formattedDob,
+    client.ssn || '',
+    client.monitoringUsername || '',
+    client.monitoringPassword || '',
+    client.secretKey || '',
+  ]];
+
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      accept: 'application/json',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      majorDimension: 'ROWS',
+      values,
+    }),
+  });
+  const text = await res.text().catch(() => '');
+  const json = parseJsonTextSafe(text) || {};
+  if (!res.ok) {
+    throw new Error(String(json.error?.message || `Google Sheets append failed (${res.status}).`));
+  }
+  return json.updates || json;
+};
+
+const createGoogleContact = async (integration, client, formattedPhone, formattedDob) => {
+  const accessToken = await getGoogleServiceAccountAccessToken(integration, ['https://www.googleapis.com/auth/contacts']);
+  const address = parseCombinedAddress(client.address || '');
+  const birthday = buildGoogleBirthdayObject(formattedDob);
+  const payload = {
+    names: [{
+      givenName: client.firstName || '',
+      familyName: client.lastName || '',
+    }],
+    emailAddresses: client.email ? [{ value: client.email, type: 'work' }] : [],
+    phoneNumbers: formattedPhone ? [{ value: formattedPhone, type: 'mobile' }] : [],
+    addresses: (address.street || address.city || address.state || address.zip)
+      ? [{
+        streetAddress: address.street || '',
+        city: address.city || '',
+        region: address.state || '',
+        postalCode: address.zip || '',
+        type: 'home',
+      }]
+      : [],
+    birthdays: birthday ? [{ date: birthday }] : [],
+    biographies: [{
+      value: buildUltaZapNotes(client, formattedDob),
+      contentType: 'TEXT_PLAIN',
+    }],
+    userDefined: [
+      client.monitoringUsername ? { key: 'Credit Monitoring', value: client.monitoringUsername } : null,
+      client.monitoringPassword ? { key: 'PW', value: client.monitoringPassword } : null,
+    ].filter(Boolean),
+  };
+
+  const res = await fetch('https://people.googleapis.com/v1/people:createContact', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      accept: 'application/json',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text().catch(() => '');
+  const json = parseJsonTextSafe(text) || {};
+  if (!res.ok) {
+    throw new Error(String(json.error?.message || `Google Contacts create failed (${res.status}).`));
+  }
+  return json;
+};
+
+const createAirtableRecord = async (integration, client) => {
+  const token = String(integration.airtableToken || '').trim();
+  const baseId = String(integration.airtableBaseId || '').trim();
+  const tableId = String(integration.airtableTableId || '').trim();
+  if (!token || !baseId || !tableId) {
+    throw new Error('Airtable target is not configured.');
+  }
+
+  const fieldMap = parseAirtableFieldMap(integration.airtableFieldMapJson || '');
+  const rawFields = buildUltaZapAirtableFields(client);
+  const fields = {};
+  for (const [key, value] of Object.entries(rawFields)) {
+    const targetKey = String(fieldMap[key] || key).trim();
+    if (!targetKey) continue;
+    fields[targetKey] = value;
+  }
+
+  const res = await fetch(`https://api.airtable.com/v0/${encodeURIComponent(baseId)}/${encodeURIComponent(tableId)}`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: 'application/json',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      records: [{ fields }],
+    }),
+  });
+  const text = await res.text().catch(() => '');
+  const json = parseJsonTextSafe(text) || {};
+  if (!res.ok) {
+    throw new Error(String(json.error?.message || json.error?.type || `Airtable create failed (${res.status}).`));
+  }
+  return json.records?.[0] || json;
+};
+
+const runUltaZapReplacement = async (client, options = {}) => {
+  const integration = options.integration || (await loadIntegrations()).ultazap;
+  if (!integration?.enabled) {
+    return { ok: false, skipped: true, reason: 'disabled' };
+  }
+
+  const formattedPhone = formatPhoneTenDigits(client.phone || '');
+  const formattedDob = normalizeDobInput(client.dob || '');
+  const steps = [];
+
+  const airtableRecord = await createAirtableRecord(integration, {
+    ...client,
+    phone: client.phone || formattedPhone,
+    dob: formattedDob,
+  });
+  steps.push({ step: 'airtable', ok: true, id: String(airtableRecord?.id || '').trim() });
+
+  const sheetResult = await appendGoogleSheetRow(integration, client, formattedPhone, formattedDob);
+  steps.push({ step: 'google-sheets', ok: true, updatedRange: String(sheetResult?.updatedRange || '').trim() });
+
+  if (integration.googleContactsEnabled) {
+    const contactResult = await createGoogleContact(integration, client, formattedPhone, formattedDob);
+    steps.push({ step: 'google-contacts', ok: true, resourceName: String(contactResult?.resourceName || '').trim() });
+  } else {
+    steps.push({ step: 'google-contacts', ok: false, skipped: true, reason: 'disabled' });
+  }
+
+  return {
+    ok: true,
+    clientId: client.id,
+    formattedPhone,
+    formattedDob,
+    steps,
+  };
 };
 
 const getClientProfileValue = (row = {}, ...keys) => {
@@ -6098,7 +6509,7 @@ const deleteClientProfile = async (clientId, ownerKey = getCurrentOwnerKey()) =>
 };
 
 const loadIntegrations = async () => {
-  const rows = await surql(`SELECT setting_key AS settingKey, value_json AS valueJson FROM settings WHERE setting_key IN ["integration.smartcredit","integration.smartcredit35540","integration.smartcredit68951","integration.myfreescorenow","integration.gohighlevel","integration.billing","integration.ninjadispute","integration.contabo"]`);
+  const rows = await surql(`SELECT setting_key AS settingKey, value_json AS valueJson FROM settings WHERE setting_key IN ["integration.smartcredit","integration.smartcredit35540","integration.smartcredit68951","integration.myfreescorenow","integration.gohighlevel","integration.billing","integration.ninjadispute","integration.contabo","integration.ultazap"]`);
 
   const map = Object.fromEntries(rows.map((row) => {
     let parsed = {};
@@ -6129,6 +6540,7 @@ const loadIntegrations = async () => {
     billing: normalizeIntegrationPayload(map.billing, 'billing'),
     ninjadispute: normalizeIntegrationPayload(map.ninjadispute, 'ninjadispute'),
     contabo: normalizeIntegrationPayload(map.contabo, 'contabo'),
+    ultazap: normalizeIntegrationPayload(map.ultazap, 'ultazap'),
   };
 };
 
@@ -7305,7 +7717,7 @@ const fetchAddressSuggestions = async (query = '') => {
 const upsertClientToGoHighLevelContact = async (client, integrations = null) => {
   const loadedIntegrations = integrations || await loadIntegrations();
   const apiToken = String(loadedIntegrations.gohighlevel?.apiToken || '').trim();
-  const locationId = String(loadedIntegrations.gohighlevel?.locationId || '').trim();
+  const locationId = String(loadedIntegrations.gohighlevel?.locationId || defaultGhlLocationId).trim();
 
   if (!apiToken || !locationId) {
     throw new Error('GoHighLevel API token or location ID is not configured yet.');
@@ -7315,6 +7727,36 @@ const upsertClientToGoHighLevelContact = async (client, integrations = null) => 
     throw new Error('This client needs a phone number or email before syncing to GoHighLevel.');
   }
 
+  const address = parseCombinedAddress(client.address || '');
+  const formattedDob = normalizeDobInput(client.dob || '');
+  const formattedSsn = normalizeSsnInput(client.ssn || '');
+  const customFields = [
+    loadedIntegrations.gohighlevel?.customFieldCreditMonitoringKey && client.monitoringUsername
+      ? {
+        key: String(loadedIntegrations.gohighlevel.customFieldCreditMonitoringKey).trim(),
+        field_value: String(client.monitoringUsername || '').trim(),
+      }
+      : null,
+    loadedIntegrations.gohighlevel?.customFieldPasswordKey && client.monitoringPassword
+      ? {
+        key: String(loadedIntegrations.gohighlevel.customFieldPasswordKey).trim(),
+        field_value: String(client.monitoringPassword || '').trim(),
+      }
+      : null,
+    loadedIntegrations.gohighlevel?.customFieldSecretKey && client.secretKey
+      ? {
+        key: String(loadedIntegrations.gohighlevel.customFieldSecretKey).trim(),
+        field_value: String(client.secretKey || '').trim(),
+      }
+      : null,
+    loadedIntegrations.gohighlevel?.customFieldPortalPasswordKey && client.portalPassword
+      ? {
+        key: String(loadedIntegrations.gohighlevel.customFieldPortalPasswordKey).trim(),
+        field_value: String(client.portalPassword || '').trim(),
+      }
+      : null,
+  ].filter(Boolean);
+
   const payload = {
     firstName: client.firstName || '',
     lastName: client.lastName || '',
@@ -7323,6 +7765,13 @@ const upsertClientToGoHighLevelContact = async (client, integrations = null) => 
     locationId,
     source: 'Ninja Tools',
     tags: ['Ninja Tools'],
+    address1: address.street || '',
+    city: address.city || '',
+    state: address.state || '',
+    postalCode: address.zip || '',
+    dateOfBirth: formattedDob || undefined,
+    ssn: formattedSsn || undefined,
+    customFields: customFields.length ? customFields : undefined,
   };
 
   const response = await fetch('https://services.leadconnectorhq.com/contacts/upsert', {
@@ -7331,7 +7780,7 @@ const upsertClientToGoHighLevelContact = async (client, integrations = null) => 
       accept: 'application/json',
       authorization: `Bearer ${apiToken}`,
       'content-type': 'application/json',
-      version: '2021-07-28',
+      version: '2023-02-21',
     },
     body: JSON.stringify(payload),
   });
@@ -7350,6 +7799,52 @@ const upsertClientToGoHighLevelContact = async (client, integrations = null) => 
     parsed,
     locationId,
     contactId: String(parsed.contact?.id || parsed.id || '').trim(),
+  };
+};
+
+const createGoHighLevelContactNote = async (contactId, client, integrations = null) => {
+  const normalizedContactId = String(contactId || '').trim();
+  if (!normalizedContactId) {
+    return { ok: false, skipped: true, reason: 'missing-contact-id' };
+  }
+
+  const loadedIntegrations = integrations || await loadIntegrations();
+  const apiToken = String(loadedIntegrations.gohighlevel?.apiToken || '').trim();
+  if (!apiToken) {
+    return { ok: false, skipped: true, reason: 'missing-api-token' };
+  }
+
+  const bodyText = buildGoHighLevelContactNote(client);
+  if (!bodyText) {
+    return { ok: false, skipped: true, reason: 'empty-note' };
+  }
+
+  const response = await fetch(`https://services.leadconnectorhq.com/contacts/${encodeURIComponent(normalizedContactId)}/notes`, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${apiToken}`,
+      'content-type': 'application/json',
+      version: '2023-02-21',
+    },
+    body: JSON.stringify({
+      body: bodyText,
+      userId: '',
+    }),
+  });
+
+  const responseText = await response.text().catch(() => '');
+  const parsed = parseJsonTextSafe(responseText) || {};
+  if (!response.ok) {
+    throw new Error(parsed.message || parsed.error || `GoHighLevel note create failed (${response.status}).`);
+  }
+
+  return {
+    ok: true,
+    status: response.status,
+    body: responseText,
+    parsed,
+    noteId: String(parsed.note?.id || parsed.id || '').trim(),
   };
 };
 
@@ -7381,7 +7876,7 @@ const sendTextMessageViaGoHighLevel = async (client, message, attachments = [], 
 
   const integrations = await loadIntegrations();
   const apiToken = String(integrations.gohighlevel?.apiToken || '').trim();
-  const locationId = String(integrations.gohighlevel?.locationId || '').trim();
+  const locationId = String(integrations.gohighlevel?.locationId || defaultGhlLocationId).trim();
   const outboundWebhookUrl = String(integrations.gohighlevel?.outboundWebhookUrl || '').trim();
 
   if (!apiToken || !locationId) {
@@ -7711,10 +8206,19 @@ const shouldFallbackToGoHighLevelForText = (error) => {
 const sendClientToGoHighLevelWebhook = async (client, options = {}) => {
   const integrations = await loadIntegrations();
   const apiToken = String(integrations.gohighlevel?.apiToken || '').trim();
-  const locationId = String(integrations.gohighlevel?.locationId || '').trim();
+  const locationId = String(integrations.gohighlevel?.locationId || defaultGhlLocationId).trim();
   if (apiToken && locationId) {
     try {
       const result = await upsertClientToGoHighLevelContact(client, integrations);
+      let noteResult = null;
+      try {
+        noteResult = await createGoHighLevelContactNote(result.contactId, client, integrations);
+      } catch (noteError) {
+        noteResult = {
+          ok: false,
+          error: noteError.message,
+        };
+      }
       return {
         attempted: true,
         mode: 'api',
@@ -7723,6 +8227,7 @@ const sendClientToGoHighLevelWebhook = async (client, options = {}) => {
         body: result.body,
         contactId: result.contactId,
         locationId: result.locationId,
+        note: noteResult,
       };
     } catch (error) {
       return {
@@ -11477,6 +11982,46 @@ const server = createServer((req, res) => {
     return;
   }
 
+  if (pathname.startsWith('/api/clients/') && pathname.endsWith('/run-ulta-zap') && req.method === 'POST') {
+    try {
+      const id = pathname.split('/')[3];
+      const store = await readStore();
+      const client = store.clients.find((entry) => entry.id === id);
+      if (!client) {
+        notFound(res);
+        return;
+      }
+      const result = await runUltaZapReplacement(client);
+      send(res, 200, { ok: true, result });
+    } catch (error) {
+      send(res, 400, { error: error.message });
+    }
+    return;
+  }
+
+  if (pathname.startsWith('/api/clients/') && pathname.endsWith('/sync-gohighlevel') && req.method === 'POST') {
+    try {
+      const id = pathname.split('/')[3];
+      const store = await readStore();
+      const client = store.clients.find((entry) => entry.id === id);
+      if (!client) {
+        notFound(res);
+        return;
+      }
+      const result = await sendClientToGoHighLevelWebhook(client, { event: 'client.manual_sync' });
+      if (result.ok && result.contactId) {
+        client.ghlContactId = result.contactId;
+        client.ghlLocationId = result.locationId || client.ghlLocationId || '';
+        client.ghlSource = 'ninja-tools-manual-sync';
+        await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
+      }
+      send(res, 200, { ok: true, result, client: toSafeClient(client) });
+    } catch (error) {
+      send(res, 400, { error: error.message });
+    }
+    return;
+  }
+
   if (pathname === '/api/clients' && req.method === 'POST') {
     try {
       const body = await readBody(req);
@@ -11509,6 +12054,7 @@ const server = createServer((req, res) => {
         if (normalizedPhone && normalizeLookupPhone(entry.phone) === normalizedPhone) return true;
         return false;
       });
+      const effectiveClientId = String(existingClient?.id || clientId).trim() || clientId;
 
       const client = {
         id: clientId,
@@ -11538,7 +12084,7 @@ const server = createServer((req, res) => {
         portalEnabled: String(body.portalEnabled || 'on').trim().toLowerCase() !== 'off',
         language: String(body.language || 'English').trim() || 'English',
         goal: String(body.goal || '').trim(),
-        documents: await persistClientDocumentsToS3(body.documents, { ownerKey, clientId }),
+        documents: await persistClientDocumentsToS3(body.documents, { ownerKey, clientId: effectiveClientId }),
         reportDate: parsedReportDate,
         nextImportInt: String(body.nextImportInt || '').trim(),
         nextImportLabel: String(body.nextImportLabel || '').trim(),
@@ -11566,7 +12112,7 @@ const server = createServer((req, res) => {
       }
       store.statuses = uniqueStatuses([...store.statuses, client.status]);
       store.phases = uniquePhases([...(store.phases || defaultPhases), client.phase]);
-      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [client.id] });
+      await writeStore(store, getCurrentOwnerKey(), { syncClientIds: [effectiveClientId] });
       const savedClient = existingClient || client;
       await insertReportSnapshot(savedClient, {
         source: savedClient.creditReportSource,
@@ -11577,6 +12123,7 @@ const server = createServer((req, res) => {
         createdAt: savedClient.lastSyncedAt,
       });
       let gohighlevelSync = { attempted: false, reason: 'not-run' };
+      let ultaZapSync = { attempted: false, reason: 'replaced-by-gohighlevel' };
       try {
         gohighlevelSync = await sendClientToGoHighLevelWebhook(savedClient, { event: existingClient ? 'client.updated' : 'client.created' });
         if (gohighlevelSync.ok && gohighlevelSync.contactId) {
@@ -11592,10 +12139,10 @@ const server = createServer((req, res) => {
           error: error.message,
         };
       }
-
       send(res, 201, {
         client: toSafeClient(savedClient),
         gohighlevelSync,
+        ultaZapSync,
         deduped: Boolean(existingClient),
       });
     } catch (error) {

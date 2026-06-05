@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allowlist": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "Agent",
+      "Workflow",
+      "ToolSearch",
+      "Skill"
+    ]
+  },
+  "permission-mode": "acceptEdits",
+  "allow-dangerously-skip-permissions": true
+}

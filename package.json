@@ -1,20 +1,28 @@
 {
   "name": "tools-ninja",
-  "version": "1.0.35",
+  "version": "1.0.37",
   "private": true,
   "type": "module",
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.77",
     "@ai-sdk/openai": "^3.0.63",
+    "@tanstack/svelte-query": "^6.1.34",
+    "@tanstack/svelte-virtual": "^3.13.28",
     "ai": "^6.0.182",
+    "autoprefixer": "^10.5.0",
     "dotenv": "^17.4.2",
+    "minisearch": "^7.2.0",
     "playwright": "1.59.1",
+    "postcss": "^8.5.15",
     "redis": "^4.6.13",
     "sharp": "^0.34.5",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "tailwindcss": "^4.3.0"
   },
   "scripts": {
     "build": "node build.mjs",
+    "deploy": "./deploy.sh",
+    "build:deploy": "npm run build && npm run deploy",
     "start": "npm run build && node server.mjs",
     "deploy:frontend:live": "./scripts/deploy-live.sh frontend",
     "deploy:backend:live": "./scripts/deploy-live.sh backend",

@@ -1,0 +1,142 @@
+{
+  "name": "Ulta Zap - Client Sync",
+  "description": "When new client added in DisputeFox, sync to Airtable, Google Sheets, and Google Contacts with AI formatting",
+  "active": true,
+  "triggers": [
+    {
+      "id": "trigger_1",
+      "type": "webhook",
+      "name": "New Client Added (DisputeFox)",
+      "config": {
+        "webhook_url": "https://api.gohighlevel.com/v1/locations/BTUVP8XCPh6i633PAvD4/workflows/webhook",
+        "event_type": "disputefox.client.created",
+        "fields": {
+          "cell_phone": "phone",
+          "first_name": "string",
+          "last_name": "string",
+          "email_id": "email",
+          "current_street": "string",
+          "current_city": "string",
+          "current_state": "string",
+          "current_zip": "string",
+          "date_of_birth": "date",
+          "ssn": "string",
+          "credit_card_number": "string",
+          "credit_card_expiration": "string",
+          "cvv": "string",
+          "monitoring_password": "string",
+          "monitoring_agency_id": "string",
+          "monitoring_username": "string",
+          "sticky_note": "string",
+          "portal_login": "string",
+          "secret_key": "string"
+        }
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "action_1",
+      "type": "airtable",
+      "name": "Create Airtable Record",
+      "enabled": true,
+      "config": {
+        "api_key": "REPLACE_WITH_AIRTABLE_API_KEY",
+        "base_id": "appmye1ShMwAPPGNM",
+        "table_id": "tbl7O2USkxjDlK2tw",
+        "fields": {
+          "fldGE3lTA5UWuJkLA": "{{trigger_1.cell_phone}}",
+          "fldwRqQQelrcxccK5": "{{trigger_1.first_name}}",
+          "fld7zwXpZt9BGVoV0": "{{trigger_1.last_name}}",
+          "fld8tdNpZqSoP4ros": "{{trigger_1.email_id}}",
+          "fld1EU5QaUaSf1Blt": "{{trigger_1.current_street}} {{trigger_1.current_city}} {{trigger_1.current_state}} {{trigger_1.current_zip}}",
+          "fldezxXwAV7kTwCM3": "{{trigger_1.date_of_birth}}",
+          "fld0Mbky3WFpKq9Jh": "{{trigger_1.ssn}}",
+          "fldvyZjOvRBf3xHrQ": "{{trigger_1.credit_card_number}}",
+          "fld4NgYvm0LmcRuHd": "{{trigger_1.credit_card_expiration}}",
+          "fldQAGieyB0Z5Wyjb": "{{trigger_1.cvv}}",
+          "fldTRPFLlz0vD3yxB": "{{trigger_1.monitoring_password}}",
+          "fld2Bzo10FfVC7ZRt": "{{trigger_1.monitoring_agency_id}}",
+          "fldTyIdM2UC1xqIVF": "{{trigger_1.sticky_note}}",
+          "fldDxHWjC1H9Gzkj6": "{{trigger_1.portal_login}}",
+          "fldaAgMFmamXugCJw": "{{trigger_1.secret_key}}"
+        }
+      }
+    },
+    {
+      "id": "action_2",
+      "type": "openai",
+      "name": "Clean Phone Number (AI)",
+      "enabled": true,
+      "config": {
+        "api_key": "REPLACE_WITH_OPENAI_API_KEY",
+        "model": "gpt-4o-mini",
+        "input": "{{trigger_1.cell_phone}}",
+        "instructions": "Remove the '+1' from the phone number. Output must be exactly 10 digits.",
+        "output_field": "clean_phone"
+      }
+    },
+    {
+      "id": "action_3",
+      "type": "openai",
+      "name": "Format DOB (AI)",
+      "enabled": true,
+      "config": {
+        "api_key": "REPLACE_WITH_OPENAI_API_KEY",
+        "model": "gpt-4o-mini",
+        "input": "{{trigger_1.date_of_birth}}",
+        "instructions": "Convert date to MM-DD-YYYY format.",
+        "output_field": "formatted_dob"
+      }
+    },
+    {
+      "id": "action_4",
+      "type": "google_sheets",
+      "name": "Add Row to Google Sheets",
+      "enabled": true,
+      "config": {
+        "api_key": "REPLACE_WITH_GOOGLE_API_KEY",
+        "spreadsheet_id": "1-7TOH4oGUELRT6tE9ao1z5HmEjeiSBbhk9EPX5KWNK4",
+        "sheet_name": "All Contacts",
+        "columns": {
+          "A": "{{trigger_1.first_name}}",
+          "B": "{{trigger_1.last_name}}",
+          "C": "{{trigger_1.email_id}}",
+          "D": "{{action_2.clean_phone}}",
+          "E": "{{trigger_1.current_street}} {{trigger_1.current_city}} {{trigger_1.current_state}} {{trigger_1.current_zip}}",
+          "F": "{{action_3.formatted_dob}}",
+          "G": "{{trigger_1.ssn}}",
+          "H": "{{trigger_1.monitoring_username}}",
+          "I": "{{trigger_1.monitoring_password}}",
+          "J": "{{trigger_1.secret_key}}"
+        }
+      }
+    },
+    {
+      "id": "action_5",
+      "type": "google_contacts",
+      "name": "Create Google Contact",
+      "enabled": true,
+      "config": {
+        "api_key": "REPLACE_WITH_GOOGLE_API_KEY",
+        "first_name": "{{trigger_1.first_name}}",
+        "last_name": "{{trigger_1.last_name}}",
+        "email": "{{trigger_1.email_id}}",
+        "phone": "{{action_2.clean_phone}}",
+        "phone_type": "mobile",
+        "address_street": "{{trigger_1.current_street}}",
+        "address_city": "{{trigger_1.current_city}}",
+        "address_state": "{{trigger_1.current_state}}",
+        "address_zip": "{{trigger_1.current_zip}}",
+        "address_type": "home",
+        "birthday": "{{action_3.formatted_dob}}",
+        "custom_fields": {
+          "Credit Monitoring": "{{trigger_1.monitoring_username}}",
+          "PW": "{{trigger_1.monitoring_password}}"
+        },
+        "notes": "DOB: {{action_3.formatted_dob}}\nSSN: {{trigger_1.ssn}}\nMonitoring Agency: {{trigger_1.monitoring_agency_id}}"
+      }
+    }
+  ],
+  "location_id": "BTUVP8XCPh6i633PAvD4"
+}

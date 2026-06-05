@@ -118,16 +118,27 @@
   });
 
   logoutButton?.addEventListener('click', async () => {
-    // Clear both the ninjacore session and the domain-wide ninja_token / ninja_session
+    // Kill ALL auth tokens — force SSO re-login on next visit
     await Promise.allSettled([
-      fetch('/api/logout', { method: 'POST' }).catch(() => {
-        document.cookie = 'txn=; Path=/; Max-Age=0; SameSite=Lax';
-      }),
+      fetch('/api/logout', { method: 'POST', credentials: 'include' }).catch(() => {}),
       fetch('https://auth.ninjadispute.com/logout', { method: 'POST', credentials: 'include' }).catch(() => {}),
     ]);
-    showMessage('');
+
+    // Clear all cookies client-side (in case server didn't clear them)
+    const clearCookie = (name) => {
+      document.cookie = `${name}=; Path=/; Domain=.ninjadispute.com; Max-Age=0; SameSite=Lax; Secure`;
+      document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+    };
+
+    clearCookie('txn');           // ninjacore session
+    clearCookie('ninja_token');   // Lucia access token (12h)
+    clearCookie('ninja_session'); // Lucia session ID (30d)
+    clearCookie('jrt');           // Legacy token
+
+    showMessage('Logged out. You will need to sign in again.');
     showLogin();
-    window.location.href = '/';
+    // Hard redirect to force fresh page load
+    setTimeout(() => { window.location.href = '/'; }, 500);
   });
 
   const trySSOLogin = async (token) => {
