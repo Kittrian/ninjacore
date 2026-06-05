@@ -179,7 +179,7 @@ pub async fn webhook(
         // the api.ninjadispute.com mirror's `<num>_ninjatools` ids.
         let synthetic = format!("ghl_{}", uuid::Uuid::new_v4().simple());
         state.db
-            .query("CREATE type::thing('clients', $rid) SET \
+            .query("CREATE type::record('clients', $rid) SET \
                 client_id = $cid, source_db = 'gohighlevel', owner_key = 'admin', \
                 first_name = $fn, last_name = $ln, email = $email, phone = $phone, \
                 external_client_id = $ghl_raw, \

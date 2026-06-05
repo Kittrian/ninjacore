@@ -73,7 +73,7 @@ pub async fn create_alternate(
     let id = Uuid::new_v4().simple().to_string();
     let letter_type = if body.letter_type.trim().is_empty() { "general" } else { body.letter_type.trim() };
     state.db
-        .query("CREATE type::thing('alternate_letters', $id) SET title = $title, content = $content, type = $type, owner = $owner, createdAt = time::now()")
+        .query("CREATE type::record('alternate_letters', $id) SET title = $title, content = $content, type = $type, owner = $owner, createdAt = time::now()")
         .bind(("id",      id.clone()))
         .bind(("title",   body.title.trim().to_string()))
         .bind(("content", body.content.clone()))
@@ -91,7 +91,7 @@ pub async fn update_alternate(
 ) -> AppResult<Json<Value>> {
     let letter_type = if body.letter_type.trim().is_empty() { "general" } else { body.letter_type.trim() };
     let mut resp = state.db
-        .query("UPDATE type::thing('alternate_letters', $id) SET title = $title, content = $content, type = $type WHERE owner = $owner RETURN AFTER")
+        .query("UPDATE type::record('alternate_letters', $id) SET title = $title, content = $content, type = $type WHERE owner = $owner RETURN AFTER")
         .bind(("id",      id.clone()))
         .bind(("title",   body.title.trim().to_string()))
         .bind(("content", body.content.clone()))
@@ -109,7 +109,7 @@ pub async fn delete_alternate(
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
     let mut resp = state.db
-        .query("DELETE type::thing('alternate_letters', $id) WHERE owner = $owner RETURN BEFORE")
+        .query("DELETE type::record('alternate_letters', $id) WHERE owner = $owner RETURN BEFORE")
         .bind(("id",    id.clone()))
         .bind(("owner", user.username.clone()))
         .await?;
@@ -170,7 +170,7 @@ pub async fn create_creditor(
     }
     let id = Uuid::new_v4().simple().to_string();
     state.db
-        .query("CREATE type::thing('creditor_contacts', $id) SET name = $name, creditor = $creditor, address = $address, city = $city, state = $state, zip = $zip, phone = $phone, fax = $fax, email = $email, owner = $owner, createdAt = time::now()")
+        .query("CREATE type::record('creditor_contacts', $id) SET name = $name, creditor = $creditor, address = $address, city = $city, state = $state, zip = $zip, phone = $phone, fax = $fax, email = $email, owner = $owner, createdAt = time::now()")
         .bind(("id",       id.clone()))
         .bind(("name",     body.name.trim().to_string()))
         .bind(("creditor", body.creditor.trim().to_string()))
@@ -193,7 +193,7 @@ pub async fn update_creditor(
     Json(body): Json<CreditorBody>,
 ) -> AppResult<Json<Value>> {
     let mut resp = state.db
-        .query("UPDATE type::thing('creditor_contacts', $id) SET name = $name, creditor = $creditor, address = $address, city = $city, state = $state, zip = $zip, phone = $phone, fax = $fax, email = $email WHERE owner = $owner RETURN AFTER")
+        .query("UPDATE type::record('creditor_contacts', $id) SET name = $name, creditor = $creditor, address = $address, city = $city, state = $state, zip = $zip, phone = $phone, fax = $fax, email = $email WHERE owner = $owner RETURN AFTER")
         .bind(("id",       id.clone()))
         .bind(("name",     body.name.trim().to_string()))
         .bind(("creditor", body.creditor.trim().to_string()))
@@ -217,7 +217,7 @@ pub async fn delete_creditor(
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
     let mut resp = state.db
-        .query("DELETE type::thing('creditor_contacts', $id) WHERE owner = $owner RETURN BEFORE")
+        .query("DELETE type::record('creditor_contacts', $id) WHERE owner = $owner RETURN BEFORE")
         .bind(("id",    id.clone()))
         .bind(("owner", user.username.clone()))
         .await?;

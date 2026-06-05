@@ -74,7 +74,7 @@ pub async fn create_template(
     let id = Uuid::new_v4().simple().to_string();
     let tpl_type = if body.tpl_type.trim().is_empty() { "all" } else { body.tpl_type.trim() };
     state.db
-        .query("CREATE type::thing('templates', $id) SET title = $title, content = $content, type = $type, owner = $owner, createdAt = time::now()")
+        .query("CREATE type::record('templates', $id) SET title = $title, content = $content, type = $type, owner = $owner, createdAt = time::now()")
         .bind(("id",      id.clone()))
         .bind(("title",   body.title.trim().to_string()))
         .bind(("content", body.content.clone()))
@@ -92,7 +92,7 @@ pub async fn update_template(
 ) -> AppResult<Json<Value>> {
     let tpl_type = if body.tpl_type.trim().is_empty() { "all" } else { body.tpl_type.trim() };
     let mut resp = state.db
-        .query("UPDATE type::thing('templates', $id) SET title = $title, content = $content, type = $type WHERE owner = $owner RETURN AFTER")
+        .query("UPDATE type::record('templates', $id) SET title = $title, content = $content, type = $type WHERE owner = $owner RETURN AFTER")
         .bind(("id",      id.clone()))
         .bind(("title",   body.title.trim().to_string()))
         .bind(("content", body.content.clone()))
@@ -110,7 +110,7 @@ pub async fn delete_template(
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
     let mut resp = state.db
-        .query("DELETE type::thing('templates', $id) WHERE owner = $owner RETURN BEFORE")
+        .query("DELETE type::record('templates', $id) WHERE owner = $owner RETURN BEFORE")
         .bind(("id",    id.clone()))
         .bind(("owner", user.username.clone()))
         .await?;
@@ -159,7 +159,7 @@ pub async fn create_paragraph(
     }
     let id = Uuid::new_v4().simple().to_string();
     state.db
-        .query("CREATE type::thing('paragraphs', $id) SET title = $title, content = $content, category = $category, owner = $owner, createdAt = time::now()")
+        .query("CREATE type::record('paragraphs', $id) SET title = $title, content = $content, category = $category, owner = $owner, createdAt = time::now()")
         .bind(("id",       id.clone()))
         .bind(("title",    body.title.trim().to_string()))
         .bind(("content",  body.content.clone()))
@@ -176,7 +176,7 @@ pub async fn update_paragraph(
     Json(body): Json<ParagraphBody>,
 ) -> AppResult<Json<Value>> {
     let mut resp = state.db
-        .query("UPDATE type::thing('paragraphs', $id) SET title = $title, content = $content, category = $category WHERE owner = $owner RETURN AFTER")
+        .query("UPDATE type::record('paragraphs', $id) SET title = $title, content = $content, category = $category WHERE owner = $owner RETURN AFTER")
         .bind(("id",       id.clone()))
         .bind(("title",    body.title.trim().to_string()))
         .bind(("content",  body.content.clone()))
@@ -194,7 +194,7 @@ pub async fn delete_paragraph(
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
     let mut resp = state.db
-        .query("DELETE type::thing('paragraphs', $id) WHERE owner = $owner RETURN BEFORE")
+        .query("DELETE type::record('paragraphs', $id) WHERE owner = $owner RETURN BEFORE")
         .bind(("id",    id.clone()))
         .bind(("owner", user.username.clone()))
         .await?;

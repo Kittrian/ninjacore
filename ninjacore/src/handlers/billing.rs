@@ -105,7 +105,7 @@ pub async fn safe_query(
                 let _ = state_ref
                     .db
                     .query(
-                        "UPDATE type::thing('payment_events', $rid) SET \
+                        "UPDATE type::record('payment_events', $rid) SET \
                          webhook_synced_at = $sa, webhook_last_status = $st, updated_at = time::now()",
                     )
                     .bind(("rid", rec_id))
@@ -436,7 +436,7 @@ async fn upsert_event(state: &AppState, e: &NormalizedEvent) -> AppResult<()> {
     let rec_id = payment_event_record_id(OWNER, &e.transaction_id);
     let now = now_rfc3339();
     // First upsert with occurrence_count=1, then recalc.
-    state.db.query("UPSERT type::thing('payment_events', $rid) SET \
+    state.db.query("UPSERT type::record('payment_events', $rid) SET \
             owner_key = $o, transaction_id = $tx, event_at = $ea, \
             client_name = $cn, email = $em, phone = $ph, \
             amount_cents = $amt, card_last4 = $l4, payment_method = $pm, \
@@ -474,7 +474,7 @@ async fn upsert_event(state: &AppState, e: &NormalizedEvent) -> AppResult<()> {
     let occ = calculate_occurrence_count(state, e).await.unwrap_or(1);
     let status_label = if occ <= 1 { "Failed".to_string() } else { format!("Failed x{occ}") };
     state.db.query(
-        "UPDATE type::thing('payment_events', $rid) SET occurrence_count = $oc, status = $st, updated_at = time::now()")
+        "UPDATE type::record('payment_events', $rid) SET occurrence_count = $oc, status = $st, updated_at = time::now()")
         .bind(("rid", rec_id))
         .bind(("oc", occ))
         .bind(("st", status_label))

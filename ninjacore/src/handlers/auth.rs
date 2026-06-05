@@ -91,7 +91,7 @@ pub async fn signup(
 
     let mut resp = state
         .db
-        .query("CREATE type::thing('users', $u) SET username = $u, password_hash = $h, password_salt = $s, created_at = time::now(), updated_at = time::now()")
+        .query("CREATE type::record('users', $u) SET username = $u, password_hash = $h, password_salt = $s, created_at = time::now(), updated_at = time::now()")
         .bind(("u", username.clone()))
         .bind(("h", hash))
         .bind(("s", salt))

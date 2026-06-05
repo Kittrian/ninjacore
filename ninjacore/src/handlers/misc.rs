@@ -352,7 +352,7 @@ pub async fn import_csv(
             .and_then(|v| v.as_str().map(str::to_string))
             .unwrap_or_else(|| format!("csv_{}", uuid::Uuid::new_v4().simple()));
         state.db
-            .query("CREATE type::thing('clients', $rid) CONTENT $doc RETURN NONE")
+            .query("CREATE type::record('clients', $rid) CONTENT $doc RETURN NONE")
             .bind(("rid", rid))
             .bind(("doc", doc))
             .await?;
