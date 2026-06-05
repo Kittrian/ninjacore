@@ -3512,8 +3512,8 @@ button {
 }
 
 .nt-liquid-email-copy {
-  width: min(100%, 35rem);
-  max-width: 100%;
+  width: fit-content;
+  max-width: min(100%, 16.5rem);
   border-radius: 999px;
   border: 1px solid rgba(124, 223, 233, 0.34);
   background: rgba(224, 239, 255, 0.14);
@@ -3528,8 +3528,8 @@ button {
 }
 
 .clients-table-wrap--compact .nt-liquid-email-copy {
-  width: min(50%, 17.5rem);
-  max-width: 50%;
+  width: fit-content;
+  max-width: min(100%, 14rem);
 }
 
 .nt-liquid-email-copy-label {

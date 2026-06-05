@@ -1,5 +1,5 @@
 {
-  "frontendVersion": "v3.18",
-  "buildVersion": "20260605-14",
-  "appScriptVersion": "v3.18 removed page nav links"
+  "frontendVersion": "v3.19",
+  "buildVersion": "20260605-15",
+  "appScriptVersion": "v3.19 shorter client email bubble"
 }
