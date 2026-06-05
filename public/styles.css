@@ -3624,6 +3624,42 @@ button {
   width: 7.6rem;
 }
 
+.nt-dashboard-clients-table {
+  min-width: 1180px;
+}
+
+.nt-dashboard-clients-table thead th:nth-child(1) {
+  width: 28%;
+}
+
+.nt-dashboard-clients-table thead th:nth-child(2) {
+  width: 8.3rem;
+}
+
+.nt-dashboard-clients-table thead th:nth-child(3) {
+  width: 13.8rem;
+}
+
+.nt-dashboard-clients-table thead th:nth-child(4) {
+  width: 8.7rem;
+}
+
+.nt-dashboard-clients-table thead th:nth-child(5) {
+  width: 10rem;
+}
+
+.nt-dashboard-clients-table thead th:nth-child(6) {
+  width: 8rem;
+}
+
+.nt-dashboard-clients-table thead th:nth-child(7) {
+  width: 8.8rem;
+}
+
+.nt-dashboard-clients-table thead th:nth-child(8) {
+  width: 7.6rem;
+}
+
 .nt-liquid-sort-button {
   width: 100%;
   border: none;
