@@ -352,11 +352,11 @@ async fn sync_client_to_gohighlevel(state: &AppState, created: &Value, body: &Ne
         .to_string();
 
     if !contact_id.is_empty() {
-        if let Some(record_id) = created.get("id").and_then(|value| value.as_str()) {
+        if let Some(record_id) = created.get("id").and_then(|value| value.as_str()).map(|value| value.to_string()) {
             let _ = state.db
                 .query("UPDATE type::thing($table, $id) SET external_client_id = $ghl, updated_at = time::now()")
                 .bind(("table", "client"))
-                .bind(("id", record_id.trim_start_matches("client:")))
+                .bind(("id", record_id.trim_start_matches("client:").to_string()))
                 .bind(("ghl", contact_id.clone()))
                 .await;
         }
