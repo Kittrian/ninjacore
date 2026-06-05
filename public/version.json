@@ -1,5 +1,5 @@
 {
-  "frontendVersion": "v3.16",
-  "buildVersion": "20260604-12",
-  "appScriptVersion": "v3.16 login width css syntax fix"
+  "frontendVersion": "v3.17",
+  "buildVersion": "20260605-13",
+  "appScriptVersion": "v3.17 login shadow cleanup and polish"
 }

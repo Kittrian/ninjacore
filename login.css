@@ -37,7 +37,6 @@ body.auth-active {
 .login-form div,
 .login-form p {
   color: #babecc;
-  text-shadow: 1px 1px 1px #fff;
 }
 
 .login-form {
@@ -55,6 +54,9 @@ body.auth-active {
   margin: 0;
   font-size: clamp(3rem, 8vw, 4.5rem);
   line-height: 0.92;
+  color: #b1b9ca;
+  letter-spacing: -0.05em;
+  font-weight: 400;
 }
 
 .login-form label,
@@ -74,7 +76,6 @@ body.auth-active {
   border-radius: 320px;
   padding: 16px;
   background-color: #ebecf0;
-  text-shadow: 1px 1px 0 #fff;
 }
 
 .auth-active input,
@@ -95,11 +96,12 @@ body.auth-active {
 
 .auth-active button,
 .login-form button {
-  color: #61677c;
+  color: #f7fbff;
   font-weight: 600;
   box-shadow: -5px -5px 20px #fff, 5px 5px 20px #babecc;
   transition: all 0.2s ease-in-out;
   cursor: pointer;
+  letter-spacing: 0.01em;
 }
 
 .auth-active button:hover,
@@ -121,7 +123,8 @@ body.auth-active {
 .login-form button.red {
   display: block;
   width: 100%;
-  color: #ae1100;
+  color: #f7fbff;
+  background: linear-gradient(135deg, #0d7a60, #0a5f4b);
 }
 
 .login-form .sso-login-buttons {
@@ -131,6 +134,14 @@ body.auth-active {
 .login-form .sso-button {
   width: 100%;
   box-sizing: border-box;
+  box-shadow: 0 10px 24px rgba(109, 122, 150, 0.12);
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+
+.login-form .sso-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(109, 122, 150, 0.18);
+  filter: saturate(1.02);
 }
 
 .auth-message {
