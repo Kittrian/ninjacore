@@ -182,6 +182,8 @@ const postWidgetHubMode = (mode) => {
   }
 };
 
+let widgetNavSetActiveAction = null;
+
 const initLiquidNav = () => {
   const nav = document.getElementById("tnwNav");
   const glare = document.getElementById("tnwGlare");
@@ -199,18 +201,32 @@ const initLiquidNav = () => {
       : "none";
     activePill.style.width = `${btn.offsetWidth}px`;
     activePill.style.transform = `translateX(${btn.offsetLeft}px)`;
+    activePill.style.opacity = "1";
   };
 
-  const activate = (btn) => {
+  const setActiveAction = (action, smooth = true) => {
+    const button = navButtons.find((item) => item.dataset.action === action) || null;
     navButtons.forEach((item) => item.classList.remove("active"));
-    btn.classList.add("active");
-    updatePill(btn, true);
+    if (!button) {
+      activePill.style.opacity = "0";
+      return;
+    }
+    button.classList.add("active");
+    updatePill(button, smooth);
+  };
+
+  widgetNavSetActiveAction = setActiveAction;
+
+  const activate = (btn) => {
+    setActiveAction(String(btn.dataset.action || "").trim(), true);
 
     const action = String(btn.dataset.action || "").trim();
     if (action === "add") {
       postWidgetHubMode("add");
     } else if (action === "home") {
       postWidgetHubMode("home");
+    } else if (action === "contacts") {
+      postWidgetHubMode("contacts");
     } else {
       postWidgetHubMode("clients");
     }
@@ -238,7 +254,7 @@ const initLiquidNav = () => {
 
   const initialActive = document.querySelector(".tnw-nav-btn.active") || navButtons[0];
   if (initialActive) {
-    window.setTimeout(() => updatePill(initialActive, false), 50);
+    window.setTimeout(() => setActiveAction(String(initialActive.dataset.action || "").trim(), false), 50);
   }
 
   window.addEventListener("resize", () => {
@@ -275,6 +291,23 @@ window.addEventListener("message", (event) => {
   if (event.data?.type === "tools-ninja:script-version") {
     syncWidgetScriptVersion(event.data.value || "");
   }
+
+  if (event.data?.type === "tools-ninja:navigation-state") {
+    const route = String(event.data.route || "").trim();
+    const hubMode = String(event.data.hubMode || "").trim();
+    const alternateTab = String(event.data.alternateTab || "").trim();
+    let action = "";
+
+    if ((route === "alternate" && alternateTab === "creditors") || (route === "clients" && hubMode === "clients")) {
+      action = "contacts";
+    } else if (route === "clients" && hubMode === "add") {
+      action = "add";
+    } else if (route === "clients" && hubMode === "home") {
+      action = "home";
+    }
+
+    widgetNavSetActiveAction?.(action, false);
+  }
 });
 
 $(document).ready(function () {
@@ -290,6 +323,7 @@ $(document).ready(function () {
   syncWidgetScriptVersion(widgetVersionFallback);
   if (window.parent && window.parent !== window) {
     window.parent.postMessage({ type: "tools-ninja:request-script-version" }, window.location.origin);
+    window.parent.postMessage({ type: "tools-ninja:request-navigation-state" }, window.location.origin);
   }
 
   $("#widgetLogoUpload").on("change", function (event) {

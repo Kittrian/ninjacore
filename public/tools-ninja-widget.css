@@ -977,8 +977,8 @@ body.outlineIt *::after {
 
 .widget-console {
   width: min(28rem, calc(100% - 2rem));
-  min-height: 10.9rem;
-  max-height: 10.9rem;
+  min-height: 14.6rem;
+  max-height: 14.6rem;
   margin: 0 auto;
   padding: 0.7rem 0.9rem;
   border-radius: 14px;
@@ -1248,8 +1248,8 @@ body {
 
 .widget-console {
   width: 100%;
-  min-height: 10.9rem;
-  max-height: 10.9rem;
+  min-height: 14.6rem;
+  max-height: 14.6rem;
   margin: 0;
   padding: 0.72rem 0.95rem;
   opacity: 1;
