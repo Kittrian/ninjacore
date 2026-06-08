@@ -865,7 +865,8 @@ div {
 }
 html {
   width: 100%;
-  height: 100vh;
+  height: auto;
+  min-height: 100vh;
   box-sizing: border-box;
   -webkit-font-smoothing: antialiased;
 }
@@ -887,8 +888,10 @@ body {
   justify-content: flex-start;
   flex-direction: column;
   width: 100%;
-  min-height: 100vh;
-  overflow: hidden;
+  height: auto;
+  min-height: auto;
+  overflow: visible;
+  overflow-x: hidden;
   padding-top: 1.2rem;
 }
 
@@ -1025,18 +1028,7 @@ body.outlineIt *::after {
   border-color: var(--widget-console-border, rgba(156, 255, 178, 0.42));
 }
 
-html,
-body {
-  height: 100%;
-  min-height: 100%;
-}
-
-body {
-  display: block;
-  min-height: 100%;
-  padding: 0;
-  overflow: hidden;
-}
+/* Removed old height constraints - now handled by flexible html/body rules above */
 
 .widget-shell {
   --widget-frame-scale-y: 1;
@@ -1045,32 +1037,31 @@ body {
   align-items: start;
   gap: 0.5rem;
   width: 100%;
-  height: 100vh;
-  min-height: 100vh;
+  min-height: auto;
+  height: auto;
   aspect-ratio: auto;
-  padding: 1.55rem 1.7rem 1.1rem;
-  border-radius: 0;
-  background-image: url("/assets/widget-console-frame-square-v6.png");
-  background-image: -webkit-image-set(
-    url("/assets/widget-console-frame-square-v6.webp") type("image/webp"),
-    url("/assets/widget-console-frame-square-v6.png") type("image/png")
-  );
-  background-image: image-set(
-    url("/assets/widget-console-frame-square-v6.webp") type("image/webp"),
-    url("/assets/widget-console-frame-square-v6.png") type("image/png")
-  );
-  background-repeat: no-repeat;
-  background-position: center top;
-  background-size: 100% calc(100% * var(--widget-frame-scale-y));
-  box-shadow: none;
+  padding: 3rem 1.2rem 1.2rem !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+/* Hard-kill any pseudo-element borders */
+.widget-shell::before,
+.widget-shell::after {
+  display: none !important;
 }
 
 .widget-top-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: center;
+  align-items: start;
   gap: 1rem;
   width: 100%;
+  auto-rows: max-content;
 }
 
 .widget-column {
@@ -1522,7 +1513,7 @@ body {
 .widget-status-col-right {
   align-items: stretch;
   justify-content: flex-start;
-  min-height: 100%;
+  min-height: auto;
   padding-top: 0;
   padding-right: 1.25rem;
 }

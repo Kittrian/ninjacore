@@ -1,0 +1,1 @@
+import{br as o,r as n,x as t,b4 as a,aY as u}from"./D9274DDn.js";function i(r){const e=o({dir:n("ltr")});return t(()=>r?.value||e.dir?.value||"ltr")}function c(r){return t(()=>a(r)?!!u(r)?.closest("form"):!0)}export{c as a,i as u};

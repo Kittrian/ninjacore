@@ -1,0 +1,10 @@
+[Unit]
+Description=Run NinjaCore VPS backup daily at 5 AM UTC
+
+[Timer]
+OnCalendar=*-*-* 05:00:00
+Persistent=true
+Unit=ninjacore-vps-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -13,11 +13,24 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260519-01" />
-    <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
-    <link rel="stylesheet" href="/login.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-    <script src="/login.js" defer></script>
+    <!-- 🚀 CODE SPLITTING: Load critical CSS immediately -->
+    <link rel="stylesheet" href="/dist/critical.css" />
+    <!-- 📦 Lazy-load non-critical CSS after first paint -->
+    <link rel="preload" href="/dist/deferred.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="/dist/deferred.css" /></noscript>
+
+    <!-- External libraries (lazy-loaded) -->
+    <link rel="preload" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+
+    <!-- Lazy load page-specific styles -->
+    <link rel="preload" href="/dist/login.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="/dist/login.css" /></noscript>
+
+    <!-- Lazy loader script - enables deferred loading -->
+    <script src="/lazy-loader.js" async></script>
+    <!-- Page-specific JS - deferred loading -->
+    <script src="/dist/login.bundle.js" defer></script>
   </head>
   <body>
     <section class="auth-shell" style="display: block;">
@@ -41,6 +54,24 @@
           <button class="auth-submit" type="submit">Log In</button>
         </form>
 
+        <div id="googleSignInWrap" class="google-signin-wrap" hidden>
+          <div class="google-signin-divider"><span>or</span></div>
+          <div id="g_id_onload"
+            data-client_id="224557516405-idt8d5qlctjtk1p3u031dtsnld95nbm9.apps.googleusercontent.com"
+            data-callback="handleGoogleLogin"
+            data-auto_prompt="false">
+          </div>
+          <div class="g_id_signin"
+            data-type="standard"
+            data-size="large"
+            data-theme="outline"
+            data-text="sign_in_with"
+            data-shape="pill"
+            data-logo_alignment="left"
+            data-width="320">
+          </div>
+        </div>
+
         <form class="signup-form auth-form" data-auth-form="signup" novalidate>
           <h2>Create Account</h2>
           <p>Start with a fresh workspace</p>
@@ -61,6 +92,7 @@
         <p class="auth-message" id="authMessage" aria-live="polite"></p>
       </div>
     </section>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <div class="page-shell" style="display: none;">
       <div id="appBootLoader" class="app-boot-loader" hidden>
         <div class="app-boot-loader-inner" aria-live="polite" aria-busy="true">
