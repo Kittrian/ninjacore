@@ -1,0 +1,16 @@
+[Unit]
+Description=SurrealDB Database
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/lib/surrealdb
+ExecStart=/usr/local/bin/surreal start --log debug --user root --pass change-me --bind 0.0.0.0:8000
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

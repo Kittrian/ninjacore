@@ -1,0 +1,15 @@
+node_modules/
+build/
+.svelte-kit/
+.env.local
+.env.*.local
+dist/
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+pnpm-lock.yaml
+yarn.lock
+bun.lockb

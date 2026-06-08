@@ -1,0 +1,28 @@
+[Unit]
+Description=NinjaCore SvelteKit Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ninjacore/apps/ninjacore-web-svelte
+
+# Run the SvelteKit dev server (which serves the built app)
+ExecStart=/usr/bin/node build/index.js
+
+# Auto-restart on failure
+Restart=on-failure
+RestartSec=5s
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# Environment variables
+Environment="NODE_ENV=production"
+Environment="ORIGIN=http://5.78.214.176:3100"
+Environment="PROTOCOL_HEADER=x-forwarded-proto"
+Environment="HOST_HEADER=x-forwarded-host"
+
+[Install]
+WantedBy=multi-user.target

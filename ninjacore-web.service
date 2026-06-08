@@ -1,0 +1,16 @@
+[Unit]
+Description=NinjaCore Next.js Frontend
+After=network.target ninjacore.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ninjacore/apps/ninjacore-web
+ExecStart=/opt/ninjacore/start-frontend.sh
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

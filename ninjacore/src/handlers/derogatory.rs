@@ -65,7 +65,7 @@ pub async fn get_derogatory(
     }
 
     let mut __resp = state.db
-        .query("SELECT * FROM ONLY type::thing('clients', $id) LIMIT 1")
+        .query("SELECT * FROM ONLY type::record('clients', $id) LIMIT 1")
         .bind(("id", client_id.clone()))
         .await?;
     let client: Option<ClientRow> = crate::db::take_one(&mut __resp, 0)?;

@@ -185,7 +185,7 @@ pub async fn delete_client(
 ) -> AppResult<Json<Value>> {
     let mut __resp = state
         .db
-        .query("DELETE type::thing('clients', $id) RETURN BEFORE")
+        .query("DELETE type::record('clients', $id) RETURN BEFORE")
         .bind(("id", id.clone()))
         .await?;
     let deleted: Option<Value> = crate::db::take_one(&mut __resp, 0)?;
@@ -214,7 +214,7 @@ pub async fn patch_status(
     }
     let mut __resp = state
         .db
-        .query("UPDATE type::thing('clients', $id) SET status = $s, updated_at = time::now() RETURN AFTER")
+        .query("UPDATE type::record('clients', $id) SET status = $s, updated_at = time::now() RETURN AFTER")
         .bind(("id", id))
         .bind(("s", next.clone()))
         .await?;
@@ -239,7 +239,7 @@ pub async fn patch_phase(
     }
     let mut __resp = state
         .db
-        .query("UPDATE type::thing('clients', $id) SET phase = $p, updated_at = time::now() RETURN AFTER")
+        .query("UPDATE type::record('clients', $id) SET phase = $p, updated_at = time::now() RETURN AFTER")
         .bind(("id", id))
         .bind(("p", next.clone()))
         .await?;
@@ -268,7 +268,7 @@ pub async fn patch_next_import(
         .unwrap_or_default();
 
     let mut __resp = state.db.query(
-        "UPDATE type::thing('clients', $id) SET \
+        "UPDATE type::record('clients', $id) SET \
             next_import_int = $ni, next_import_label = $nl, \
             next_import_mode = 'manual', \
             manual_next_import_start_days = $days, \
@@ -299,7 +299,7 @@ pub async fn patch_financial(
 ) -> AppResult<Json<Value>> {
     let yearly_income = body.yearly_income.unwrap_or_default().trim().to_string();
     let mut __resp = state.db.query(
-        "UPDATE type::thing('clients', $id) SET yearly_income = $yi, updated_at = time::now() RETURN AFTER")
+        "UPDATE type::record('clients', $id) SET yearly_income = $yi, updated_at = time::now() RETURN AFTER")
         .bind(("id", id))
         .bind(("yi", yearly_income))
         .await?;
@@ -406,7 +406,7 @@ pub async fn patch_profile(
     let ni_set = ni_opt.is_some();
 
     let mut __resp = state.db.query(
-        "UPDATE type::thing('clients', $id) SET \
+        "UPDATE type::record('clients', $id) SET \
             first_name = $fn, last_name = $ln, email = $email, phone = $phone, \
             email_n = $em, phone_n = $ph, \
             dob = $dob, ssn = $ssn, address = $address, \
@@ -606,7 +606,7 @@ async fn persist_refresh_overrides(
     if body.secret_key.is_some() { sets.push("secret_key = $sk"); }
 
     let update = format!(
-        "UPDATE type::thing('clients', $id) SET {} RETURN NONE",
+        "UPDATE type::record('clients', $id) SET {} RETURN NONE",
         sets.join(", ")
     );
     let mut q = state.db.query(update).bind(("id", id.to_string()));
@@ -647,7 +647,7 @@ fn client_to_camel(row: &Value) -> Value {
 async fn load_client_raw(state: &AppState, id: &str) -> AppResult<Value> {
     let mut __resp = state
         .db
-        .query("SELECT * FROM ONLY type::thing('clients', $id) LIMIT 1")
+        .query("SELECT * FROM ONLY type::record('clients', $id) LIMIT 1")
         .bind(("id", id.to_string()))
         .await?;
     let row: Option<Value> = crate::db::take_one(&mut __resp, 0)?;

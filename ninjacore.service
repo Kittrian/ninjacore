@@ -1,0 +1,24 @@
+[Unit]
+Description=NinjaCore Rust Backend API
+After=network.target surrealdb.service
+Requires=surrealdb.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ninjacore/ninjacore
+Environment="BIND_ADDR=0.0.0.0:8080"
+Environment="SURREAL_URL=http://127.0.0.1:8000"
+Environment="SURREAL_NS=ninja"
+Environment="SURREAL_DB=dispute"
+Environment="SURREAL_USER=root"
+Environment="SURREAL_PASS=change-me"
+Environment="RUST_LOG=ninjacore=debug,tower_http=info"
+ExecStart=/opt/ninjacore/ninjacore/target/release/ninjacore
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
