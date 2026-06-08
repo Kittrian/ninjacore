@@ -12,59 +12,19 @@
 	let filteredClients = [];
 	let searchWorker;
 	let totalCount = 0;
-	let isLoadingMore = false;
-	const CHUNK_SIZE = 500;
 
-	// Fetch initial clients (first 100 for fast render)
+	// Fetch full client payload once; backend already returns the whole list.
 	const clientsQuery = createQuery({
 		queryKey: queryKeys.clients(),
-		queryFn: () => api.getClients(0, 100), // Initial 100 for SSR/fast render
+		queryFn: () => api.getClientsPayload(),
 		staleTime: 1000 * 60, // 1 minute
 		gcTime: 1000 * 60 * 5, // 5 minutes
 	});
 
-	// Load remaining clients in background (for search + counts)
-	const allClientsQuery = createQuery({
-		queryKey: [...queryKeys.clients(), 'all'],
-		queryFn: async () => {
-			const initial = await api.getClients(0, 100);
-			totalCount = initial.length || 100; // Estimate total
-
-			// If we have more than 100, load in chunks
-			if (totalCount > 100) {
-				const allData = [...(initial || [])];
-				for (let offset = 100; offset < 3500; offset += CHUNK_SIZE) {
-					try {
-						const chunk = await api.getClients(offset, CHUNK_SIZE);
-						if (!chunk || chunk.length === 0) break;
-						allData.push(...chunk);
-						if (chunk.length < CHUNK_SIZE) break; // Stop if we got fewer than chunk size
-					} catch (e) {
-						console.warn(`Failed to load chunk at offset ${offset}:`, e);
-						break;
-					}
-				}
-				return allData;
-			}
-			return initial;
-		},
-		staleTime: 1000 * 60 * 5, // 5 minutes (longer for full dataset)
-		gcTime: 1000 * 60 * 10, // 10 minutes
-	});
-
-	// Show initial 100 immediately
 	$: if ($clientsQuery.data) {
-		clients = $clientsQuery.data;
-		// For non-search display, use initial 100
-		if (!$searchQuery.trim()) {
-			updateFiltered();
-		}
-	}
-
-	// Load all clients in background for search + counts
-	$: if ($allClientsQuery.data) {
-		allClients = $allClientsQuery.data;
-		totalCount = allClients.length;
+		allClients = $clientsQuery.data.clients || [];
+		clients = allClients;
+		totalCount = $clientsQuery.data.totalCount || allClients.length;
 
 		// Initialize FULL search index with ALL clients
 		initializeSearchIndex(allClients);
@@ -75,10 +35,7 @@
 			});
 		}
 
-		// If user was searching, update results with full dataset
-		if ($searchQuery.trim()) {
-			updateFiltered();
-		}
+		updateFiltered();
 	}
 
 	// Update filtered list when search/filter changes
@@ -94,32 +51,12 @@
 			// This will be empty if still loading, shows incremental results as data loads
 			filteredClients = searchClients($searchQuery);
 		} else {
-			// BROWSE: Use initial 100 for fast render, expand to all when available
-			const sourceClients = allClients.length > 100 ? allClients : clients;
+			const sourceClients = allClients.length ? allClients : clients;
 
 			// Apply status filter
 			filteredClients = sourceClients.filter(
-				(c) => $filterStatus === 'all' || c.status === $filterStatus
+				(c) => $filterStatus === 'all' || String(c.status || '').toLowerCase() === $filterStatus
 			);
-		}
-	}
-
-	// Load more clients when user scrolls near bottom
-	async function loadMore() {
-		if (isLoadingMore || allClients.length === 0) return;
-		isLoadingMore = true;
-
-		try {
-			const nextOffset = clients.length;
-			const moreClients = await api.getClients(nextOffset, CHUNK_SIZE);
-			if (moreClients && moreClients.length > 0) {
-				clients = [...clients, ...moreClients];
-				updateFiltered();
-			}
-		} catch (e) {
-			console.error('Failed to load more clients:', e);
-		} finally {
-			isLoadingMore = false;
 		}
 	}
 
@@ -203,21 +140,13 @@
 				<!-- SEARCH MODE -->
 				<p>
 					Found {filteredClients.length} result{filteredClients.length !== 1 ? 's' : ''} in {totalCount} clients
-					{#if $allClientsQuery.isPending}
-						<span class="ml-2 text-blue-600 animate-pulse">🔍 Searching in {allClients.length}/{totalCount} loaded...</span>
-					{:else}
-						<span class="ml-2 text-green-600">✅ Searched all {totalCount} clients</span>
-					{/if}
+					<span class="ml-2 text-green-600">✅ Searched all {totalCount} clients</span>
 				</p>
 			{:else}
 				<!-- BROWSE MODE -->
 				<p>
 					Showing {filteredClients.length} of {totalCount} clients
-					{#if $allClientsQuery.isPending}
-						<span class="ml-2 text-blue-600 animate-pulse">📥 Loading all clients for search...</span>
-					{:else if allClients.length >= 100}
-						<span class="ml-2 text-green-600">✅ All {allClients.length} clients ready for search</span>
-					{/if}
+					<span class="ml-2 text-green-600">✅ All {allClients.length} clients ready for search</span>
 				</p>
 			{/if}
 		</div>
@@ -246,7 +175,7 @@
 								</div>
 								<div class="text-right">
 									<span
-										class="inline-block px-2 py-1 text-xs rounded {client.status === 'client'
+										class="inline-block px-2 py-1 text-xs rounded {String(client.status || '').toLowerCase() === 'client'
 											? 'bg-green-100 text-green-800'
 											: 'bg-gray-100 text-gray-800'}"
 									>
@@ -259,18 +188,5 @@
 				{/each}
 			</div>
 		</div>
-
-		<!-- Load More Button (only show in browse mode) -->
-		{#if !$searchQuery.trim() && clients.length < totalCount && clients.length < (allClients.length || 100)}
-			<div class="mt-4 text-center">
-				<button
-					on:click={loadMore}
-					disabled={isLoadingMore}
-					class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition"
-				>
-					{isLoadingMore ? 'Loading...' : `Load More (${clients.length}/${totalCount})`}
-				</button>
-			</div>
-		{/if}
 	{/if}
 </div>
