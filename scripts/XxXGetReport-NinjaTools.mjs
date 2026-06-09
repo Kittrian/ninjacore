@@ -154,6 +154,7 @@ const extractFirstJsonObject = (value) => {
 
 const normalizeAgency = (value) => String(value || '').trim().toLowerCase();
 const escapeRegExp = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const SCRIPT_VERSION = 'v.6';
 const defaultApiBaseNewServer = String(process.env.TOOLS_NINJA_API_BASE_DEFAULT || 'http://5.78.214.176:3017').trim();
 const defaultApiBaseWhitelistedServer = String(process.env.TOOLS_NINJA_API_BASE_WHITELISTED || 'http://147.93.190.166:3017').trim();
 
@@ -1168,7 +1169,7 @@ const runSmartCredit = async (context, client, apiBase) => {
 };
 
 const main = async () => {
-  console.log('XxXGetReport - Ninja Tools Server Runner');
+  console.log(`XxXGetReport - Ninja Tools Server Runner ${SCRIPT_VERSION}`);
 
   const client = parseClientPayload();
   const monitoringAgency = String(client.monitoringAgency || '').trim();
