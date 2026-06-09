@@ -50,12 +50,18 @@ bun run preview
 
 ```
 src/
-├── App.svelte          # Main application component
-├── main.ts             # Entry point
-├── styles.css          # Global styles + Tailwind directives
+├── App.svelte                    # Main app shell
+├── main.ts                       # Entry point
+├── styles.css                    # Global styles + Tailwind directives
 └── lib/
-    └── api.ts          # API client utilities
+    ├── api.ts                    # API client utilities
+    ├── stores.ts                 # Global state management
+    └── components/
+        ├── Card.svelte           # Reusable card component
+        └── Button.svelte         # Reusable button component
 ```
+
+**See [DEVELOPMENT.md](./DEVELOPMENT.md) for full development guide and what needs to be done next.**
 
 ## 🔌 API Integration
 
