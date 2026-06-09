@@ -329,7 +329,9 @@ const initClientDropdown = (select) => {
   wrapper.appendChild(root);
   root.appendChild(btn);
   root.appendChild(menu);
-  wrapper.classList.add(select.disabled ? 'is-disabled' : '');
+  if (select.disabled) {
+    wrapper.classList.add('is-disabled');
+  }
   refreshClientDropdown(select);
   if (!hasValue) {
     btn.setAttribute('disabled', 'disabled');
