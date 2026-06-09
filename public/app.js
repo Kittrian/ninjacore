@@ -383,7 +383,7 @@ const setBootLoadingOverlay = (isActive, message = '') => {
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
 const ND_API = 'https://api.ninjadispute.com';
 const ndFetch = (path, opts = {}) => fetch(`${ND_API}${path}`, { credentials: 'include', ...opts });
-const APP_SCRIPT_VERSION = 'v3.02 loaded';
+const APP_SCRIPT_VERSION = 'v3.17 loaded';
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
 const widgetBusinessNameStorageKey = 'tools-ninja-widget-business-name';
@@ -947,6 +947,22 @@ const uniquePhaseList = (phases = []) => {
       seen.add(normalized);
       return true;
     });
+};
+
+const dedupeClientsById = (clients = []) => {
+  const rows = Array.isArray(clients) ? clients : [];
+  const byId = new Map();
+  rows.forEach((client) => {
+    if (!client || typeof client !== 'object') {
+      return;
+    }
+    const id = String(client.id || '').trim();
+    if (!id) {
+      return;
+    }
+    byId.set(id, client);
+  });
+  return [...byId.values()];
 };
 
 const getDefaultHomeSettings = () => ({
@@ -1639,6 +1655,7 @@ const setClientFormMode = (mode = 'add', client = null) => {
     }
     setClientFormSegment('client');
     renderClientDocumentsSection(client.documents || []);
+    populateAddClientFormFromClient(client);
     updateClientMonitoringCredentialLayout();
     return;
   }
@@ -1700,13 +1717,16 @@ const populateAddClientFormFromClient = (client) => {
   form.monitoringUsername.value = client.monitoringUsername || '';
   form.monitoringPassword.value = client.monitoringPassword || '';
   if (form.secretKey) form.secretKey.value = client.secretKey || '';
-  form.tokenId.value = client.tokenId || '';
+  if (form.monitoringToken) form.monitoringToken.value = client.monitoringToken || '';
+  if (form.tokenId) {
+    form.tokenId.value = client.tokenId || client.monitoringToken || '';
+  }
   form.portalPassword.value = client.portalPassword || '';
   form.language.value = client.language || 'English';
   if (form.ninjaAssigned) {
     const current = String(state.currentUser || 'admin').trim() || 'admin';
     form.ninjaAssigned.innerHTML = `<option value="${escapeHtml(current)}">${escapeHtml(current)}</option>`;
-    form.ninjaAssigned.value = client.ninjaAssigned || current;
+    form.ninjaAssigned.value = client.ninjaAssigned || client.assignedTo || current;
   }
   if (form.affiliateAssigned) {
     form.affiliateAssigned.value = client.affiliateAssigned || 'None';
@@ -1973,7 +1993,9 @@ const request = async (url, options = {}) => {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(payload.error || 'Request failed');
+    const error = new Error(payload.error || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
@@ -6055,7 +6077,6 @@ const openEditDialog = async (clientId) => {
   renderAddClientAssignmentOptions();
   renderSpouseClientOptions();
   setClientFormMode('edit', detailedClient);
-  populateAddClientFormFromClient(detailedClient);
   setHubMode('add', { preserveAddFormState: true });
   initClientDropdowns();
   setFormMessage(`Editing ${detailedClient.firstName} ${detailedClient.lastName}.`);
@@ -6081,27 +6102,46 @@ const loadClients = async ({ showSkeleton = false } = {}) => {
     renderClientsLoadingSkeleton();
   }
 
+  try {
   const payload = await request('/api/clients');
-  state.clients = payload.clients;
-  state.clientsRenderLimit = CLIENTS_RENDER_INITIAL_LIMIT;
-  if (state.pinnedClientId && !state.clients.some((client) => client.id === state.pinnedClientId)) {
-    clearPinnedClientList();
+    state.clients = dedupeClientsById(payload?.clients);
+    state.clientsRenderLimit = CLIENTS_RENDER_INITIAL_LIMIT;
+    if (state.pinnedClientId && !state.clients.some((client) => client.id === state.pinnedClientId)) {
+      clearPinnedClientList();
+    }
+    state.currentUser = String(payload.currentUser || state.currentUser || 'admin').trim() || 'admin';
+    applyDisputeDueDateCountdownToClients(state.clients);
+    state.statuses = payload.statuses || state.statuses;
+    state.phases = uniquePhaseList(payload.phases || state.phases || ['None']);
+    syncStatusFilterOptions();
+    renderAddClientStatusOptions();
+    renderAddClientPhaseOptions();
+    renderAddClientAssignmentOptions();
+    renderSpouseClientOptions();
+    renderClients();
+    if (!state.selectedClientId) {
+      setWidgetRefreshHeader(null);
+      updateBrowserTabTitle(null);
+    }
+    syncSmartCreditClientTokenInput();
+  } catch (error) {
+    if (error?.status === 401) {
+      const pageShell = document.querySelector('.page-shell');
+      const loginForm = document.querySelector('.login-form');
+      const authMessage = document.getElementById('authMessage');
+      document.documentElement.classList.add('auth-active');
+      document.body.classList.add('auth-active');
+      if (pageShell) pageShell.style.display = 'none';
+      if (loginForm) loginForm.style.display = '';
+      if (authMessage) {
+        authMessage.textContent = 'Your session expired. Please log in again.';
+        authMessage.style.color = '#ee3b6c';
+      }
+      setBootLoadingOverlay(false);
+      return;
+    }
+    throw error;
   }
-  state.currentUser = String(payload.currentUser || state.currentUser || 'admin').trim() || 'admin';
-  applyDisputeDueDateCountdownToClients(state.clients);
-  state.statuses = payload.statuses || state.statuses;
-  state.phases = uniquePhaseList(payload.phases || state.phases || ['None']);
-  syncStatusFilterOptions();
-  renderAddClientStatusOptions();
-  renderAddClientPhaseOptions();
-  renderAddClientAssignmentOptions();
-  renderSpouseClientOptions();
-  renderClients();
-  if (!state.selectedClientId) {
-    setWidgetRefreshHeader(null);
-    updateBrowserTabTitle(null);
-  }
-  syncSmartCreditClientTokenInput();
 };
 
 const renderClientDetailLoading = () => {
@@ -6613,7 +6653,8 @@ const syncSelectedClientFromServer = async (clientId) => {
   }
   applyDisputeDueDateCountdownToClients([incomingClient]);
 
-  const existingClient = state.clients.find((client) => client.id === incomingClient.id);
+  const normalizedIncomingId = String(incomingClient.id || '').trim();
+  const existingClient = state.clients.find((client) => String(client?.id || '').trim() === normalizedIncomingId);
   if (existingClient) {
     Object.assign(existingClient, incomingClient);
   } else {
@@ -7592,7 +7633,18 @@ const bindEvents = () => {
         await finishClientSaveProgress();
         // Merge the new client into state instead of refetching the whole list.
         if (payload?.client) {
-          state.clients.push(payload.client);
+          const nextClient = payload.client;
+          const normalizedId = String(nextClient.id || '').trim();
+          const existingClientIndex = state.clients.findIndex((entry) => String(entry.id || '').trim() === normalizedId);
+          if (existingClientIndex >= 0) {
+            state.clients[existingClientIndex] = {
+              ...state.clients[existingClientIndex],
+              ...nextClient,
+            };
+          } else {
+            state.clients.push(nextClient);
+          }
+          state.clients = dedupeClientsById(state.clients);
           renderClients();
         }
         setHubMode('clients');

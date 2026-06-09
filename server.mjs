@@ -1574,6 +1574,7 @@ const normalizeClientRecord = (client = {}) => ({
   monitoringPassword: client.monitoringPassword || '',
   secretKey: client.secretKey || '',
   monitoringToken: client.monitoringToken || '',
+  tokenId: client.monitoringToken || '',
   portalPassword: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', client.ssn || ''),
   portalEnabled: client.portalEnabled !== undefined ? Boolean(client.portalEnabled) : true,
   language: client.language || 'English',
@@ -1741,6 +1742,48 @@ const readOptionalStringField = (source, key, fallback = '') => (
     ? String(source[key] ?? '').trim()
     : String(fallback ?? '').trim()
 );
+const readMonitoringTokenFromBody = (body, fallback = '') => (
+  hasOwnField(body, 'monitoringToken')
+    ? String(body.monitoringToken ?? '').trim()
+    : String(body?.tokenId ?? fallback).trim()
+);
+const buildClientIdentityKeys = (client = {}) => {
+  const first = normalizeLookupValue(client.firstName || '');
+  const last = normalizeLookupValue(client.lastName || '');
+  const email = normalizeLookupValue(client.email || '');
+  const phone = normalizeLookupPhone(client.phone || '');
+  const ssn = normalizeSsnInput(client.ssn || '');
+  const dob = normalizeDobInput(client.dob || '');
+  const keys = [];
+
+  const clientId = String(client.id || '').trim();
+  if (clientId) {
+    keys.push(`id:${clientId}`);
+  }
+
+  if (first && last && email) {
+    keys.push(`name+email:${first}|${last}|${email}`);
+  }
+  if (first && last && ssn) {
+    keys.push(`name+ssn:${first}|${last}|${ssn}`);
+  }
+  if (first && last && dob) {
+    keys.push(`name+dob:${first}|${last}|${dob}`);
+  }
+  if (first && last) {
+    keys.push(`name:${first}|${last}`);
+  }
+  if (email) {
+    keys.push(`email:${email}`);
+  }
+  if (phone) {
+    keys.push(`phone:${phone}`);
+  }
+  if (ssn) {
+    keys.push(`ssn:${ssn}`);
+  }
+  return keys;
+};
 
 const buildDefaultPortalPassword = (lastName = '', ssn = '') => {
   const safeLastName = String(lastName || '').trim().replace(/\s+/g, '');
@@ -5205,6 +5248,7 @@ const toSafeClient = (client) => {
     monitoringPassword: client.monitoringPassword || '',
     secretKey: client.secretKey || '',
     monitoringToken: client.monitoringToken || '',
+    tokenId: client.monitoringToken || '',
     portalPassword: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', client.ssn || ''),
     portalEnabled: client.portalEnabled !== undefined ? Boolean(client.portalEnabled) : true,
     language: client.language || 'English',
@@ -5276,6 +5320,7 @@ const toClientListItem = (client) => {
     monitoringPassword: client.monitoringPassword || '',
     secretKey: client.secretKey || '',
     monitoringToken: client.monitoringToken || '',
+    tokenId: client.tokenId || client.monitoringToken || '',
     portalPassword: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', client.ssn || ''),
     portalEnabled: client.portalEnabled !== undefined ? Boolean(client.portalEnabled) : true,
     language: client.language || 'English',
@@ -5716,15 +5761,71 @@ const loadClientProfilesMap = async (ownerKey = getCurrentOwnerKey()) => {
 
 const mergeStoreWithProfileDb = async (store, ownerKey = getCurrentOwnerKey()) => {
   const profileMap = await loadClientProfilesMap(ownerKey);
-  const mergedClients = store.clients.map((client) => mergeClientProfileRow(client, profileMap.get(client.id)));
-  const existingIds = new Set(mergedClients.map((client) => String(client.id || '').trim()).filter(Boolean));
+  const rowKeyToClientId = new Map();
+  for (const [clientId, row] of profileMap.entries()) {
+    const normalizedId = String(clientId || '').trim();
+    if (!normalizedId) {
+      continue;
+    }
+    const rowKeys = buildClientIdentityKeys({
+      id: normalizedId,
+      firstName: row.firstName || '',
+      lastName: row.lastName || '',
+      email: row.email || '',
+      dob: row.dob || '',
+      ssn: row.ssn || '',
+      phone: row.phone || '',
+    });
+    for (const key of rowKeys) {
+      if (!rowKeyToClientId.has(key)) {
+        rowKeyToClientId.set(key, normalizedId);
+      }
+    }
+  }
+
+  const usedProfileIds = new Set();
+  const mergedClients = store.clients.map((client) => {
+    const directMatch = rowKeyToClientId.get(`id:${String(client.id || '').trim()}`);
+    const normalizedDirectMatch = directMatch && !usedProfileIds.has(directMatch)
+      ? directMatch
+      : null;
+    const identityMatch = normalizedDirectMatch || buildClientIdentityKeys(client).find((key) => {
+      const candidate = rowKeyToClientId.get(key);
+      return candidate && !usedProfileIds.has(candidate);
+    });
+    if (!identityMatch || usedProfileIds.has(identityMatch)) {
+      return mergeClientProfileRow(client, null);
+    }
+    usedProfileIds.add(identityMatch);
+    return mergeClientProfileRow(client, profileMap.get(identityMatch));
+  });
+  const existingIds = new Set(
+    mergedClients.map((client) => String(client.id || '').trim()).filter(Boolean),
+  );
 
   // Critical bridge behavior:
   // if a client exists in MySQL but not yet in store.json, append it so /api/clients
   // immediately returns the synced row instead of hiding it from the UI.
   for (const [clientId, row] of profileMap.entries()) {
     const normalizedId = String(clientId || '').trim();
-    if (!normalizedId || existingIds.has(normalizedId)) {
+    if (!normalizedId || usedProfileIds.has(normalizedId) || existingIds.has(normalizedId)) {
+      continue;
+    }
+
+    const rowKeys = buildClientIdentityKeys({
+      id: normalizedId,
+      firstName: row.firstName || '',
+      lastName: row.lastName || '',
+      email: row.email || '',
+      dob: row.dob || '',
+      ssn: row.ssn || '',
+      phone: row.phone || '',
+    });
+    const alreadyRepresentedByStoreClient = rowKeys.some((key) => {
+      const candidateId = rowKeyToClientId.get(key);
+      return Boolean(candidateId) && existingIds.has(candidateId);
+    });
+    if (alreadyRepresentedByStoreClient) {
       continue;
     }
 
@@ -5749,6 +5850,7 @@ const mergeStoreWithProfileDb = async (store, ownerKey = getCurrentOwnerKey()) =
       monitoringPassword: row.monitoringPassword || '',
       secretKey: row.secretKey || '',
       monitoringToken: row.monitoringToken || '',
+      tokenId: row.monitoringToken || '',
       portalPassword: row.portalPassword || '',
       portalEnabled: row.portalEnabled,
       language: row.language || 'English',
@@ -10780,7 +10882,11 @@ const server = createServer((req, res) => {
       client.monitoringPassword = readOptionalStringField(body, 'monitoringPassword', client.monitoringPassword || '');
       const requestedSecret = readOptionalStringField(body, 'secretKey', client.secretKey || '');
       client.secretKey = requestedSecret || getLastFourDigits(ssn);
-      client.monitoringToken = readOptionalStringField(body, 'monitoringToken', client.monitoringToken || '');
+      if (hasOwnField(body, 'monitoringToken')) {
+        client.monitoringToken = readOptionalStringField(body, 'monitoringToken', client.monitoringToken || '');
+      } else if (hasOwnField(body, 'tokenId')) {
+        client.monitoringToken = readOptionalStringField(body, 'tokenId', client.monitoringToken || '');
+      }
       client.portalPassword = readOptionalStringField(body, 'portalPassword', client.portalPassword || '')
         || buildDefaultPortalPassword(nextLastName, ssn);
       client.portalEnabled = readOptionalStringField(body, 'portalEnabled', client.portalEnabled ? 'on' : 'off').toLowerCase() !== 'off';
@@ -11293,7 +11399,7 @@ const server = createServer((req, res) => {
         monitoringUsername: String(body.monitoringUsername || '').trim(),
         monitoringPassword: String(body.monitoringPassword || '').trim(),
         secretKey: String(body.secretKey || '').trim() || getLastFourDigits(ssn),
-        monitoringToken: String(body.monitoringToken || '').trim(),
+        monitoringToken: readMonitoringTokenFromBody(body),
         portalPassword: String(body.portalPassword || '').trim() || buildDefaultPortalPassword(body.lastName, ssn),
         portalEnabled: String(body.portalEnabled || 'on').trim().toLowerCase() !== 'off',
         language: String(body.language || 'English').trim() || 'English',

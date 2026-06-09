@@ -65,6 +65,276 @@ const affiliateMonitoringFallbacks = {
 };
 
 const byId = (id) => document.getElementById(id);
+const getClientDropdownSkinClass = (select) => {
+  if (select.classList.contains('add-client-select') && select.classList.contains('add-client-select-compact')) {
+    return 'is-add-client-select is-add-client-select-compact';
+  }
+  if (select.classList.contains('add-client-select')) return 'is-add-client-select';
+  if (select.classList.contains('client-status-select')) return 'is-client-status-select';
+  if (select.classList.contains('client-phase-select')) return 'is-client-phase-select';
+  if (select.classList.contains('status-filter-select')) return 'is-status-filter-select';
+  if (select.classList.contains('nt-liquid-toolbar-select')) return 'is-nt-liquid-toolbar-select';
+  return '';
+};
+
+const closeClientDropdown = (dropdown) => {
+  if (!dropdown) {
+    return;
+  }
+  const button = dropdown.querySelector('.nt-dropdown-btn');
+  const menu = dropdown.querySelector('.nt-dropdown-menu');
+  button?.setAttribute('aria-expanded', 'false');
+  menu?.setAttribute('hidden', '');
+  dropdown.classList.remove('is-open');
+};
+
+const closeAllClientDropdowns = () => {
+  document.querySelectorAll('.nt-dropdown').forEach(closeClientDropdown);
+};
+
+const getSelectOptionItems = (select) => Array.from(select.options || []);
+
+const syncClientDropdownValue = (dropdown, select) => {
+  const buttonLabel = dropdown.querySelector('.nt-dropdown-label');
+  if (!buttonLabel) {
+    return;
+  }
+  const button = dropdown.querySelector('.nt-dropdown-btn');
+  if (button) {
+    button.setAttribute('data-dropdown-value', select.value || '');
+  }
+  const selected = getSelectOptionItems(select).find((option) => option.selected);
+  buttonLabel.textContent = String(select.value || selected?.text || '');
+  dropdown.querySelectorAll('.nt-dropdown-menu-item').forEach((item) => {
+    const isSelected = item.dataset.value === select.value;
+    item.classList.toggle('is-active', isSelected);
+    item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+  });
+};
+
+const getDropdownId = () => `nt-dd-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const renderClientDropdownItems = (select, menu) => {
+  if (!select || !menu) {
+    return;
+  }
+
+  menu.textContent = '';
+  getSelectOptionItems(select).forEach((option) => {
+    const item = document.createElement('button');
+    const isSelected = option.selected;
+    item.type = 'button';
+    item.className = 'nt-dropdown-menu-item nt-menu-link';
+    item.role = 'option';
+    item.tabIndex = -1;
+    item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    item.dataset.value = option.value;
+    item.dataset.dropdownAction = 'select';
+    item.textContent = option.text;
+    menu.appendChild(item);
+  });
+
+  menu.dataset.itemCount = String(menu.children.length);
+};
+
+const refreshClientDropdown = (select) => {
+  const dropdown = select.closest('.nt-dropdown');
+  const menu = dropdown?.querySelector('.nt-dropdown-menu');
+  if (!dropdown || !menu) {
+    return;
+  }
+
+  renderClientDropdownItems(select, menu);
+  const selectedOption = getSelectOptionItems(select).find((option) => option.selected);
+  const selectedValue = selectedOption ? selectedOption.value : select.value;
+  select.value = selectedValue || '';
+  syncClientDropdownValue(dropdown, select);
+
+  const isDisabled = select.disabled || menu.childElementCount === 0;
+  const button = dropdown.querySelector('.nt-dropdown-btn');
+  if (button) {
+    button.disabled = isDisabled;
+  }
+  dropdown.classList.toggle('is-disabled', isDisabled);
+  dropdown.classList.toggle('is-empty', menu.childElementCount === 0);
+};
+
+const initClientDropdown = (select) => {
+  if (!select || select.dataset.ntDropdownReady === '1') {
+    return;
+  }
+  const root = document.createElement('div');
+  const dropdownId = getDropdownId();
+  const wrapper = document.createElement('div');
+  const btn = document.createElement('button');
+  const btnLabel = document.createElement('span');
+  const menu = document.createElement('div');
+
+  const hasValue = Boolean(select.options?.length);
+  const selected = getSelectOptionItems(select).find((option) => option.selected) || null;
+
+  select.setAttribute('tabindex', '-1');
+  select.setAttribute('aria-hidden', 'true');
+  select.classList.add('nt-dropdown-native');
+  select.dataset.ntDropdownReady = '1';
+
+  wrapper.className = `nt-dropdown nt-dropdown-root ${getClientDropdownSkinClass(select)}`.trim();
+  wrapper.dataset.dropdownFor = dropdownId;
+  wrapper.dataset.origin = select.id || '';
+  select.parentNode?.insertBefore(wrapper, select);
+  wrapper.appendChild(select);
+
+  root.className = 'nt-dropdown-root-inner';
+  btn.type = 'button';
+  btn.className = 'nt-dropdown-btn';
+  btn.setAttribute('aria-haspopup', 'listbox');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.setAttribute('aria-controls', dropdownId);
+  btn.setAttribute('data-dropdown-button', '1');
+
+  btnLabel.className = 'nt-dropdown-label';
+  btnLabel.textContent = String(select.value || selected?.text || '');
+  btn.setAttribute('data-dropdown-value', select.value || '');
+
+  menu.className = 'nt-dropdown-menu';
+  menu.id = dropdownId;
+  menu.setAttribute('role', 'listbox');
+  menu.setAttribute('tabindex', '-1');
+  menu.setAttribute('hidden', '');
+  renderClientDropdownItems(select, menu);
+
+  btn.addEventListener('click', () => {
+    const isOpen = btn.getAttribute('aria-expanded') === 'true';
+    if (isOpen) {
+      closeClientDropdown(wrapper);
+      return;
+    }
+    closeAllClientDropdowns();
+    btn.setAttribute('aria-expanded', 'true');
+    menu.hidden = false;
+    wrapper.classList.add('is-open');
+    const selectedItem = menu.querySelector('.nt-dropdown-menu-item.is-active');
+    (selectedItem || menu.firstElementChild)?.focus();
+  });
+
+  btn.addEventListener('keydown', (event) => {
+    if (!['Enter', 'ArrowDown', 'ArrowUp', 'Escape', ' '].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    if (event.key === 'Escape') {
+      closeClientDropdown(wrapper);
+      btn.focus();
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
+      if (btn.getAttribute('aria-expanded') === 'true') {
+        const firstItem = menu.querySelector('.nt-dropdown-menu-item');
+        firstItem?.focus();
+      } else {
+        btn.click();
+      }
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      if (btn.getAttribute('aria-expanded') !== 'true') {
+        btn.click();
+      } else {
+        const lastItem = menu.querySelector('.nt-dropdown-menu-item:last-child');
+        lastItem?.focus();
+      }
+    }
+  });
+
+  menu.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeClientDropdown(wrapper);
+      btn.focus();
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+      return;
+    }
+    event.preventDefault();
+    const items = Array.from(menu.querySelectorAll('.nt-dropdown-menu-item'));
+    if (!items.length) {
+      return;
+    }
+    const active = items.indexOf(document.activeElement);
+    const next = event.key === 'ArrowDown'
+      ? (active + 1) % items.length
+      : (active - 1 + items.length) % items.length;
+    items[next]?.focus();
+  });
+
+  menu.addEventListener('click', (event) => {
+    const button = event.target.closest('.nt-dropdown-menu-item[data-value]');
+    if (!button) {
+      return;
+    }
+    const optionValue = button.dataset.value;
+    select.value = optionValue;
+    syncClientDropdownValue(wrapper, select);
+    const changeEvent = new Event('change', { bubbles: true });
+    select.dispatchEvent(changeEvent);
+    closeClientDropdown(wrapper);
+    btn.focus();
+  });
+
+  select.addEventListener('change', () => {
+    if (select.value !== btn.getAttribute('data-dropdown-value')) {
+      syncClientDropdownValue(wrapper, select);
+      btn.setAttribute('data-dropdown-value', select.value || '');
+    }
+  });
+
+  if (select.classList.contains('nt-liquid-select') || select.classList.contains('client-status-select') || select.classList.contains('client-phase-select')) {
+    btnLabel.textContent = selected?.text || btnLabel.textContent || '';
+  }
+
+  wrapper.appendChild(root);
+  root.appendChild(btn);
+  root.appendChild(menu);
+  if (select.disabled) {
+    wrapper.classList.add('is-disabled');
+  }
+  refreshClientDropdown(select);
+  if (!hasValue) {
+    btn.setAttribute('disabled', 'disabled');
+    wrapper.classList.add('is-disabled');
+  }
+};
+
+const initClientDropdowns = (root = document) => {
+  if (!root) {
+    return;
+  }
+  if (!('addEventListener' in document)) {
+    return;
+  }
+  root.querySelectorAll('select[data-client-dropdown="1"], select.add-client-select, select.client-status-select, select.client-phase-select, select.status-filter-select, select.nt-liquid-toolbar-select').forEach((select) => {
+    if (!select.closest('.nt-dropdown')) {
+      initClientDropdown(select);
+    } else {
+      refreshClientDropdown(select);
+    }
+  });
+};
+
+document.addEventListener('click', (event) => {
+  const clickedDropdown = event.target.closest('.nt-dropdown');
+  if (!clickedDropdown) {
+    closeAllClientDropdowns();
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    closeAllClientDropdowns();
+  }
+});
+
 const setBootLoadingOverlay = (isActive, message = '') => {
   const overlay = byId('appBootLoader');
   if (!overlay) {
@@ -555,6 +825,22 @@ const uniquePhaseList = (phases = []) => {
     });
 };
 
+const dedupeClientsById = (clients = []) => {
+  const rows = Array.isArray(clients) ? clients : [];
+  const byId = new Map();
+  rows.forEach((client) => {
+    if (!client || typeof client !== 'object') {
+      return;
+    }
+    const id = String(client.id || '').trim();
+    if (!id) {
+      return;
+    }
+    byId.set(id, client);
+  });
+  return [...byId.values()];
+};
+
 const getDefaultHomeSettings = () => ({
   companyName: window.localStorage.getItem(widgetBusinessNameStorageKey) || 'Best Texas Credit Pros',
   companyAddress: '1751 River Run Suite 200',
@@ -767,6 +1053,7 @@ const renderAddClientStatusOptions = () => {
   if (!options.includes(selected)) {
     select.value = options[0] || 'Client';
   }
+  initClientDropdowns();
 };
 
 const renderAddClientPhaseOptions = () => {
@@ -782,6 +1069,7 @@ const renderAddClientPhaseOptions = () => {
   if (!options.includes(selected)) {
     select.value = options[0] || 'None';
   }
+  initClientDropdowns();
 };
 
 const renderAddClientAssignmentOptions = () => {
@@ -796,6 +1084,7 @@ const renderAddClientAssignmentOptions = () => {
     affiliateSelect.innerHTML = '<option value="None">None</option>';
     affiliateSelect.value = 'None';
   }
+  initClientDropdowns();
 };
 
 const renderSpouseClientOptions = () => {
@@ -1216,6 +1505,7 @@ const setClientFormMode = (mode = 'add', client = null) => {
     }
     setClientFormSegment('client');
     renderClientDocumentsSection(client.documents || []);
+    populateAddClientFormFromClient(client);
     return;
   }
 
@@ -1281,7 +1571,7 @@ const populateAddClientFormFromClient = (client) => {
   if (form.ninjaAssigned) {
     const current = String(state.currentUser || 'admin').trim() || 'admin';
     form.ninjaAssigned.innerHTML = `<option value="${escapeHtml(current)}">${escapeHtml(current)}</option>`;
-    form.ninjaAssigned.value = client.ninjaAssigned || current;
+    form.ninjaAssigned.value = client.ninjaAssigned || client.assignedTo || current;
   }
   if (form.affiliateAssigned) {
     form.affiliateAssigned.value = client.affiliateAssigned || 'None';
@@ -1519,7 +1809,9 @@ const request = async (url, options = {}) => {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(payload.error || 'Request failed');
+    const error = new Error(payload.error || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
@@ -3751,6 +4043,7 @@ const renderClients = () => {
 
   list.innerHTML = renderClientsTable(sortedClients, { emptyMessage });
   list.classList.toggle('clients-table-wrap--compact', sortedClients.length === 1);
+  initClientDropdowns(list);
   applyClientsGlassBackground(getSavedClientsGlassBackground() || DEFAULT_CLIENTS_GLASS_BG_URL);
   const tableSearchInput = list.querySelector('#clientsTableSearchInput');
   if (tableSearchInput) {
@@ -4045,6 +4338,7 @@ const syncStatusFilterOptions = () => {
   `)];
 
   select.innerHTML = options.join('');
+  initClientDropdowns();
 };
 
 const renderClientDetail = (client) => {
@@ -5229,7 +5523,6 @@ const openEditDialog = async (clientId) => {
   renderAddClientAssignmentOptions();
   renderSpouseClientOptions();
   setClientFormMode('edit', detailedClient);
-  populateAddClientFormFromClient(detailedClient);
   setHubMode('add', { preserveAddFormState: true });
   setFormMessage(`Editing ${detailedClient.firstName} ${detailedClient.lastName}.`);
 };
@@ -5249,24 +5542,43 @@ const syncClientPortalToggleValue = () => {
 };
 
 const loadClients = async () => {
-  const payload = await request('/api/clients');
-  state.clients = payload.clients;
-  if (state.pinnedClientId && !state.clients.some((client) => client.id === state.pinnedClientId)) {
-    clearPinnedClientList();
-  }
-  state.currentUser = String(payload.currentUser || state.currentUser || 'admin').trim() || 'admin';
-  applyDisputeDueDateCountdownToClients(state.clients);
-  state.statuses = payload.statuses || state.statuses;
-  state.phases = uniquePhaseList(payload.phases || state.phases || ['None']);
-  syncStatusFilterOptions();
-  renderAddClientStatusOptions();
-  renderAddClientPhaseOptions();
-  renderAddClientAssignmentOptions();
-  renderSpouseClientOptions();
-  renderClients();
-  if (!state.selectedClientId) {
-    setWidgetRefreshHeader(null);
-    updateBrowserTabTitle(null);
+  try {
+    const payload = await request('/api/clients');
+    state.clients = dedupeClientsById(payload?.clients);
+    if (state.pinnedClientId && !state.clients.some((client) => client.id === state.pinnedClientId)) {
+      clearPinnedClientList();
+    }
+    state.currentUser = String(payload.currentUser || state.currentUser || 'admin').trim() || 'admin';
+    applyDisputeDueDateCountdownToClients(state.clients);
+    state.statuses = payload.statuses || state.statuses;
+    state.phases = uniquePhaseList(payload.phases || state.phases || ['None']);
+    syncStatusFilterOptions();
+    renderAddClientStatusOptions();
+    renderAddClientPhaseOptions();
+    renderAddClientAssignmentOptions();
+    renderSpouseClientOptions();
+    renderClients();
+    if (!state.selectedClientId) {
+      setWidgetRefreshHeader(null);
+      updateBrowserTabTitle(null);
+    }
+    return;
+  } catch (error) {
+    if (error?.status === 401) {
+      const pageShell = document.querySelector('.page-shell');
+      const loginForm = document.querySelector('.login-form');
+      const authMessage = document.getElementById('authMessage');
+      document.documentElement.classList.add('auth-active');
+      document.body.classList.add('auth-active');
+      if (pageShell) pageShell.style.display = 'none';
+      if (loginForm) loginForm.style.display = '';
+      if (authMessage) {
+        authMessage.textContent = 'Your session expired. Please log in again.';
+        authMessage.style.color = '#ee3b6c';
+      }
+      return;
+    }
+    throw error;
   }
 };
 
@@ -5749,7 +6061,8 @@ const syncSelectedClientFromServer = async (clientId) => {
   }
   applyDisputeDueDateCountdownToClients([incomingClient]);
 
-  const existingClient = state.clients.find((client) => client.id === incomingClient.id);
+  const normalizedIncomingId = String(incomingClient.id || '').trim();
+  const existingClient = state.clients.find((client) => String(client?.id || '').trim() === normalizedIncomingId);
   if (existingClient) {
     Object.assign(existingClient, incomingClient);
   } else {
