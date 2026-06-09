@@ -1,0 +1,258 @@
+{
+  "extra_deletes": [
+    {
+      "id": "clients:162f4s3afx0aj4oue15b",
+      "id_part": "162f4s3afx0aj4oue15b",
+      "before": {
+        "client_id": "1011",
+        "email": "LamontEvans0349@gmail.com",
+        "first_name": "Lamont",
+        "id": "clients:162f4s3afx0aj4oue15b",
+        "last_name": "Evans",
+        "phone": "4695560349",
+        "status": "Client"
+      },
+      "why": "email_dup"
+    },
+    {
+      "id": "clients:1f42z6xod1r53y7ldlgl",
+      "id_part": "1f42z6xod1r53y7ldlgl",
+      "before": {
+        "client_id": "922",
+        "email": "MiqdadiDina@gmail.com",
+        "first_name": "Dina",
+        "id": "clients:1f42z6xod1r53y7ldlgl",
+        "last_name": "Miqdadi",
+        "phone": "",
+        "status": "Client"
+      },
+      "why": "email_dup"
+    },
+    {
+      "id": "clients:28f2857y9vnkukkswt52",
+      "id_part": "28f2857y9vnkukkswt52",
+      "before": {
+        "client_id": "798",
+        "email": "JANIECEYVONNE@icloud.com",
+        "first_name": "Janiece",
+        "id": "clients:28f2857y9vnkukkswt52",
+        "last_name": "York",
+        "phone": "",
+        "status": "Client"
+      },
+      "why": "email_dup"
+    },
+    {
+      "id": "clients:`client-1twpemh8_ninjatools`",
+      "id_part": "`client-1twpemh8_ninjatools`",
+      "before": {
+        "client_id": "client-1twpemh8",
+        "email": "",
+        "first_name": "Gregg",
+        "id": "clients:`client-1twpemh8_ninjatools`",
+        "last_name": "Lamon",
+        "phone": "(713) 212-9977",
+        "status": "Client"
+      },
+      "why": "phone_name_dup"
+    },
+    {
+      "id": "clients:`client-2f4tczab_ninjatools`",
+      "id_part": "`client-2f4tczab_ninjatools`",
+      "before": {
+        "client_id": "client-2f4tczab",
+        "email": "jamesjohnsonjrllc@gmail.com",
+        "first_name": "James",
+        "id": "clients:`client-2f4tczab_ninjatools`",
+        "last_name": "Johnson",
+        "phone": "5127451760",
+        "status": "Client"
+      },
+      "why": "email_dup"
+    },
+    {
+      "id": "clients:`client-3v93bwic_ninjatools`",
+      "id_part": "`client-3v93bwic_ninjatools`",
+      "before": {
+        "client_id": "client-3v93bwic",
+        "email": "MarioSchz@yahoo.com",
+        "first_name": "Mario",
+        "id": "clients:`client-3v93bwic_ninjatools`",
+        "last_name": "Sanchez",
+        "phone": "+1 (817) 691-0974",
+        "status": "Client"
+      },
+      "why": "email_dup"
+    },
+    {
+      "id": "clients:`client-4wy8y89n_ninjatools`",
+      "id_part": "`client-4wy8y89n_ninjatools`",
+      "before": {
+        "client_id": "client-4wy8y89n",
+        "email": "dillionodden06151993@gmail.com",
+        "first_name": "Dillion",
+        "id": "clients:`client-4wy8y89n_ninjatools`",
+        "last_name": "Odden",
+        "phone": "+1 (940) 445-1769",
+        "status": "Client"
+      },
+      "why": "phone_name_dup"
+    },
+    {
+      "id": "clients:`client-7lb3if1h_ninjatools`",
+      "id_part": "`client-7lb3if1h_ninjatools`",
+      "before": {
+        "client_id": "client-7lb3if1h",
+        "email": "paving5287@icloud.com",
+        "first_name": "Peter",
+        "id": "clients:`client-7lb3if1h_ninjatools`",
+        "last_name": "McDonald 2",
+        "phone": "",
+        "status": "Client"
+      },
+      "why": "email_dup"
+    }
+  ],
+  "extra_unsure": [
+    {
+      "id": "clients:01f2wvo5opqne85bz7s8",
+      "id_part": "01f2wvo5opqne85bz7s8",
+      "before": {
+        "client_id": "352",
+        "email": "",
+        "first_name": "Rickie",
+        "id": "clients:01f2wvo5opqne85bz7s8",
+        "last_name": "James Reese",
+        "phone": "",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    },
+    {
+      "id": "clients:49f0qwhms12gs2lynov2",
+      "id_part": "49f0qwhms12gs2lynov2",
+      "before": {
+        "client_id": "709",
+        "email": "",
+        "first_name": "Daviana",
+        "id": "clients:49f0qwhms12gs2lynov2",
+        "last_name": "Sharma",
+        "phone": "",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    },
+    {
+      "id": "clients:508f9cf8kybsy4jzvt78",
+      "id_part": "508f9cf8kybsy4jzvt78",
+      "before": {
+        "client_id": "141",
+        "email": "",
+        "first_name": "Michael",
+        "id": "clients:508f9cf8kybsy4jzvt78",
+        "last_name": "Hill",
+        "phone": "",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    },
+    {
+      "id": "clients:6f676u41zbnz4l66b36r",
+      "id_part": "6f676u41zbnz4l66b36r",
+      "before": {
+        "client_id": "82",
+        "email": "",
+        "first_name": "Jayton",
+        "id": "clients:6f676u41zbnz4l66b36r",
+        "last_name": "Cogburn",
+        "phone": "",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    },
+    {
+      "id": "clients:`client-1_ninjatools`",
+      "id_part": "`client-1_ninjatools`",
+      "before": {
+        "client_id": "client-1",
+        "email": "jane@example.com",
+        "first_name": "Jane",
+        "id": "clients:`client-1_ninjatools`",
+        "last_name": "Doe",
+        "phone": "",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    },
+    {
+      "id": "clients:`client-2a3kmq2n_ninjatools`",
+      "id_part": "`client-2a3kmq2n_ninjatools`",
+      "before": {
+        "client_id": "client-2a3kmq2n",
+        "email": "",
+        "first_name": "Donovon",
+        "id": "clients:`client-2a3kmq2n_ninjatools`",
+        "last_name": "Knaghten",
+        "phone": "+1 (817) 751-1361",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    },
+    {
+      "id": "clients:`client-3zqrmwob_ninjatools`",
+      "id_part": "`client-3zqrmwob_ninjatools`",
+      "before": {
+        "client_id": "client-3zqrmwob",
+        "email": "",
+        "first_name": "Dustan",
+        "id": "clients:`client-3zqrmwob_ninjatools`",
+        "last_name": "Simmons",
+        "phone": "8172395419",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    },
+    {
+      "id": "clients:`client-63a3jome_ninjatools`",
+      "id_part": "`client-63a3jome_ninjatools`",
+      "before": {
+        "client_id": "client-63a3jome",
+        "email": "test@example.com",
+        "first_name": "Test",
+        "id": "clients:`client-63a3jome_ninjatools`",
+        "last_name": "Client",
+        "phone": "5551234567",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    },
+    {
+      "id": "clients:`client-8n4y0gz7_ninjatools`",
+      "id_part": "`client-8n4y0gz7_ninjatools`",
+      "before": {
+        "client_id": "client-8n4y0gz7",
+        "email": "synctest@example.com",
+        "first_name": "SyncTest",
+        "id": "clients:`client-8n4y0gz7_ninjatools`",
+        "last_name": "FixVerified",
+        "phone": "5559876543",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    },
+    {
+      "id": "clients:`client-9uyq8vwr_ninjatools`",
+      "id_part": "`client-9uyq8vwr_ninjatools`",
+      "before": {
+        "client_id": "client-9uyq8vwr",
+        "email": "",
+        "first_name": "Aidan",
+        "id": "clients:`client-9uyq8vwr_ninjatools`",
+        "last_name": "Stewart",
+        "phone": "5416902194",
+        "status": "Client"
+      },
+      "why": "not_in_csv_active"
+    }
+  ]
+}

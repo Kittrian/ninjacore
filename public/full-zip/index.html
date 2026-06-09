@@ -25,8 +25,73 @@
 <body>
     <!-- DO NOT touch the following DIV -->
     <div id="q-app"></div>
+    <script>
+    (function() {
+        var legacyAuthKeys = ["token", "username", "profile", "userId", "usuario", "queues"];
+        window.__ninjaDisputeResetLegacyAuth = function(options) {
+            var settings = options || {};
+            legacyAuthKeys.forEach(function(key) {
+                localStorage.removeItem(key);
+            });
+            if (settings.preserveRedirect) {
+                localStorage.setItem("redirect", settings.redirect || window.location.hash.replace(/^#/, "") || "/");
+            } else {
+                localStorage.removeItem("redirect");
+            }
+        };
+        function syncTokenCookie() {
+            var match = document.cookie.match(/(?:^|;\s*)ninja_token=([^;]+)/);
+            if (match && match[1]) {
+                localStorage.setItem("token", JSON.stringify(decodeURIComponent(match[1])));
+                return true;
+            }
+            return false;
+        }
+        function ensureOAuthButtons() {
+            if (window.location.hash.indexOf('/login') === -1) return;
+            if (document.getElementById('nd-oauth-buttons')) return;
+            var loginButton = Array.prototype.find.call(document.querySelectorAll('button'), function(btn) {
+                return (btn.textContent || '').trim() === 'Login';
+            });
+            if (!loginButton || !loginButton.parentNode) return;
+            var wrap = document.createElement('div');
+            wrap.id = 'nd-oauth-buttons';
+            wrap.style.marginTop = '12px';
+            wrap.style.display = 'flex';
+            wrap.style.flexDirection = 'column';
+            wrap.style.gap = '8px';
+            [
+                { label: 'Continue with Google', href: 'https://api.ninjadispute.com/auth/google-login?redirect=' + encodeURIComponent('https://ninjadispute.com/#/clients') },
+                { label: 'Continue with GitHub', href: 'https://api.ninjadispute.com/auth/github-login?redirect=' + encodeURIComponent('https://ninjadispute.com/#/clients') },
+                { label: 'Continue with Apple', href: 'https://api.ninjadispute.com/auth/apple-login?redirect=' + encodeURIComponent('https://ninjadispute.com/#/clients') }
+            ].forEach(function(item) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = item.label;
+                btn.style.padding = '10px 14px';
+                btn.style.borderRadius = '6px';
+                btn.style.border = '1px solid #d0d0d0';
+                btn.style.background = '#fff';
+                btn.style.cursor = 'pointer';
+                btn.onclick = function() { window.location.href = item.href; };
+                wrap.appendChild(btn);
+            });
+            loginButton.parentNode.appendChild(wrap);
+        }
+        try {
+            if (!syncTokenCookie()) {
+                window.__ninjaDisputeResetLegacyAuth({ preserveRedirect: false });
+            }
+        } catch (error) {
+            console.warn("Failed to sync ninja_token cookie", error);
+        }
+        ensureOAuthButtons();
+        new MutationObserver(ensureOAuthButtons).observe(document.documentElement, { childList: true, subtree: true });
+        window.addEventListener('hashchange', ensureOAuthButtons);
+    })();
+</script>
     <script src="js/vendor.c3660414.js"></script>
-    <script src="js/app.e903ffdd.js"></script>
+    <script src="js/app.e903ffdd.js?v=5"></script>
 </body>
 
 </html>

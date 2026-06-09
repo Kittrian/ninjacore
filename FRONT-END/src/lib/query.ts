@@ -36,7 +36,7 @@ export const queryClient = new QueryClient({
  */
 export const queryKeys = {
 	all: ['api'] as const,
-	clients: () => [...queryKeys.all, 'clients'] as const,
+	clients: (status?: string) => status ? [...queryKeys.all, 'clients', status] as const : [...queryKeys.all, 'clients'] as const,
 	clientsInfinite: () => [...queryKeys.clients(), 'infinite'] as const,
 	clientsSearch: (query: string) => [...queryKeys.clients(), 'search', query] as const,
 	client: (id: string) => [...queryKeys.all, 'client', id] as const,

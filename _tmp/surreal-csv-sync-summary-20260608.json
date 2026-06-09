@@ -1,0 +1,10 @@
+{
+  "created_at": "2026-06-08",
+  "server": "5.78.214.176",
+  "csv_rows": 2477,
+  "operations": 2111,
+  "patched": 2001,
+  "created": 110,
+  "skipped": 31,
+  "backup_path": "/Users/drewdrew/NinjaTools/_tmp/surreal-csv-sync-backup-20260608.json"
+}

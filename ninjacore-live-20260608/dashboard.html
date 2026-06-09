@@ -1,0 +1,2324 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tools Ninja</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260520-1" />
+    <link rel="shortcut icon" href="/favicon.ico?v=20260520-1" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260520-1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <!-- 🚀 CODE SPLITTING: Load critical CSS immediately -->
+    
+    <!-- 📦 Lazy-load non-critical CSS after first paint -->
+    
+    <noscript></noscript>
+    <!-- External libraries (lazy-loaded) -->
+    <link rel="preload" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <!-- Lazy load page-specific styles -->
+    
+    <noscript></noscript>
+    <!-- Lazy loader script - enables deferred loading -->
+    
+    <!-- Page-specific JS - deferred loading -->
+    
+  
+    <link rel="stylesheet" href="/styles.css?v=20260608-01" />
+    <link rel="stylesheet" href="/billing.css?v=20260608-01" />
+    <link rel="stylesheet" href="/payments.css?v=20260608-01" />
+    <link rel="stylesheet" href="/learning.css?v=20260608-01" />
+    <link rel="stylesheet" href="/nd-hash-shell.css?v=20260608-01" />
+    <link rel="stylesheet" href="/full-modern.css?v=20260608-01" />
+    <link rel="stylesheet" href="/full-disputes.css?v=20260608-01" />
+
+<!-- LOAD MINISEARCH BEFORE MAIN SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/minisearch"></script>
+
+<!-- INJECT OPTIMIZED CLIENTS RENDERER -->
+<script>
+// Keep original as fallback
+const renderGlassClientsFallbackOriginal = window.renderGlassClientsFallback || function() {};
+
+// Define optimized version FIRST
+const renderGlassClientsOptimized = (clients, options = {}) => {
+  const clientsList = document.getElementById('clientsList');
+  if (!clientsList || clientsList.querySelector('.nt-virtual-scroll-optimized')) {
+    return;
+  }
+
+  const statuses = Array.isArray(options.statuses) ? options.statuses : ['Client', 'Lead', 'Prospect', 'Inactive'];
+  const phases = Array.isArray(options.phases) ? options.phases : ['None', 'Round 1', 'Round 2', 'Round 3', 'Complete'];
+  
+  let sortState = { key: 'nextImport', direction: 'asc' };
+  let visibleClients = clients.slice();
+  let miniSearchIndex = null;
+  let searchWorker = null;
+  const rowHeight = 52;
+  const overscan = 5;
+
+  const initMiniSearch = () => {
+    if (typeof window.MiniSearch === 'undefined') return null;
+    try {
+      const ms = new window.MiniSearch({
+        fields: ['name', 'status', 'phase', 'email', 'phone', 'username'],
+        storeFields: ['idx'],
+        searchOptions: { fuzzy: 0.15, combineWith: 'AND' }
+      });
+      
+      ms.addAll(clients.map((c, idx) => ({
+        idx,
+        name: String((c.firstName || '') + ' ' + (c.lastName || '')).trim(),
+        status: String(c.status || ''),
+        phase: String(c.phase || ''),
+        email: String(c.email || ''),
+        phone: String(c.phone || ''),
+        username: String(c.monitoringUsername || '')
+      })));
+      return ms;
+    } catch (e) {
+      console.warn('MiniSearch init failed:', e);
+      return null;
+    }
+  };
+
+  miniSearchIndex = initMiniSearch();
+
+  const initSearchWorker = () => {
+    if (!window.Worker || !miniSearchIndex) return null;
+    try {
+      const workerCode = `
+        let idx = null;
+        self.onmessage = (e) => {
+          const {type, data} = e.data;
+          if (type === 'init') {
+            idx = data;
+          } else if (type === 'search') {
+            const q = data.query || '';
+            if (!q || !idx) {
+              self.postMessage({type: 'results', indices: []});
+              return;
+            }
+            const results = idx.search(q);
+            const indices = results.map(r => r.idx);
+            self.postMessage({type: 'results', indices});
+          }
+        };
+      `;
+      const blob = new Blob([workerCode], { type: 'application/javascript' });
+      const worker = new Worker(URL.createObjectURL(blob));
+      worker.postMessage({ type: 'init', data: miniSearchIndex });
+      return worker;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  searchWorker = initSearchWorker();
+
+  const sortValue = (rawClient, key) => {
+    const c = rawClient;
+    if (key === 'name') return (String(c.firstName || '') + ' ' + String(c.lastName || '')).trim().toLowerCase();
+    if (key === 'status') return String(c.status || '').toLowerCase();
+    if (key === 'phase') return String(c.phase || 'None').toLowerCase();
+    if (key === 'nextImport') {
+      const days = window.getClientDaysLeft ? window.getClientDaysLeft(c) : 999;
+      return Number.isFinite(days) ? days : 999;
+    }
+    if (key === 'reportDate') {
+      const d = window.parseDateValue ? window.parseDateValue(c.reportDate) : null;
+      return d ? d.getTime() : 0;
+    }
+    return '';
+  };
+
+  const sortClients = (arr) => arr.slice().sort((a, b) => {
+    const aVal = sortValue(a, sortState.key);
+    const bVal = sortValue(b, sortState.key);
+    const dir = sortState.direction === 'asc' ? 1 : -1;
+    
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return (aVal - bVal) * dir || String(sortValue(a, 'name')).localeCompare(String(sortValue(b, 'name')));
+    }
+    
+    const cmp = String(aVal).localeCompare(String(bVal), undefined, { sensitivity: 'base' });
+    return (cmp || String(sortValue(a, 'name')).localeCompare(String(sortValue(b, 'name')))) * dir;
+  });
+
+  const getVirtualRange = (scrollTop, containerH, total) => {
+    const rowsVisible = Math.ceil(containerH / rowHeight);
+    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+    const end = Math.min(total, start + rowsVisible + overscan * 2);
+    return { start, end, offset: start * rowHeight };
+  };
+
+  clientsList.style.setProperty('--nt-clients-custom-bg', "url('/assets/clients-glass-bg.png')");
+  clientsList.innerHTML = `
+    <div class="nt-liquid-table-shell nt-virtual-scroll-optimized">
+      <div class="nt-liquid-table-toolbar">
+        <span class="nt-liquid-toolbar-title">Clients</span>
+        <span class="nt-liquid-toolbar-count" id="clientsTableCount">${clients.length} client${clients.length === 1 ? '' : 's'}</span>
+        <div class="nt-liquid-table-search">
+          <span class="nt-liquid-table-search-icon">🔍</span>
+          <input id="clientsTableSearchInput" class="nt-liquid-table-search-input" type="search" placeholder="Search clients..." aria-label="Search clients">
+        </div>
+        <div class="nt-liquid-toolbar-buttons">
+          <select id="clientsStatusFilter" class="nt-liquid-toolbar-btn" style="appearance: none; padding-right: 24px; background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2208%22><path fill=%22%23666%22 d=%22M0 0l6 8 6-8z%22/></svg>'); background-repeat: no-repeat; background-position: right 8px center; background-size: 12px;">
+              <option value="">📊 All Status</option>
+            </select>
+          <button id="clientsTableImportTrigger" class="nt-liquid-toolbar-btn nt-liquid-import-btn" type="button">Import</button>
+        </div>
+      </div>
+      <div class="nt-liquid-table-scroll" id="clientsVirtualScroll" style="height: 600px; overflow-y: auto; position: relative;">
+        <div id="clientsVirtualContainer" style="position: relative;">
+          <table class="nt-liquid-table nt-dashboard-clients-table">
+            <thead>
+              <tr>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="name">Name</button></th>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="status">Status</button></th>
+                <th>Phone</th>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="phase">Phase</button></th>
+                <th>Monitoring</th>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="nextImport">Days Left</button></th>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="reportDate">Report Date</button></th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="clientsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const scrollEl = clientsList.querySelector('#clientsVirtualScroll');
+  const containerEl = clientsList.querySelector('#clientsVirtualContainer');
+  const tbody = clientsList.querySelector('#clientsTableBody');
+  let sortedClients = sortClients(visibleClients);
+
+  const renderVirtual = (scrollTop = 0) => {
+    const { start, end, offset } = getVirtualRange(scrollTop, scrollEl.clientHeight, sortedClients.length);
+    
+    let html = '';
+    for (let i = start; i < end && i < sortedClients.length; i++) {
+      const c = sortedClients[i];
+      const rowHtml = window.renderRows ? window.renderRows([c], statuses, phases) : '';
+      if (rowHtml) html += rowHtml;
+    }
+    
+    containerEl.style.height = sortedClients.length * rowHeight + 'px';
+    tbody.innerHTML = html || '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #999;">No clients match your search.</td></tr>';
+    tbody.style.transform = `translateY(${offset}px)`;
+    
+    bindActions();
+  };
+
+  renderVirtual(0);
+
+  scrollEl?.addEventListener('scroll', (e) => renderVirtual(e.target.scrollTop), { passive: true });
+
+  const searchInput = clientsList.querySelector('#clientsTableSearchInput');
+  searchInput?.addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    
+    if (!query) {
+      visibleClients = clients.slice();
+      sortedClients = sortClients(visibleClients);
+      scrollEl.scrollTop = 0;
+      renderVirtual(0);
+      return;
+    }
+
+    if (searchWorker) {
+      searchWorker.onmessage = (evt) => {
+        if (evt.data.type === 'results') {
+          const idxSet = new Set(evt.data.indices);
+          visibleClients = clients.filter((_, idx) => idxSet.has(idx));
+          sortedClients = sortClients(visibleClients);
+          scrollEl.scrollTop = 0;
+          renderVirtual(0);
+        }
+      };
+      searchWorker.postMessage({ type: 'search', data: { query } });
+    } else if (miniSearchIndex) {
+      const results = miniSearchIndex.search(query);
+      const idxSet = new Set(results.map(r => r.idx));
+      visibleClients = clients.filter((_, idx) => idxSet.has(idx));
+      sortedClients = sortClients(visibleClients);
+      scrollEl.scrollTop = 0;
+      renderVirtual(0);
+    }
+  });
+
+  clientsList.querySelectorAll('[data-sort-key]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.sortKey;
+      if (sortState.key === key) {
+        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortState.key = key;
+        sortState.direction = 'asc';
+      }
+      sortedClients = sortClients(visibleClients);
+      scrollEl.scrollTop = 0;
+      renderVirtual(0);
+    });
+  });
+
+  clientsList.querySelector('#clientsTableImportTrigger')?.addEventListener('click', () => {
+    document.getElementById('clientsCsv')?.click();
+  });
+
+  const bindActions = () => {
+    clientsList.querySelectorAll('[data-action="open"]').forEach((btn) => {
+      btn.onclick = (e) => {
+        const clientId = e.currentTarget.closest('tr')?.dataset.clientId;
+        if (clientId && typeof window.loadDashboardClientDetail === 'function') {
+          window.loadDashboardClientDetail(clientId);
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+      btn.onclick = (e) => {
+        const clientId = e.currentTarget.closest('tr')?.dataset.clientId;
+        if (!clientId) return;
+        if (typeof window.openEditDialog === 'function') {
+          window.openEditDialog(clientId);
+        } else {
+          document.getElementById('clientHubAddPane')?.removeAttribute('hidden');
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+      btn.onclick = async (e) => {
+        const clientId = e.currentTarget.closest('tr')?.dataset.clientId;
+        if (!clientId || !window.confirm('Delete this client?')) return;
+        try {
+          if (typeof window.requestJson === 'function') {
+            await window.requestJson(`/api/clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
+            const idx = clients.findIndex((c) => String(c.id) === String(clientId));
+            if (idx !== -1) clients.splice(idx, 1);
+            visibleClients = clients.slice();
+            sortedClients = sortClients(visibleClients);
+            scrollEl.scrollTop = 0;
+            renderVirtual(0);
+          }
+        } catch (err) {
+          console.error('Delete failed:', err);
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="copy-phone"]').forEach((btn) => {
+      btn.onclick = async (e) => {
+        const phone = e.currentTarget.dataset.phone;
+        if (phone) {
+          try {
+            await navigator.clipboard.writeText(phone);
+            e.currentTarget.classList.add('is-copied');
+            setTimeout(() => e.currentTarget.classList.remove('is-copied'), 1200);
+          } catch (err) {
+            console.error('Copy failed:', err);
+          }
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="copy-email"]').forEach((btn) => {
+      btn.onclick = async (e) => {
+        const email = e.currentTarget.dataset.email;
+        if (email) {
+          try {
+            await navigator.clipboard.writeText(email);
+            e.currentTarget.classList.add('is-copied');
+            setTimeout(() => e.currentTarget.classList.remove('is-copied'), 1200);
+          } catch (err) {
+            console.error('Copy failed:', err);
+          }
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="status"]').forEach((sel) => {
+      sel.onchange = async (e) => {
+        const clientId = e.currentTarget.dataset.clientId;
+        const status = e.currentTarget.value;
+        if (clientId && typeof window.requestJson === 'function') {
+          try {
+            await window.requestJson(`/api/clients/${encodeURIComponent(clientId)}/status`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status })
+            });
+            const c = clients.find((x) => String(x.id) === String(clientId));
+            if (c) c.status = status;
+          } catch (err) {
+            console.error('Status update failed:', err);
+          }
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="phase"]').forEach((sel) => {
+      sel.onchange = async (e) => {
+        const clientId = e.currentTarget.dataset.clientId;
+        const phase = e.currentTarget.value;
+        if (clientId && typeof window.requestJson === 'function') {
+          try {
+            await window.requestJson(`/api/clients/${encodeURIComponent(clientId)}/phase`, {
+              method: 'PATCH',
+              body: JSON.stringify({ phase })
+            });
+            const c = clients.find((x) => String(x.id) === String(clientId));
+            if (c) c.phase = phase;
+          } catch (err) {
+            console.error('Phase update failed:', err);
+          }
+        }
+      };
+    });
+  };
+};
+
+// Optimized renderer disabled: the original glass table below owns Clients UI controls/actions.
+window.renderGlassClientsOptimized = renderGlassClientsOptimized;
+console.log('✅ Clients glass table renderer active');
+</script>
+
+<style>
+      .status-filter-option {
+        padding: 10px 12px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 13px;
+        transition: background 0.2s;
+      }
+      .status-filter-option:hover {
+        background: #f0f0f0;
+      }
+      .status-filter-option.active {
+        background: #e0e7ff;
+        color: #667eea;
+        font-weight: 600;
+      }
+    </style></head>
+  <body><!-- OLD LOGIN FORM PERMANENTLY REMOVED -->
+    
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <div class="page-shell">
+      <div id="appBootLoader" class="app-boot-loader" hidden>
+        <div class="app-boot-loader-inner" aria-live="polite" aria-busy="true">
+          <div class="loader" aria-hidden="true">
+            <div class="inner one"></div>
+            <div class="inner two"></div>
+            <div class="inner three"></div>
+          </div>
+          <p id="appBootLoaderText" class="app-boot-loader-text" hidden>Loading Ninja Tools...</p>
+        </div>
+      </div>
+      <header class="hero">
+        <div class="hero-copy-block">
+          <div class="hero-ninja-wrap">
+            <iframe
+              class="hero-widget-frame"
+              src="/tools-ninja-widget.html?v=20260608-01"
+              title="Get New Report Ninja Widget"
+            ></iframe>
+          </div>
+        </div>
+        <div class="hero-panel">
+          <div class="top-actions">
+            <button class="top-logout-btn" type="button" id="logoutButton">Logout</button>
+          </div>
+          <div class="integration-stack">
+            <details class="integration-card" id="smartCreditIntegrationCard">
+              <summary>
+                <span class="integration-summary-brand integration-summary-brand-smartcredit">
+                  <img class="integration-brand-image integration-brand-image-smartcredit" src="/assets/smartcredit-logo.png" alt="SmartCredit" />
+                </span>
+                <span class="integration-summary-label">SmartCredit API</span>
+              </summary>
+              <form id="smartCreditIntegrationForm" class="integration-form">
+                <label class="field">
+                  <span>Token ID</span>
+                  <input name="tokenId" type="text" placeholder="Token ID" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>API Secret</span>
+                  <input name="apiSecret" type="text" placeholder="API Secret" />
+                </label>
+                <button type="submit">Save SmartCredit</button>
+              </form>
+            </details>
+            <details class="integration-card" id="myFreeScoreIntegrationCard">
+              <summary>
+                <span class="integration-summary-brand integration-summary-brand-mfsn">
+                  <img class="integration-brand-image integration-brand-image-mfsn" src="/assets/myfreescorenow-logo.png" alt="MyFreeScoreNow" />
+                </span>
+                <span class="integration-summary-label">API Login</span>
+              </summary>
+              <form id="myFreeScoreIntegrationForm" class="integration-form">
+                <label class="field">
+                  <span>API Email</span>
+                  <input name="tokenId" type="text" placeholder="apiuser@test.com" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>API Password</span>
+                  <input name="apiSecret" type="text" placeholder="API Password" />
+                </label>
+                <button type="submit">Save MyFreeScoreNow</button>
+              </form>
+            </details>
+            <p id="integrationMessage" class="form-message muted"></p>
+          </div>
+          <button class="affiliate-links-launch" type="button" id="affiliateLinksLaunch">Affiliate Links</button>
+          <div class="hero-quick-actions" aria-label="Quick actions">
+            <button class="hero-canvas-action" type="button" id="billingQuickAction">
+              <div class="hero-glow-btn">
+                <canvas class="hero-glow-canvas"></canvas>
+                <p class="hero-glow-text">Billing</p>
+              </div>
+              <span class="hero-action-icon-wrap" aria-hidden="true">
+                <img src="/assets/icons/billing-icon.png" alt="" />
+              </span>
+            </button>
+            <button class="hero-canvas-action" type="button" id="disputeQuickAction">
+              <div class="hero-glow-btn">
+                <canvas class="hero-glow-canvas"></canvas>
+                <p class="hero-glow-text">Dispute Center</p>
+              </div>
+              <span class="hero-action-icon-wrap" aria-hidden="true">
+                <img src="/assets/icons/dispute-sword-icon.png" alt="" />
+              </span>
+            </button>
+            <button class="sap-ai-action" type="button" id="setupAiPromptsAction" aria-label="Setup AI Prompts">
+              <span class="sap-ai-aura" aria-hidden="true"></span>
+              <span class="sap-ai-border" aria-hidden="true"></span>
+              <span class="sap-ai-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sap-ai-sparkle" aria-hidden="true">
+                  <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+                  <path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>
+                </svg>
+                <span class="sap-ai-text">Setup AI Prompts</span>
+                <span class="sap-ai-arrow-wrap" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                  </svg>
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </header>
+      <main class="crm-layout" id="crmLayout">
+        <section class="panel client-hub-pane client-hub-pane-home" id="clientHubHomePane">
+          <form id="homeSettingsForm" class="home-settings-shell">
+            <div class="home-settings-intro">
+              <p class="home-settings-kicker">Person Settings</p>
+              <h2>Business Settings</h2>
+              <p>Company profile, dispute timing, email settings, and important links for Ninja Tools.</p>
+              <p id="homeSettingsMessage" class="form-message muted">Business settings save locally and sync with the Ninja widget.</p>
+            </div>
+            <section class="home-settings-card home-settings-card-profile">
+              <div class="home-settings-head">
+                <div>
+                  <p class="eyebrow">Company Profile</p>
+                  <h3>Best Texas Credit Pros Setup</h3>
+                </div>
+              </div>
+              <div class="home-brand-row">
+                <div class="home-logo-editor">
+                  <div class="home-logo-preview-shell">
+                    <img id="homeLogoPreview" class="home-logo-preview" alt="Company logo preview" hidden />
+                    <p id="homeLogoPlaceholder" class="home-logo-placeholder">Upload the company logo used across Ninja Tools.</p>
+                  </div>
+                  <label class="home-logo-upload" for="homeLogoInput">
+                    <span>Upload Image</span>
+                    <input id="homeLogoInput" name="logo" type="file" accept="image/*" />
+                  </label>
+                </div>
+                <div class="home-color-editor">
+                  <span class="home-color-label">Company Color</span>
+                  <div class="home-color-swatches" id="homeColorSwatches" role="group" aria-label="Company accent color">
+                    <button type="button" class="home-color-swatch" data-home-color="#58a55c" aria-label="Green"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#4da95f" aria-label="Leaf green"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#1d9ca1" aria-label="Teal"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#ffad28" aria-label="Amber"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#ee3b6c" aria-label="Pink"></button>
+                    <button type="button" class="home-color-swatch" data-home-color="#0000ff" aria-label="Blue"></button>
+                  </div>
+                </div>
+              </div>
+              <div class="home-settings-grid">
+                <label class="field">
+                  <span>Company Name</span>
+                  <input id="homeCompanyName" name="companyName" type="text" />
+                </label>
+                <label class="field">
+                  <span>Company Address</span>
+                  <input id="homeCompanyAddress" name="companyAddress" type="text" />
+                </label>
+                <label class="field">
+                  <span>Company City</span>
+                  <input id="homeCompanyCity" name="companyCity" type="text" />
+                </label>
+                <label class="field">
+                  <span>Company State</span>
+                  <select id="homeCompanyState" name="companyState" class="home-settings-select">
+                    <option>Texas</option>
+                    <option>Oklahoma</option>
+                    <option>Louisiana</option>
+                    <option>Arkansas</option>
+                    <option>New Mexico</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Company Zipcode</span>
+                  <input id="homeCompanyZipcode" name="companyZipcode" type="text" />
+                </label>
+                <label class="field">
+                  <span>Company Email</span>
+                  <input id="homeCompanyEmail" name="companyEmail" type="email" />
+                </label>
+                <label class="field">
+                  <span>Company Phone</span>
+                  <input id="homeCompanyPhone" name="companyPhone" type="text" />
+                </label>
+                <label class="field">
+                  <span>Consultation Fee</span>
+                  <input id="homeConsultationFee" name="consultationFee" type="text" />
+                </label>
+                <label class="field">
+                  <span>Service Fee</span>
+                  <input id="homeServiceFee" name="serviceFee" type="text" />
+                </label>
+              </div>
+              <div class="home-links-grid">
+                <label class="field">
+                  <span>Client Portal URL</span>
+                  <input id="homeClientPortalUrl" name="clientPortalUrl" type="url" />
+                </label>
+                <label class="field">
+                  <span>Self Signup Link</span>
+                  <input id="homeSelfSignupLink" name="selfSignupLink" type="url" />
+                </label>
+              </div>
+            </section>
+            <div class="home-settings-subgrid">
+              <section class="home-settings-card">
+                <div class="home-settings-head home-settings-head-compact">
+                  <div>
+                    <p class="eyebrow">Dispute Settings</p>
+                    <h3>Round Timing</h3>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>Dispute Due Date</span>
+                  <select id="homeDisputeDueDate" name="disputeDueDate" class="home-settings-select">
+                    <option value="30-Days">30-Days</option>
+                    <option value="35-Days">35-Days</option>
+                    <option value="45-Days">45-Days</option>
+                    <option value="60-Days">60-Days</option>
+                  </select>
+                </label>
+                <button type="submit" class="home-settings-save">Save Business Settings</button>
+              </section>
+              <section class="home-settings-card">
+                <div class="home-settings-head home-settings-head-compact">
+                  <div>
+                    <p class="eyebrow">Email Settings</p>
+                    <h3>Sender Identity</h3>
+                  </div>
+                </div>
+                <div class="home-settings-grid home-settings-grid-tight">
+                  <label class="field">
+                    <span>Sender Name</span>
+                    <input id="homeSenderName" name="senderName" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Email Domain</span>
+                    <input id="homeEmailDomain" name="emailDomain" type="text" />
+                  </label>
+                </div>
+                <label class="field">
+                  <span>From Name Preview</span>
+                  <input id="homeFromNamePreview" name="fromNamePreview" type="text" readonly />
+                </label>
+              </section>
+            </div>
+          </form>
+        </section>
+        <section class="panel client-hub-pane client-hub-pane-add" id="clientHubAddPane" hidden>
+          <div class="add-client-panel-body">
+            <div class="section-heading compact-heading">
+              <h2 id="clientFormTitle">Add Client</h2>
+              <p id="clientFormSubtitle">Client identity, monitoring credentials, and portal access for Ninja Tools.</p>
+            </div>
+            <form id="clientForm" class="form-grid compact-form-grid add-client-rich-form neu-forms-skin">
+              <section class="add-client-form-section field-full client-form-segment-section">
+                <div class="client-form-segment-nav" role="tablist" aria-label="Client Form Sections">
+                  <button class="client-form-segment-tab is-active" type="button" role="tab" aria-selected="true" data-form-segment-tab="client">Client</button>
+                  <button class="client-form-segment-tab" type="button" role="tab" aria-selected="false" data-form-segment-tab="ninja">Ninja Team</button>
+                  <button class="client-form-segment-tab" type="button" role="tab" aria-selected="false" data-form-segment-tab="affiliate">Affiliate</button>
+                </div>
+                <div class="client-form-segment-panels">
+                  <div class="client-form-segment-panel is-active" role="tabpanel" data-form-segment-panel="client">
+                    <div class="add-client-grid client-form-segment-grid">
+                      <p class="muted">Client fields are managed in the sections below.</p>
+                    </div>
+                  </div>
+                  <div class="client-form-segment-panel" role="tabpanel" data-form-segment-panel="ninja" hidden>
+                    <div class="add-client-grid client-form-segment-grid">
+                      <label class="field">
+                        <span>Ninja Team Queue</span>
+                        <input name="ninjaQueue" type="text" placeholder="Assigned processing lane" />
+                      </label>
+                      <label class="field">
+                        <span>Ninja Team Priority</span>
+                        <input name="ninjaPriority" type="text" placeholder="Low / Medium / High" />
+                      </label>
+                      <label class="field field-full">
+                        <span>Ninja Team Notes</span>
+                        <textarea name="ninjaTeamNotes" rows="2" placeholder="Internal team notes..."></textarea>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="client-form-segment-panel" role="tabpanel" data-form-segment-panel="affiliate" hidden>
+                    <div class="add-client-grid client-form-segment-grid">
+                      <label class="field">
+                        <span>Affiliate Name</span>
+                        <input name="affiliateName" type="text" placeholder="Affiliate or partner name" />
+                      </label>
+                      <label class="field">
+                        <span>Affiliate Campaign</span>
+                        <input name="affiliateCampaign" type="text" placeholder="Campaign or source details" />
+                      </label>
+                      <label class="field field-full">
+                        <span>Affiliate Notes</span>
+                        <textarea name="affiliateNotes" rows="2" placeholder="Affiliate tracking notes..."></textarea>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <section class="add-client-form-section field-full client-only-section">
+                <div class="add-client-form-heading">
+                  <h3>Client Identity</h3>
+                  <p>Name, contact info, CRM matching, and household pairing.</p>
+                </div>
+                <div class="add-client-grid">
+                  <label class="field field-name">
+                    <span>First Name</span>
+                    <input name="firstName" placeholder="Jane" required />
+                  </label>
+                  <label class="field field-name">
+                    <span>Last Name</span>
+                    <input name="lastName" placeholder="Doe" required />
+                  </label>
+                  <label class="field field-email">
+                    <span>Email</span>
+                    <input name="email" type="email" placeholder="jane@example.com" />
+                  </label>
+                  <div class="add-client-inline-fields add-client-inline-fields-identity">
+                    <label class="field field-compact field-dob">
+                      <span>DOB</span>
+                      <input name="dob" type="text" inputmode="numeric" placeholder="MM/DD/YYYY" maxlength="10" autocomplete="bday" />
+                    </label>
+                    <label class="field field-compact field-ssn">
+                      <span>SSN</span>
+                      <input name="ssn" type="text" inputmode="numeric" placeholder="123-45-2352" maxlength="11" />
+                    </label>
+                    <label class="field field-compact field-phone">
+                      <span>Phone</span>
+                      <input name="phone" type="tel" placeholder="(713) 212-9977" />
+                    </label>
+                  </div>
+                  <label class="field field-full">
+                    <span>Street Address</span>
+                    <input id="clientAddressInput" name="address" type="text" list="clientAddressMatches" placeholder="Start typing an address..." autocomplete="off" />
+                    <small class="field-note" id="clientAddressHint">Address suggestions will appear as you type.</small>
+                    <datalist id="clientAddressMatches"></datalist>
+                  </label>
+                  <div class="add-client-inline-fields add-client-inline-fields-address">
+                    <label class="field field-compact field-city">
+                      <span>City</span>
+                      <input name="addressCity" type="text" placeholder="Fort Worth" />
+                    </label>
+                    <label class="field field-compact field-state">
+                      <span>State</span>
+                      <input name="addressState" type="text" placeholder="TX" maxlength="2" />
+                    </label>
+                    <label class="field field-compact field-zip">
+                      <span>Zip</span>
+                      <input name="addressZip" type="text" inputmode="numeric" placeholder="76102" maxlength="10" />
+                    </label>
+                  </div>
+                  <label class="field field-full">
+                    <span>Join Client (Spouse)</span>
+                    <input id="spouseClientSearch" name="spouseClientSearch" type="text" list="spouseClientMatches" placeholder="Search existing CRM clients..." autocomplete="off" />
+                    <input id="spouseClientId" name="spouseClientId" type="hidden" />
+                    <datalist id="spouseClientMatches"></datalist>
+                  </label>
+                  <div class="add-client-inline-fields add-client-inline-fields-status">
+                    <label class="field field-compact">
+                      <span>Status</span>
+                      <select id="clientAddStatus" name="status" class="add-client-select"></select>
+                    </label>
+                    <label class="field field-compact">
+                      <span>Phase</span>
+                      <select id="clientAddPhase" name="phase" class="add-client-select"></select>
+                    </label>
+                  </div>
+                </div>
+              </section>
+              <section class="add-client-form-section field-full client-only-section">
+                <div class="add-client-form-heading">
+                  <h3>Credit Monitoring Credentials</h3>
+                  <p>Used by refresh and Get Report to choose the right method automatically.</p>
+                </div>
+                <div class="add-client-grid">
+                  <label class="field">
+                    <span>Credit Monitoring</span>
+                    <select name="monitoringAgency" class="add-client-select">
+                      <option value="">Select monitoring</option>
+                      <option value="IdentityIQ">IdentityIQ</option>
+                      <option value="SmartCredit">SmartCredit</option>
+                      <option value="MyFreeScoreNow">MyFreeScoreNow</option>
+                      <option value="MyScoreIQ">MyScoreIQ</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Username</span>
+                    <input name="monitoringUsername" type="text" placeholder="Monitoring username or email" />
+                  </label>
+                  <label class="field add-client-credential-field">
+                    <span>Password</span>
+                    <div class="password-field-wrap">
+                      <input name="monitoringPassword" class="monitoring-password-input" type="password" placeholder="Monitoring password" />
+                      <button class="password-toggle-button" type="button" data-password-toggle="monitoringPassword" aria-label="Show password" aria-pressed="false">◐</button>
+                    </div>
+                  </label>
+                  <label class="field add-client-credential-field" data-secret-key-field>
+                    <span>Secret Key</span>
+                    <div class="password-field-wrap security-code-field-wrap">
+                      <input id="clientSecretKeyInput" name="secretKey" class="security-code-input" type="password" placeholder="Defaults to last 4 of SSN" />
+                      <button class="security-code-toggle-button" type="button" data-password-toggle="secretKey" aria-label="Show secret key" aria-pressed="false">◐</button>
+                    </div>
+                  </label>
+                  <label class="field add-client-credential-field" data-monitoring-token-field>
+                    <span>TOKEN</span>
+                    <input name="monitoringToken" type="text" placeholder="Customer token if provided" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" />
+                  </label>
+                </div>
+              </section>
+              <section class="add-client-form-section field-full client-only-section">
+                <div class="add-client-form-heading">
+                  <h3>Portal Access</h3>
+                  <p>Default portal password is last name + first initial + 123.</p>
+                </div>
+                <div class="add-client-portal-split">
+                  <div class="add-client-portal-left">
+                    <label class="field field-portal-password">
+                      <span>Password</span>
+                      <div class="password-field-wrap">
+                        <input id="clientPortalPasswordInput" name="portalPassword" class="monitoring-password-input" type="password" />
+                        <button class="password-toggle-button" type="button" data-password-toggle="portalPassword" aria-label="Show portal password" aria-pressed="false">◐</button>
+                      </div>
+                    </label>
+                    <fieldset class="field portal-toggle-field client-portal-toggle-fieldset">
+                      <span>Ninja Portal</span>
+                      <div class="portal-toggle-group portal-toggle-group-neu">
+                        <label class="portal-toggle-switch-line" for="clientPortalEnabledToggle">
+                          <input id="clientPortalEnabledToggle" class="toggle-input" type="checkbox" checked />
+                          <span class="toggle-switch" aria-hidden="true"></span>
+                          <span class="portal-toggle-switch-copy">On / Off</span>
+                        </label>
+                        <input id="clientPortalEnabledValue" type="hidden" name="portalEnabled" value="on" />
+                      </div>
+                    </fieldset>
+                    <label class="field field-portal-language">
+                      <span>Language</span>
+                      <select name="language" class="add-client-select add-client-select-compact">
+                        <option value="English">English</option>
+                        <option value="Spanish">Spanish</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="add-client-portal-right">
+                    <label class="field">
+                      <span>Ninja Assigned</span>
+                      <select id="clientNinjaAssigned" name="ninjaAssigned" class="add-client-select"></select>
+                    </label>
+                    <label class="field">
+                      <span>Affiliate Assigned</span>
+                      <select id="clientAffiliateAssigned" name="affiliateAssigned" class="add-client-select">
+                        <option value="None">None</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </section>
+              <section class="add-client-form-section field-full client-only-section">
+                <div class="add-client-form-heading">
+                  <h3>Documents</h3>
+                  <p>Upload key files and choose print side preferences.</p>
+                </div>
+                <div id="clientDocumentsList" class="client-documents-list"></div>
+                <div class="client-documents-actions">
+                  <button id="addCustomDocumentButton" class="client-doc-add" type="button">+ Add new document</button>
+                </div>
+              </section>
+              <div class="field-full">
+                <button id="clientFormSubmitButton" type="submit">Save Client</button>
+                <div id="clientSaveProgressBox" class="client-save-progress" hidden>
+                  <div class="client-save-progress-head">
+                    <strong>Saving Client</strong>
+                    <span id="clientSaveProgressPercent">0%</span>
+                  </div>
+                  <div class="client-save-progress-track" role="progressbar" aria-label="Saving Client" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div id="clientSaveProgressBar" class="client-save-progress-bar"></div>
+                  </div>
+                </div>
+              </div>
+            </form>
+            <p id="formMessage" class="form-message muted"></p>
+          </div>
+        </section>
+        <div class="client-hub-pane client-section-grid" id="clientHubClientsPane">
+          <section class="panel client-hub-clients-panel nt-clients-glass-scope">
+            <div class="section-heading clients-heading-row">
+              <div></div>
+              <div class="csv-import-block clients-csv-import">
+                <form id="csvImportForm" class="csv-import-form inline-csv-import-form nt-clients-import-form">
+                  <input id="clientsCsv" name="clientsCsv" type="file" accept=".csv,text/csv" required />
+                  <button type="submit">Import</button>
+                </form>
+                <p id="csvImportMessage" class="form-message muted"></p>
+              </div>
+            </div>
+            <div class="clients-toolbar nt-clients-toolbar-legacy" hidden>
+              <input id="searchInput" class="search-input" type="search" placeholder="Search by name, phone, email, SSN, or monitoring username" />
+              <select id="statusFilter" class="status-filter-select">
+                <option value="__all__">All Clients</option>
+              </select>
+            </div>
+            <div id="clientsList" class="clients-table-wrap"></div>
+          </section>
+          <section class="panel detail-panel">
+            <div id="clientDetail" class="detail-shell">
+              <p class="muted">Choose a client to load the credit scores.</p>
+            </div>
+          </section>
+        </div>
+        <section class="panel dashboard-panel">
+          <div class="dashboard-shell" id="dashboardShell">
+            <p class="muted">Loading Ninja Tools dashboard...</p>
+          </div>
+        </section>
+      </main>
+    </div>
+    <template id="clientDetailTemplate">
+      <div>
+        <div class="detail-header">
+        <div class="detail-name-column">
+          <p class="eyebrow">Client Detail</p>
+          <div class="detail-nameplate nameplate-logo">
+            <h3 class="detail-name" data-text="&#xf504; Client Detail">&#xf504; Client Detail</h3>
+          </div>
+          <div class="detail-name-loader-row">
+            <div class="detail-refresh-loader-anchor" aria-live="polite"></div>
+          </div>
+        </div>
+          <div class="detail-credentials">
+            <div class="monitoring-agency-switch" role="group" aria-label="Credit monitoring service">
+              <span class="agency-switch-glider" aria-hidden="true"></span>
+              <button class="agency-toggle agency-toggle-identityiq" type="button" data-agency="IdentityIQ">IdentityIQ</button>
+              <button class="agency-toggle agency-toggle-myfreescorenow" type="button" data-agency="MyFreeScoreNow">MyFreeScoreNow</button>
+              <button class="agency-toggle agency-toggle-smartcredit" type="button" data-agency="SmartCredit">SmartCredit</button>
+              <button class="agency-toggle agency-toggle-myscoreiq" type="button" data-agency="MyScoreIQ">MyScoreIQ</button>
+            </div>
+            <div class="monitoring-link-indicator" hidden>
+              <span class="monitoring-link-icon is-unlinked" aria-hidden="true"></span>
+              <span class="monitoring-link-text">Unlinked</span>
+            </div>
+            <label class="field credential-field">
+              <span>Username</span>
+              <input class="monitoring-username-input" type="text" placeholder="Username" />
+            </label>
+            <label class="field credential-field">
+              <span>Password</span>
+              <div class="password-field-wrap">
+                <input class="monitoring-password-input" type="password" placeholder="Password" />
+                <button class="password-toggle-button" type="button" aria-label="Show password" aria-pressed="false">◐</button>
+              </div>
+            </label>
+            <label class="field credential-field">
+              <span class="security-field-label">Secret Key</span>
+              <div class="password-field-wrap security-code-field-wrap">
+                <input class="security-code-input" type="password" placeholder="Secret Key" />
+                <button class="security-code-toggle-button" type="button" aria-label="Show token" aria-pressed="false">◐</button>
+              </div>
+            </label>
+            <div class="client-goal-row detail-goal-row">
+              <div class="detail-refresh-action">
+                <div class="detail-refresh-button-wrap">
+                  <button class="detail-refresh-button" type="button">
+                    <span>Refresh Report</span>
+                  </button>
+                  <div class="detail-refresh-button-shadow"></div>
+                </div>
+              </div>
+              <a class="report-link detail-report-link detail-report-inline" target="_blank" rel="noreferrer">Last Report -- --</a>
+              <label class="field client-goal-field">
+                <select class="client-goal-select">
+                  <option value="">Select Goal</option>
+                  <option value="Mortgage">Mortgage</option>
+                  <option value="Credit Card">Credit Card</option>
+                  <option value="Re-Finance">Re-Finance</option>
+                  <option value="Auto">Auto</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+        <p class="muted detail-email"></p>
+        <div class="detail-lower-split">
+          <section class="text-client-panel">
+            <div class="text-client-header">
+              <div class="text-client-copy">
+                <small>BlueBubbles</small>
+                <span class="text-client-destination"></span>
+              </div>
+              <button class="text-client-send-button" type="button">Send Text</button>
+            </div>
+            <div class="text-attachment-area">
+              <span class="text-attachment-label">Attachment</span>
+              <div class="text-attachment-dropzone" role="button" tabindex="0" aria-label="Add attachment">
+                <input class="text-attachment-input" type="file" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.zip,.heic,.heif,.webp" hidden />
+                <p class="text-attachment-hint">Drop image/PDF/file, click to choose, or paste screenshot (Ctrl/Cmd+V)</p>
+                <p class="text-attachment-meta muted"></p>
+              </div>
+            </div>
+            <label class="field text-client-field">
+              <span>Message</span>
+              <textarea class="text-client-input" rows="3" placeholder="Type a text message to send through BlueBubbles..."></textarea>
+            </label>
+            <p class="text-client-status muted"></p>
+          </section>
+          <div class="client-notes-panel">
+            <label class="field client-notes-field">
+              <span>Client Notes</span>
+              <textarea class="client-notes-input" rows="4" placeholder="Add notes about this client..."></textarea>
+            </label>
+          </div>
+        </div>
+        <div class="detail-section-divider" aria-hidden="true">
+          <img src="/assets/ninjatools-divider.jpg" alt="" />
+        </div>
+        <div class="score-grid">
+          <article class="score-card transunion">
+            <div class="score-card-top">
+              <span>TransUnion</span>
+              <span class="projected-fico-chip">Projected FICO 8 <strong class="projected-fico-value" data-projected-fico="transunion">--</strong></span>
+            </div>
+            <div class="score-card-bottom">
+              <strong class="score-value" data-score="transunion">--</strong>
+            </div>
+            <div class="score-scroll">
+              <div class="score-scroll-row">
+                <div class="score-utilization">
+                  <small>Utilization</small>
+                  <strong class="utilization-value" data-utilization="transunion">--</strong>
+                </div>
+                <div class="score-age">
+                  <small>Age of Credit</small>
+                  <strong class="age-value" data-age="transunion">--</strong>
+                </div>
+              </div>
+              <div class="score-scroll-row score-scroll-row-secondary">
+                <div class="score-on-time">
+                  <small>On Time Payments</small>
+                  <strong class="on-time-value" data-on-time="transunion">--</strong>
+                </div>
+                <div class="score-total-debt">
+                  <small>Total Debt</small>
+                  <strong class="total-debt-value" data-total-debt="transunion">--</strong>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="score-card experian">
+            <div class="score-card-top">
+              <span>Experian</span>
+              <span class="projected-fico-chip">Projected FICO 8 <strong class="projected-fico-value" data-projected-fico="experian">--</strong></span>
+            </div>
+            <div class="score-card-bottom">
+              <strong class="score-value" data-score="experian">--</strong>
+            </div>
+            <div class="score-scroll">
+              <div class="score-scroll-row">
+                <div class="score-utilization">
+                  <small>Utilization</small>
+                  <strong class="utilization-value" data-utilization="experian">--</strong>
+                </div>
+                <div class="score-age">
+                  <small>Age of Credit</small>
+                  <strong class="age-value" data-age="experian">--</strong>
+                </div>
+              </div>
+              <div class="score-scroll-row score-scroll-row-secondary">
+                <div class="score-on-time">
+                  <small>On Time Payments</small>
+                  <strong class="on-time-value" data-on-time="experian">--</strong>
+                </div>
+                <div class="score-total-debt">
+                  <small>Total Debt</small>
+                  <strong class="total-debt-value" data-total-debt="experian">--</strong>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="score-card equifax">
+            <div class="score-card-top">
+              <span>Equifax</span>
+              <span class="projected-fico-chip">Projected FICO 8 <strong class="projected-fico-value" data-projected-fico="equifax">--</strong></span>
+            </div>
+            <div class="score-card-bottom">
+              <strong class="score-value" data-score="equifax">--</strong>
+            </div>
+            <div class="score-scroll">
+              <div class="score-scroll-row">
+                <div class="score-utilization">
+                  <small>Utilization</small>
+                  <strong class="utilization-value" data-utilization="equifax">--</strong>
+                </div>
+                <div class="score-age">
+                  <small>Age of Credit</small>
+                  <strong class="age-value" data-age="equifax">--</strong>
+                </div>
+              </div>
+              <div class="score-scroll-row score-scroll-row-secondary">
+                <div class="score-on-time">
+                  <small>On Time Payments</small>
+                  <strong class="on-time-value" data-on-time="equifax">--</strong>
+                </div>
+                <div class="score-total-debt">
+                  <small>Total Debt</small>
+                  <strong class="total-debt-value" data-total-debt="equifax">--</strong>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="income-dti-panel">
+          <div class="dti-summary-grid dti-summary-grid-inline">
+            <div class="dti-summary-card dti-summary-card-combo">
+              <div class="dti-mini-stat">
+                <small>Total Debt</small>
+                <strong class="dti-total-debt">--</strong>
+                <div class="dti-debt-breakdown dti-debt-breakdown-list"></div>
+                <div class="dti-inline-inputs">
+                  <label class="field income-field dti-income-card dti-inline-input-card">
+                    <span>Yearly Income</span>
+                    <input class="yearly-income-input" type="number" min="0" step="1000" placeholder="75000" />
+                  </label>
+                  <label class="field income-field dti-income-card dti-inline-input-card">
+                    <span>Housing Payment</span>
+                    <input class="housing-payment-input" type="number" min="0" step="50" placeholder="1800" />
+                  </label>
+                  <label class="field income-field dti-income-card dti-inline-input-card">
+                    <span>Debt Monthly Payments</span>
+                    <input class="debt-monthly-payment-input" type="number" min="0" step="25" placeholder="450" />
+                  </label>
+                </div>
+              </div>
+              <div class="dti-mini-stat">
+                <small>Front-End DTI</small>
+                <strong class="dti-front-end">--</strong>
+              </div>
+              <div class="dti-mini-stat">
+                <small>Back-End DTI</small>
+                <strong class="dti-back-end">--</strong>
+              </div>
+              <div class="dti-scale-wrap">
+                <div class="dti-scale-bar">
+                  <span class="dti-scale-segment good"></span>
+                  <span class="dti-scale-segment fair"></span>
+                  <span class="dti-scale-segment risky"></span>
+                  <span class="dti-scale-segment danger"></span>
+                </div>
+                <span class="dti-scale-marker front-end-marker">Front</span>
+                <span class="dti-scale-marker back-end-marker">Back</span>
+                <div class="dti-scale-labels">
+                  <span>Good<br />36% or less</span>
+                  <span>Fair<br />37-43%</span>
+                  <span>Risky<br />44-50%</span>
+                  <span>Danger<br />51%+</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="whatif-simulator-panel">
+            <div class="whatif-simulator-head">
+              <h5>What If Simulator</h5>
+              <p>Current and projected 3-bureau score scenarios</p>
+            </div>
+            <div class="whatif-simulator-controls">
+              <label class="field whatif-field">
+                <span>Scenario</span>
+                <select class="whatif-scenario-select">
+                  <option value="pay_down_revolving" selected>Pay Down Revolving</option>
+                  <option value="baseline">Baseline</option>
+                  <option value="increase_credit_limits">Increase Credit Limits</option>
+                  <option value="time_travel">Age Accounts (Time Travel)</option>
+                </select>
+              </label>
+              <label class="field whatif-field whatif-slider-field">
+                <span class="whatif-value-label">Credit Card Utilization Pay Down</span>
+                <input class="whatif-scenario-slider" type="range" min="0" max="100" step="10" value="0" />
+                <div class="whatif-slider-meta">
+                  <strong class="whatif-slider-value">0%</strong>
+                  <small class="whatif-slider-helper">No utilization reduction</small>
+                </div>
+                <div class="whatif-slider-total-wrap">
+                  <small>Total Credit Card Balance</small>
+                  <strong class="whatif-slider-total">$0.00</strong>
+                </div>
+              </label>
+            </div>
+            <div class="whatif-simulator-results">
+              <div class="whatif-score-columns">
+                <div class="whatif-score-column">
+                  <h6>Vantage 3.0</h6>
+                  <div class="whatif-result-card">
+                    <small>Current</small>
+                    <strong class="whatif-current-vantage">---</strong>
+                  </div>
+                  <div class="whatif-result-card">
+                    <small>Projected</small>
+                    <strong class="whatif-vantage-score">---</strong>
+                  </div>
+                </div>
+                <div class="whatif-score-column">
+                  <h6>FICO 8</h6>
+                  <div class="whatif-result-card">
+                    <small>Current</small>
+                    <strong class="whatif-current-fico">---</strong>
+                  </div>
+                  <div class="whatif-result-card">
+                    <small>Projected</small>
+                    <strong class="whatif-projected-fico-bureau">---</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="whatif-delta-grid">
+                <div class="whatif-result-card">
+                  <small>Delta (Vantage 3.0)</small>
+                  <strong class="whatif-vantage-delta-score"><span class="whatif-delta-arrow">-</span><span class="whatif-delta-value">---</span></strong>
+                </div>
+                <div class="whatif-result-card">
+                  <small>Delta (FICO 8)</small>
+                  <strong class="whatif-fico-delta-score"><span class="whatif-delta-arrow">-</span><span class="whatif-delta-value">---</span></strong>
+                </div>
+              </div>
+            </div>
+            <p class="whatif-status muted">Ready.</p>
+          </div>
+        </div>
+        <div class="accounts-section">
+          <div class="accounts-heading">
+            <div class="accounts-heading-main">
+              <h4>Open Accounts</h4>
+              <span id="openAccountCount">0</span>
+              <div class="accounts-inquiries">
+                <small>Hard Inquiries</small>
+                <div class="accounts-inquiries-list">
+                  <span class="accounts-inquiry-badge transunion">
+                    <b class="hard-inquiry-count-transunion">0</b>
+                    <em>TU</em>
+                  </span>
+                  <span class="accounts-inquiry-badge experian">
+                    <b class="hard-inquiry-count-experian">0</b>
+                    <em>EX</em>
+                  </span>
+                  <span class="accounts-inquiry-badge equifax">
+                    <b class="hard-inquiry-count-equifax">0</b>
+                    <em>EQ</em>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="accounts-filter-wrap">
+              <button class="accounts-filter-button" type="button" aria-expanded="false">Filter Accounts</button>
+              <div class="accounts-filter-menu" hidden></div>
+            </div>
+          </div>
+          <div class="account-category-list"></div>
+          <div class="accounts-list"></div>
+        </div>
+        <p class="muted detail-note"></p>
+      </div>
+    </template>
+    <dialog id="clientEditDialog" class="client-edit-dialog">
+      <form id="clientEditForm" class="client-edit-form" method="dialog">
+        <div class="client-edit-header">
+          <div>
+            <p class="eyebrow">Update Client</p>
+            <h3 id="clientEditTitle">Edit Client</h3>
+          </div>
+          <button class="client-edit-close" type="button" id="clientEditClose" aria-label="Close edit dialog">X</button>
+        </div>
+        <div class="client-edit-grid">
+          <label class="field">
+            <span>First Name</span>
+            <input name="firstName" required />
+          </label>
+          <label class="field">
+            <span>Last Name</span>
+            <input name="lastName" required />
+          </label>
+          <label class="field">
+            <span>Status</span>
+            <select name="status" id="clientEditStatus"></select>
+          </label>
+          <label class="field">
+            <span>Phone</span>
+            <input name="phone" />
+          </label>
+          <label class="field field-full">
+            <span>Email</span>
+            <input name="email" type="email" />
+          </label>
+          <label class="field">
+            <span>Next Import</span>
+            <input name="nextImportInt" type="number" step="1" />
+          </label>
+          <label class="field">
+            <span>Credit Monitoring</span>
+            <select name="monitoringAgency">
+              <option value="">Not Set</option>
+              <option value="IdentityIQ">IdentityIQ</option>
+              <option value="SmartCredit">SmartCredit</option>
+              <option value="MyFreeScoreNow">MyFreeScoreNow</option>
+              <option value="MyScoreIQ">MyScoreIQ</option>
+            </select>
+          </label>
+        </div>
+        <div class="client-edit-actions">
+          <button class="client-edit-cancel" type="button" id="clientEditCancel">Cancel</button>
+          <button type="submit">Save Changes</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="imageCropDialog" class="image-crop-dialog">
+      <div id="imageCropVueApp" class="image-crop-shell">
+        <div class="image-crop-head">
+          <h3>Crop Image</h3>
+          <p>{{ imageSrc ? 'Rotate, move, and crop. Save Crop resizes to 900 x 500.' : 'Upload an image to begin cropping.' }}</p>
+        </div>
+        <div class="image-crop-canvas-wrap" :class="{ 'is-empty': !imageSrc }">
+          <img v-if="imageSrc" ref="cropImage" :src="imageSrc" alt="Crop target preview" />
+          <div v-else class="image-crop-empty">Load an image to crop</div>
+        </div>
+        <div class="image-crop-actions">
+          <div class="image-crop-rotate-controls">
+            <button type="button" class="image-crop-rotate" @click="rotate(-90)">Rotate Left</button>
+            <button type="button" class="image-crop-rotate" @click="rotate(90)">Rotate Right</button>
+            <button type="button" class="image-crop-rotate" @click="resetCrop">Reset</button>
+          </div>
+          <div class="image-crop-nudge-controls">
+            <button type="button" class="image-crop-nudge" @click="moveBy(0, -25)">Up</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(-25, 0)">Left</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(25, 0)">Right</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(0, 25)">Down</button>
+          </div>
+          <div class="image-crop-primary-controls">
+            <button type="button" class="client-edit-cancel" @click="emitCancel">Cancel</button>
+            <button type="button" @click="emitSave">Save Crop</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+    <dialog id="affiliateLinksDialog" class="client-edit-dialog affiliate-links-dialog">
+      <div class="client-edit-form affiliate-links-panel">
+        <div class="client-edit-header affiliate-links-header">
+          <div>
+            <p class="eyebrow">Saved Clients</p>
+            <h3>Affiliate Links</h3>
+          </div>
+          <button class="client-edit-close" type="button" id="affiliateLinksClose" aria-label="Close affiliate links dialog">X</button>
+        </div>
+        <div class="affiliate-tabs">
+          <button class="affiliate-tab-button is-active" type="button" data-affiliate-tab-target="creditBuilder">Credit Builder</button>
+          <button class="affiliate-tab-button" type="button" data-affiliate-tab-target="creditMonitoring">Credit Monitoring</button>
+        </div>
+        <section id="affiliateBuilderPanel" class="affiliate-panel-section">
+          <div id="affiliateBuilderRows" class="affiliate-rows"></div>
+          <div class="affiliate-footer-actions">
+            <button class="affiliate-add-button" type="button" id="affiliateAddBuilderRow">Add Affiliate Link</button>
+          </div>
+        </section>
+        <section id="affiliateMonitoringPanel" class="affiliate-panel-section" hidden>
+          <div id="affiliateMonitoringRows" class="affiliate-rows"></div>
+        </section>
+      </div>
+    </dialog>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+  <script>
+// Add this BEFORE app.js in the HTML to fix 401 errors
+// Intercept fetch to always include credentials
+
+// Also add to XMLHttpRequest
+const originalOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+  this.withCredentials = true;
+  return originalOpen.apply(this, [method, url, ...rest]);
+};
+
+      (() => {
+        const ensureDashboardAuth = async () => {
+          try {
+            const response = await fetch('/api/auth/status', { credentials: 'include' });
+            const data = response.ok ? await response.json() : null;
+            if (data?.authenticated) {
+              return true;
+            }
+          } catch {
+          }
+          window.location.replace('/');
+          return false;
+        };
+
+        const escapeHtml = (value = '') => String(value ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+
+        const pick = (client, ...keys) => {
+          for (const key of keys) {
+            const value = client?.[key];
+            if (value !== undefined && value !== null && String(value).trim()) {
+              return String(value).trim();
+            }
+          }
+          return '';
+        };
+
+        const clientName = (client) => (
+          pick(client, 'name')
+          || `${pick(client, 'firstName', 'first_name')} ${pick(client, 'lastName', 'last_name')}`.trim()
+          || pick(client, 'id')
+          || 'Client'
+        );
+
+        const digitsOnly = (value = '') => String(value || '').replace(/\D/g, '');
+
+        const formatPhoneNumber = (value = '') => {
+          const digits = digitsOnly(value);
+          const normalized = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+          if (normalized.length !== 10) {
+            return String(value || '').trim();
+          }
+          return `(${normalized.slice(0, 3)})${normalized.slice(3, 6)}-${normalized.slice(6)}`;
+        };
+
+        const parseDateValue = (value = '') => {
+          const clean = String(value || '').trim();
+          if (!clean) {
+            return null;
+          }
+          const dateOnly = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+          if (dateOnly) {
+            const parsed = new Date(
+              Number.parseInt(dateOnly[1], 10),
+              Number.parseInt(dateOnly[2], 10) - 1,
+              Number.parseInt(dateOnly[3], 10),
+            );
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+          }
+          const parsed = new Date(clean);
+          return Number.isNaN(parsed.getTime()) ? null : parsed;
+        };
+
+        const formatReportDateCell = (reportDate) => {
+          const parsed = parseDateValue(reportDate);
+          if (!parsed) {
+            return '--';
+          }
+          return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        };
+
+        const getClientDaysLeft = (client) => {
+          const raw = client?.nextImport?.daysUntilNextImport
+            ?? client?.daysLeft
+            ?? client?.days_left
+            ?? client?.nextImportInt
+            ?? client?.next_import_int;
+          const parsed = Number.parseInt(String(raw ?? '').trim(), 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const formatNextImport = (days) => (
+          Number.isFinite(days) ? `${days} day${Math.abs(days) === 1 ? '' : 's'}` : '--'
+        );
+
+        const renderDaysLeftCell = (client) => {
+          const days = getClientDaysLeft(client);
+          const classes = ['next-import-edit-button', 'nt-liquid-status-pill'];
+          if (!Number.isFinite(days)) {
+            classes.push('nt-liquid-status-muted');
+            return `<span class="${classes.join(' ')}">--</span>`;
+          }
+          if (days < 0) {
+            classes.push('nt-liquid-status-overdue');
+          } else if (days === 0) {
+            classes.push('nt-liquid-status-due');
+          } else if (days <= 7) {
+            classes.push('nt-liquid-status-warning');
+          } else {
+            classes.push('nt-liquid-status-good');
+          }
+          return `<button class="${classes.join(' ')}" type="button" data-action="next-import" data-next-import-days="${days}" aria-label="Edit days left">${formatNextImport(days)}</button>`;
+        };
+
+        const getMonitoringService = (client = {}) => {
+          const source = `${pick(client, 'monitoringAgency', 'monitoring_agency')} ${pick(client, 'creditReportSource', 'credit_report_source')}`.toLowerCase();
+          if (source.includes('identity')) {
+            return { key: 'identityiq', label: 'IdentityIQ' };
+          }
+          if (source.includes('smart')) {
+            return { key: 'smartcredit', label: 'SmartCredit' };
+          }
+          if (source.includes('myscore')) {
+            return { key: 'myscoreiq', label: 'MyScoreIQ' };
+          }
+          if (source.includes('myfree') || source.includes('mfsn')) {
+            return { key: 'myfreescorenow', label: 'MyFreeScoreNow' };
+          }
+          return { key: 'report', label: 'Credit Report' };
+        };
+
+        const renderMonitoringBadge = (client) => {
+          const service = getMonitoringService(client);
+          const id = encodeURIComponent(pick(client, 'id'));
+          return `
+            <a class="client-table-report monitoring-badge monitoring-${service.key}" href="/api/clients/${id}/report" target="_blank" rel="noreferrer" title="${escapeHtml(service.label)}">
+              <span>${escapeHtml(service.label)}</span>
+            </a>
+          `;
+        };
+
+        const setDashboardMessage = (message, isError = false) => {
+          const node = document.getElementById('formMessage') || document.getElementById('csvImportMessage');
+          if (!node) {
+            return;
+          }
+          node.textContent = message;
+          node.classList.toggle('error', Boolean(isError));
+          node.classList.toggle('muted', !isError);
+        };
+
+        const requestJson = async (path, options = {}) => {
+          const response = await fetch(path, {
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+            ...options,
+          });
+          if (response.status === 401) {
+            window.location.replace('/');
+            throw new Error('Please login first.');
+          }
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || `Request failed (${response.status})`);
+          }
+          return data;
+        };
+
+        const normalizeClient = (client = {}) => ({
+          ...client,
+          id: pick(client, 'id'),
+          firstName: pick(client, 'firstName', 'first_name'),
+          lastName: pick(client, 'lastName', 'last_name'),
+          status: pick(client, 'status') || 'Client',
+          phase: pick(client, 'phase') || 'None',
+          email: pick(client, 'email'),
+          phone: pick(client, 'phone'),
+          reportDate: pick(client, 'reportDate', 'report_date'),
+        });
+
+        const getReportJsonCandidate = (client = {}) => {
+          const directCandidates = [
+            client.latestReportJson,
+            client.latest_report_json,
+            client.creditReportJson,
+            client.credit_report_json,
+            client.reportJson,
+            client.report_json,
+            client.reportJsonRaw,
+            client.report_json_raw,
+            client.creditReport?.json,
+            client.credit_report?.json,
+            client.report?.json,
+          ];
+          return directCandidates.find((candidate) => candidate !== undefined && candidate !== null && String(candidate).trim?.() !== '');
+        };
+
+        const parseReportJsonValue = (value) => {
+          if (value === undefined || value === null || value === '') {
+            return null;
+          }
+          if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+              return null;
+            }
+            try {
+              return JSON.parse(trimmed);
+            } catch {
+              return trimmed;
+            }
+          }
+          return value;
+        };
+
+        const reportHistoryDate = (entry = {}) => pick(entry, 'reportDate', 'report_date', 'createdAt', 'created_at', 'updatedAt', 'updated_at', 'date');
+
+        const pickLatestReportHistoryEntry = (entries = []) => entries
+          .filter(Boolean)
+          .slice()
+          .sort((left, right) => new Date(reportHistoryDate(right) || 0) - new Date(reportHistoryDate(left) || 0))[0];
+
+        const loadLatestReportJson = async (clientId, client) => {
+          const directValue = parseReportJsonValue(getReportJsonCandidate(client));
+          if (directValue !== null) {
+            return {
+              value: directValue,
+              source: 'client',
+              reportDate: pick(client, 'reportDate', 'report_date'),
+            };
+          }
+
+          try {
+            const historyData = await requestJson(`/api/clients/${encodeURIComponent(clientId)}/report-history`);
+            const history = Array.isArray(historyData.history)
+              ? historyData.history
+              : Array.isArray(historyData.reports)
+                ? historyData.reports
+                : Array.isArray(historyData)
+                  ? historyData
+                  : [];
+            const latest = pickLatestReportHistoryEntry(history);
+            const historyValue = parseReportJsonValue(getReportJsonCandidate(latest || {}));
+            if (historyValue !== null) {
+              return {
+                value: historyValue,
+                source: 'history',
+                reportDate: reportHistoryDate(latest),
+              };
+            }
+          } catch {}
+
+          return {
+            value: null,
+            source: 'none',
+            reportDate: pick(client, 'reportDate', 'report_date'),
+          };
+        };
+
+        const formatReportJsonForDisplay = (value) => {
+          if (value === null || value === undefined || value === '') {
+            return 'No recent credit report JSON found for this client.';
+          }
+          if (typeof value === 'string') {
+            return value;
+          }
+          return JSON.stringify(value, null, 2);
+        };
+
+        const renderDashboardClientDetail = (client, reportState) => {
+          const normalizedClient = normalizeClient(client);
+          const displayName = clientName(normalizedClient);
+          const email = String(normalizedClient.email || '').trim();
+          const phoneRaw = String(normalizedClient.phone || '').trim();
+          const phoneDisplay = formatPhoneNumber(phoneRaw) || phoneRaw || '--';
+          const reportDate = reportState.reportDate || normalizedClient.reportDate || '';
+          const reportText = formatReportJsonForDisplay(reportState.value);
+          const hasReportJson = reportState.value !== null && reportState.value !== undefined && reportState.value !== '';
+          return `
+            <div class="detail-header">
+              <div>
+                <p class="muted">Selected Client</p>
+                <h3>${escapeHtml(displayName)}</h3>
+              </div>
+              <span class="status-pill">${escapeHtml(normalizedClient.status || 'Client')}</span>
+            </div>
+            <div class="detail-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0;">
+              <div><p class="muted">Email</p><strong>${escapeHtml(email || '--')}</strong></div>
+              <div><p class="muted">Phone</p><strong>${escapeHtml(phoneDisplay)}</strong></div>
+              <div><p class="muted">Phase</p><strong>${escapeHtml(normalizedClient.phase || 'None')}</strong></div>
+              <div><p class="muted">Report Date</p><strong>${escapeHtml(formatReportDateCell(reportDate).replace(/<[^>]+>/g, '') || '--')}</strong></div>
+            </div>
+            <div class="detail-section">
+              <div class="detail-header">
+                <div>
+                  <p class="muted">Most Recent Credit Report</p>
+                  <h4>Latest Credit Report JSON</h4>
+                </div>
+                <button class="secondary" type="button" data-action="copy-report-json"${hasReportJson ? '' : ' disabled'}>Copy JSON</button>
+              </div>
+              <pre class="dashboard-report-json" style="max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:rgba(3,8,23,.72);border:1px solid rgba(148,163,184,.22);border-radius:16px;padding:14px;color:#e5edf7;font-size:12px;line-height:1.45;">${escapeHtml(reportText)}</pre>
+            </div>
+          `;
+        };
+
+        const loadDashboardClientDetail = async (clientId) => {
+          const detail = document.getElementById('clientDetail');
+          if (!detail || !clientId) {
+            return;
+          }
+          detail.innerHTML = '<p class="muted">Loading client and latest credit report JSON...</p>';
+          try {
+            const data = await requestJson(`/api/clients/${encodeURIComponent(clientId)}`);
+            const client = data.client || data.result || data;
+            const reportState = await loadLatestReportJson(clientId, client);
+            detail.innerHTML = renderDashboardClientDetail(client, reportState);
+            detail.querySelector('[data-action="copy-report-json"]')?.addEventListener('click', async (event) => {
+              try {
+                await navigator.clipboard.writeText(formatReportJsonForDisplay(reportState.value));
+                event.currentTarget.textContent = 'Copied';
+                window.setTimeout(() => {
+                  event.currentTarget.textContent = 'Copy JSON';
+                }, 1200);
+                setDashboardMessage('Copied latest credit report JSON.');
+              } catch {
+                setDashboardMessage('Could not copy report JSON.', true);
+              }
+            });
+            detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          } catch (error) {
+            detail.innerHTML = `<p class="muted">Could not load this client.</p><p>${escapeHtml(error.message)}</p>`;
+            setDashboardMessage(error.message, true);
+          }
+        };
+
+        const renderRows = (clients, statuses, phases) => clients.map((rawClient) => {
+          const client = normalizeClient(rawClient);
+          const displayName = clientName(client);
+          const email = String(client.email || '').trim();
+          const phoneRaw = String(client.phone || '').trim();
+          const phoneDisplay = formatPhoneNumber(phoneRaw) || phoneRaw;
+          const emailDisplay = email || '--';
+          return `
+            <tr data-client-id="${escapeHtml(client.id)}">
+              <td class="nt-liquid-col-member">
+                <div class="nt-liquid-member-stack">
+                  <button class="nt-liquid-member-link" type="button" data-action="open" title="${escapeHtml(displayName)}">
+                    <span class="nt-liquid-member-name">${escapeHtml(displayName)}</span>
+                  </button>
+                  <button class="nt-liquid-email-copy" type="button" data-action="copy-email" data-email="${escapeHtml(email)}" aria-label="Copy email for ${escapeHtml(displayName)}">
+                    <span class="nt-liquid-email-copy-label">${escapeHtml(emailDisplay)}</span>
+                  </button>
+                </div>
+              </td>
+              <td class="nt-liquid-col-stage">
+                <select class="client-status-select nt-liquid-select" data-action="status" data-client-id="${escapeHtml(client.id)}">
+                  ${statuses.map((status) => `<option value="${escapeHtml(status)}"${status === client.status ? ' selected' : ''}>${escapeHtml(status)}</option>`).join('')}
+                </select>
+              </td>
+              <td class="nt-liquid-col-phone">
+                ${phoneRaw ? `
+                  <button class="nt-liquid-phone-copy" type="button" data-action="copy-phone" data-phone="${escapeHtml(phoneRaw)}" aria-label="Copy phone for ${escapeHtml(displayName)}">
+                    <span class="nt-liquid-phone-copy-label">${escapeHtml(phoneDisplay)}</span>
+                  </button>
+                ` : ''}
+              </td>
+              <td class="nt-liquid-col-phase">
+                <select class="client-phase-select nt-liquid-select" data-action="phase" data-client-id="${escapeHtml(client.id)}">
+                  ${phases.map((phase) => `<option value="${escapeHtml(phase)}"${phase === client.phase ? ' selected' : ''}>${escapeHtml(phase)}</option>`).join('')}
+                </select>
+              </td>
+              <td class="nt-liquid-col-monitor">${renderMonitoringBadge(client)}</td>
+              <td class="nt-liquid-col-days">${renderDaysLeftCell(rawClient)}</td>
+              <td class="nt-liquid-col-report">${formatReportDateCell(client.reportDate)}</td>
+              <td class="nt-liquid-col-actions">
+                <div class="nt-liquid-actions-row">
+                  <button class="client-table-edit nt-liquid-edit-button" type="button" data-action="edit" aria-label="Edit client">Edit</button>
+                  <button class="client-table-delete nt-liquid-delete-button" type="button" data-action="delete" aria-label="Delete client">X</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        const renderGlassClientsFallback = (clients, options = {}) => {
+          const clientsList = document.getElementById('clientsList');
+          if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
+            return;
+          }
+
+          const statuses = Array.isArray(options.statuses) && options.statuses.length ? options.statuses : ['Client', 'Lead', 'Prospect', 'Inactive'];
+          const phases = Array.isArray(options.phases) && options.phases.length ? options.phases : ['None', 'Round 1', 'Round 2', 'Round 3', 'Complete'];
+          const sortState = { key: 'nextImport', direction: 'asc' };
+          let visibleClients = clients.slice();
+          let filterText = '';
+          let statusFilter = '';
+          let phaseFilter = '';
+
+          const sortColumns = {
+            name: 'Name',
+            status: 'Status',
+            phase: 'Phase',
+            nextImport: 'Days Left',
+            reportDate: 'Report Date',
+          };
+
+          const sortValue = (rawClient, key) => {
+            const client = normalizeClient(rawClient);
+            if (key === 'name') {
+              return clientName(client).toLowerCase();
+            }
+            if (key === 'status') {
+              return String(client.status || '').toLowerCase();
+            }
+            if (key === 'phase') {
+              return String(client.phase || 'None').toLowerCase();
+            }
+            if (key === 'nextImport') {
+              const days = getClientDaysLeft(rawClient);
+              return Number.isFinite(days) ? days : Number.MAX_SAFE_INTEGER;
+            }
+            if (key === 'reportDate') {
+              const parsed = parseDateValue(client.reportDate);
+              return parsed ? parsed.getTime() : 0;
+            }
+            return '';
+          };
+
+          const sortClients = (nextClients) => nextClients.slice().sort((left, right) => {
+            const leftValue = sortValue(left, sortState.key);
+            const rightValue = sortValue(right, sortState.key);
+            const direction = sortState.direction === 'asc' ? 1 : -1;
+
+            if (typeof leftValue === 'number' && typeof rightValue === 'number') {
+              if (leftValue === rightValue) {
+                return clientName(left).localeCompare(clientName(right));
+              }
+              return (leftValue - rightValue) * direction;
+            }
+
+            const compared = String(leftValue).localeCompare(String(rightValue), undefined, { sensitivity: 'base' });
+            if (compared === 0) {
+              return clientName(left).localeCompare(clientName(right));
+            }
+            return compared * direction;
+          });
+
+          const sortHeader = (key, label) => `
+            <button class="nt-liquid-sort-button" type="button" data-sort-key="${escapeHtml(key)}" aria-label="Sort by ${escapeHtml(label)}">
+              <span>${escapeHtml(label)}</span>
+              <span class="nt-liquid-sort-indicator" data-sort-indicator="${escapeHtml(key)}"></span>
+            </button>
+          `;
+
+          const updateSortHeaders = () => {
+            clientsList.querySelectorAll('[data-sort-key]').forEach((button) => {
+              const key = button.dataset.sortKey || '';
+              const isActive = key === sortState.key;
+              button.classList.toggle('is-active', isActive);
+              button.setAttribute('aria-sort', isActive ? (sortState.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+              const indicator = button.querySelector('[data-sort-indicator]');
+              if (indicator) {
+                indicator.textContent = isActive ? (sortState.direction === 'asc' ? '↑' : '↓') : '';
+              }
+            });
+          };
+
+          const rows = renderRows(sortClients(visibleClients), statuses, phases);
+          clientsList.style.setProperty('--nt-clients-custom-bg', "url('/assets/clients-glass-bg.png')");
+          const countLabel = `${clients.length} client${clients.length === 1 ? '' : 's'}`;
+          clientsList.innerHTML = `
+            <div class="nt-liquid-table-shell">
+              <div class="nt-liquid-table-toolbar">
+                <span class="nt-liquid-toolbar-title">Clients</span>
+                <span class="nt-liquid-toolbar-count" id="clientsTableCount">${escapeHtml(countLabel)}</span>
+                <div class="nt-liquid-table-search">
+                  <span class="nt-liquid-table-search-icon">🔍</span>
+                  <input id="clientsTableSearchInput" class="nt-liquid-table-search-input" type="search" placeholder="Search clients..." aria-label="Search clients">
+                </div>
+                <div class="nt-liquid-toolbar-buttons">
+                  <select id="clientsSortSelect" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" aria-label="Sort clients">
+                    <option value="nextImport">Sort: Days Left</option>
+                    <option value="status">Sort: Status</option>
+                    <option value="phase">Sort: Phase</option>
+                    <option value="reportDate">Sort: Report Date</option>
+                    <option value="name">Sort: Name</option>
+                  </select>
+                  <select id="clientsSortDirection" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" aria-label="Sort direction">
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                  </select>
+                  <select id="clientsStatusFilter" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" aria-label="Filter by status">
+                    <option value="">All Status</option>
+                    ${statuses.map((status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`).join('')}
+                  </select>
+                  <select id="clientsPhaseFilter" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" aria-label="Filter by phase">
+                    <option value="">All Phase</option>
+                    ${phases.map((phase) => `<option value="${escapeHtml(phase)}">${escapeHtml(phase)}</option>`).join('')}
+                  </select>
+                  <button id="clientsTableImportTrigger" class="nt-liquid-toolbar-btn nt-liquid-import-btn" type="button">Import</button>
+                </div>
+              </div>
+              <div class="nt-liquid-table-scroll">
+                <table class="nt-liquid-table nt-dashboard-clients-table">
+                  <thead>
+                    <tr>
+                      <th>${sortHeader('name', sortColumns.name)}</th>
+                      <th>${sortHeader('status', sortColumns.status)}</th>
+                      <th>Phone</th>
+                      <th>${sortHeader('phase', sortColumns.phase)}</th>
+                      <th>Monitoring</th>
+                      <th>${sortHeader('nextImport', sortColumns.nextImport)}</th>
+                      <th>${sortHeader('reportDate', sortColumns.reportDate)}</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rows || '<tr class="nt-liquid-empty-row"><td class="nt-liquid-empty-cell" colspan="8">No clients saved yet.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+
+          const applyClientFilters = () => clients.filter((client) => {
+            const normalized = normalizeClient(client);
+            const query = filterText.trim().toLowerCase();
+            const matchesText = !query || [
+              clientName(client),
+              normalized.status,
+              normalized.phase,
+              normalized.email,
+              normalized.phone,
+              normalized.monitoringUsername,
+              normalized.monitoringAgency,
+            ].some((value) => String(value || '').toLowerCase().includes(query));
+            const matchesStatus = !statusFilter || String(normalized.status || 'Client') === statusFilter;
+            const matchesPhase = !phaseFilter || String(normalized.phase || 'None') === phaseFilter;
+            return matchesText && matchesStatus && matchesPhase;
+          });
+
+          const refreshRows = (nextClients = applyClientFilters()) => {
+            visibleClients = nextClients.slice();
+            const sortedClients = sortClients(visibleClients);
+            clientsList.querySelector('.nt-liquid-table tbody').innerHTML = renderRows(sortedClients, statuses, phases)
+              || '<tr class="nt-liquid-empty-row"><td class="nt-liquid-empty-cell" colspan="8">No clients match your filters.</td></tr>';
+            const countNode = clientsList.querySelector('#clientsTableCount');
+            if (countNode) {
+              countNode.textContent = `${visibleClients.length} client${visibleClients.length === 1 ? '' : 's'}`;
+            }
+            const sortSelect = clientsList.querySelector('#clientsSortSelect');
+            const directionSelect = clientsList.querySelector('#clientsSortDirection');
+            if (sortSelect) sortSelect.value = sortState.key;
+            if (directionSelect) directionSelect.value = sortState.direction;
+            updateSortHeaders();
+          };
+
+          updateSortHeaders();
+
+          const searchInput = clientsList.querySelector('#clientsTableSearchInput');
+          searchInput?.addEventListener('input', () => {
+            filterText = String(searchInput.value || '');
+            refreshRows();
+            bindClientTableActions();
+          });
+
+          clientsList.querySelectorAll('[data-sort-key]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const nextKey = button.dataset.sortKey || 'nextImport';
+              if (sortState.key === nextKey) {
+                sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+              } else {
+                sortState.key = nextKey;
+                sortState.direction = 'asc';
+              }
+              refreshRows();
+              bindClientTableActions();
+            });
+          });
+
+          clientsList.querySelector('#clientsSortSelect')?.addEventListener('change', (event) => {
+            sortState.key = event.currentTarget.value || 'nextImport';
+            refreshRows();
+            bindClientTableActions();
+          });
+
+          clientsList.querySelector('#clientsSortDirection')?.addEventListener('change', (event) => {
+            sortState.direction = event.currentTarget.value === 'desc' ? 'desc' : 'asc';
+            refreshRows();
+            bindClientTableActions();
+          });
+
+          clientsList.querySelector('#clientsStatusFilter')?.addEventListener('change', (event) => {
+            statusFilter = String(event.currentTarget.value || '');
+            refreshRows();
+            bindClientTableActions();
+          });
+
+          clientsList.querySelector('#clientsPhaseFilter')?.addEventListener('change', (event) => {
+            phaseFilter = String(event.currentTarget.value || '');
+            refreshRows();
+            bindClientTableActions();
+          });
+
+          clientsList.querySelector('#clientsTableImportTrigger')?.addEventListener('click', () => {
+            document.getElementById('clientsCsv')?.click();
+          });
+
+          const bindClientTableActions = () => {
+            clientsList.querySelectorAll('[data-action="open"]').forEach((button) => {
+              button.addEventListener('click', (event) => {
+                const clientId = event.currentTarget.closest('tr')?.dataset.clientId;
+                if (!clientId) {
+                  return;
+                }
+                loadDashboardClientDetail(clientId);
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="edit"]').forEach((button) => {
+              button.addEventListener('click', (event) => {
+                const clientId = event.currentTarget.closest('tr')?.dataset.clientId;
+                if (!clientId) {
+                  return;
+                }
+                if (typeof window.openEditDialog === 'function') {
+                  window.openEditDialog(clientId);
+                  return;
+                }
+                document.getElementById('clientHubAddPane')?.removeAttribute('hidden');
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="delete"]').forEach((button) => {
+              button.addEventListener('click', async (event) => {
+                const clientId = event.currentTarget.closest('tr')?.dataset.clientId;
+                if (!clientId || !window.confirm('Delete this client?')) {
+                  return;
+                }
+                try {
+                  await requestJson(`/api/clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
+                  const index = clients.findIndex((entry) => String(pick(entry, 'id')) === String(clientId));
+                  if (index !== -1) {
+                    clients.splice(index, 1);
+                  }
+                  refreshRows(clients);
+                  bindClientTableActions();
+                  setDashboardMessage('Client deleted.');
+                } catch (error) {
+                  setDashboardMessage(error.message, true);
+                }
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="copy-phone"]').forEach((button) => {
+              button.addEventListener('click', async (event) => {
+                const targetButton = event.currentTarget;
+                const phone = String(targetButton.dataset.phone || '').trim();
+                if (!phone) {
+                  return;
+                }
+                try {
+                  await navigator.clipboard.writeText(phone);
+                  targetButton.classList.add('is-copied');
+                  const labelNode = targetButton.querySelector('.nt-liquid-phone-copy-label');
+                  if (labelNode) labelNode.textContent = 'Copied';
+                  window.setTimeout(() => {
+                    targetButton.classList.remove('is-copied');
+                    if (labelNode) labelNode.textContent = formatPhoneNumber(phone) || phone;
+                  }, 1200);
+                  setDashboardMessage(`Copied ${formatPhoneNumber(phone) || phone} to clipboard.`);
+                } catch {
+                  setDashboardMessage('Could not copy phone number.', true);
+                }
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="copy-email"]').forEach((button) => {
+              button.addEventListener('click', async (event) => {
+                const targetButton = event.currentTarget;
+                const email = String(targetButton.dataset.email || '').trim();
+                if (!email) {
+                  return;
+                }
+                try {
+                  await navigator.clipboard.writeText(email);
+                  targetButton.classList.add('is-copied');
+                  const labelNode = targetButton.querySelector('.nt-liquid-email-copy-label');
+                  if (labelNode) labelNode.textContent = 'Copied';
+                  window.setTimeout(() => {
+                    targetButton.classList.remove('is-copied');
+                    if (labelNode) labelNode.textContent = email;
+                  }, 1200);
+                  setDashboardMessage(`Copied ${email} to clipboard.`);
+                } catch {
+                  setDashboardMessage('Could not copy email.', true);
+                }
+              }, { once: true });
+            });
+
+            clientsList.querySelectorAll('[data-action="status"]').forEach((select) => {
+              select.addEventListener('change', async (event) => {
+                const { clientId } = event.currentTarget.dataset;
+                const status = event.currentTarget.value;
+                try {
+                  await requestJson(`/api/clients/${encodeURIComponent(clientId)}/status`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ status }),
+                  });
+                  const client = clients.find((entry) => String(pick(entry, 'id')) === String(clientId));
+                  if (client) client.status = status;
+                  setDashboardMessage('Client status updated.');
+                } catch (error) {
+                  setDashboardMessage(error.message, true);
+                }
+              });
+            });
+
+            clientsList.querySelectorAll('[data-action="phase"]').forEach((select) => {
+              select.addEventListener('change', async (event) => {
+                const { clientId } = event.currentTarget.dataset;
+                const phase = event.currentTarget.value;
+                try {
+                  await requestJson(`/api/clients/${encodeURIComponent(clientId)}/phase`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ phase }),
+                  });
+                  const client = clients.find((entry) => String(pick(entry, 'id')) === String(clientId));
+                  if (client) client.phase = phase;
+                  setDashboardMessage('Client phase updated.');
+                } catch (error) {
+                  setDashboardMessage(error.message, true);
+                }
+              });
+            });
+
+            clientsList.querySelectorAll('[data-action="next-import"]').forEach((button) => {
+              button.addEventListener('click', async (event) => {
+                const clientId = event.currentTarget.closest('tr')?.dataset.clientId;
+                const currentDays = Number.parseInt(event.currentTarget.dataset.nextImportDays || '', 10);
+                const input = window.prompt('Set Next Import days for this client', Number.isFinite(currentDays) ? String(currentDays) : '');
+                if (!clientId || input === null) {
+                  return;
+                }
+                const days = Number.parseInt(String(input).trim(), 10);
+                if (!Number.isFinite(days)) {
+                  setDashboardMessage('Please enter a valid number of days.', true);
+                  return;
+                }
+                try {
+                  await requestJson(`/api/clients/${encodeURIComponent(clientId)}/next-import`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ days }),
+                  });
+                  const client = clients.find((entry) => String(pick(entry, 'id')) === String(clientId));
+                  if (client) client.daysLeft = days;
+                  refreshRows();
+                  bindClientTableActions();
+                  setDashboardMessage(`Next Import updated to ${formatNextImport(days)}.`);
+                } catch (error) {
+                  setDashboardMessage(error.message, true);
+                }
+              }, { once: true });
+            });
+          };
+
+          bindClientTableActions();
+        };
+
+        window.setTimeout(async () => {
+          if (!(await ensureDashboardAuth())) {
+            return;
+          }
+
+          const clientsList = document.getElementById('clientsList');
+          if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
+            return;
+          }
+
+          fetch('/api/clients', { credentials: 'include' })
+            .then((response) => {
+              if (response.status === 401) {
+                window.location.replace('/');
+                return null;
+              }
+              return response.ok ? response.json() : null;
+            })
+            .then((data) => {
+              if (!data) {
+                return;
+              }
+              const clients = Array.isArray(data.clients)
+                ? data.clients
+                : Array.isArray(data.results)
+                  ? data.results
+                  : [];
+              renderGlassClientsFallback(clients, {
+                statuses: data.statuses,
+                phases: data.phases,
+              });
+            })
+            .catch((error) => console.error('Clients glass fallback failed:', error));
+        }, 900);
+      })();
+    </script>
+    <script>
+      (() => {
+        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260608-01';
+        const dashboardHubModeStorageKey = 'tools-ninja-dashboard-hub-mode';
+        const heroWidgetFrame = () => document.querySelector('.hero-widget-frame');
+        const panes = {
+          home: document.getElementById('clientHubHomePane'),
+          add: document.getElementById('clientHubAddPane'),
+          clients: document.getElementById('clientHubClientsPane'),
+        };
+
+        const readHubMode = () => {
+          const stored = String(window.sessionStorage.getItem(dashboardHubModeStorageKey) || '').trim();
+          if (stored === 'home' || stored === 'add' || stored === 'clients') {
+            return stored;
+          }
+          return 'clients';
+        };
+
+        const syncWidgetState = () => {
+          const frame = heroWidgetFrame();
+          if (!frame?.contentWindow) {
+            return;
+          }
+
+          const mode = readHubMode();
+          frame.contentWindow.postMessage({
+            type: 'tools-ninja:script-version',
+            value: DASHBOARD_SCRIPT_VERSION,
+          }, window.location.origin);
+          frame.contentWindow.postMessage({
+            type: 'tools-ninja:navigation-state',
+            route: 'clients',
+            hubMode: mode,
+            alternateTab: '',
+          }, window.location.origin);
+        };
+
+        const setHubMode = (mode = 'clients') => {
+          const nextMode = mode === 'home' || mode === 'add' || mode === 'clients' ? mode : 'clients';
+          window.sessionStorage.setItem(dashboardHubModeStorageKey, nextMode);
+          document.body.dataset.dashboardHubMode = nextMode;
+
+          Object.entries(panes).forEach(([key, pane]) => {
+            if (!pane) {
+              return;
+            }
+            pane.hidden = key !== nextMode;
+          });
+
+          if (nextMode === 'add') {
+            window.requestAnimationFrame(() => {
+              document.querySelector('#clientForm input[name="firstName"]')?.focus();
+            });
+          }
+
+          syncWidgetState();
+        };
+
+        heroWidgetFrame()?.addEventListener('load', () => {
+          syncWidgetState();
+        });
+
+        window.addEventListener('message', (event) => {
+          if (event.origin !== window.location.origin) {
+            return;
+          }
+
+          if (event.data?.type === 'tools-ninja:request-script-version') {
+            syncWidgetState();
+            return;
+          }
+
+          if (event.data?.type === 'tools-ninja:request-navigation-state') {
+            syncWidgetState();
+            return;
+          }
+
+          if (event.data?.type === 'tools-ninja:hub-mode') {
+            const requestedMode = String(event.data.mode || '').trim();
+            if (requestedMode === 'home') {
+              setHubMode('home');
+              return;
+            }
+            if (requestedMode === 'add') {
+              setHubMode('add');
+              return;
+            }
+            if (requestedMode === 'contacts' || requestedMode === 'clients') {
+              setHubMode('clients');
+              return;
+            }
+            setHubMode('clients');
+          }
+        });
+
+        setHubMode(readHubMode());
+      })();
+    </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const statusSelect = document.getElementById('clientsStatusFilter');
+      if (!statusSelect) return;
+      
+      // Populate status options from visible clients
+      window.populateStatusOptions = function(clients) {
+        const statuses = {};
+        clients.forEach(c => {
+          const s = c.status || 'Unknown';
+          statuses[s] = (statuses[s] || 0) + 1;
+        });
+        
+        statusSelect.innerHTML = '<option value="">📊 All Status</option>';
+        Object.entries(statuses)
+          .sort((a,b) => b[1] - a[1])
+          .forEach(([status, count]) => {
+            const opt = document.createElement('option');
+            opt.value = status;
+            opt.textContent = `${status} (${count})`;
+            statusSelect.appendChild(opt);
+          });
+      };
+      
+      // Filter rows by status
+      statusSelect.addEventListener('change', (e) => {
+        const selected = e.target.value;
+        document.querySelectorAll('tbody tr').forEach(row => {
+          if (!selected) {
+            row.style.display = '';
+          } else {
+            const statusCell = row.querySelector('td:nth-child(2)');
+            const status = statusCell ? statusCell.textContent.trim() : '';
+            row.style.display = status === selected ? '' : 'none';
+          }
+        });
+      });
+    });
+    </script>
+</body>
+</html>

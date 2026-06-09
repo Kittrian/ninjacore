@@ -72,8 +72,9 @@ export async function getClients(offset: number = 0, limit: number = 100) {
 	return clients.slice(offset, offset + limit);
 }
 
-export async function getClientsPayload() {
-	const payload = await apiCall<ClientsPayload | any[]>('/clients');
+export async function getClientsPayload(options?: { status?: string }) {
+	const statusParam = options?.status ? `?status=${encodeURIComponent(options.status)}` : '';
+	const payload = await apiCall<ClientsPayload | any[]>(`/clients${statusParam}`);
 	const clients = Array.isArray(payload) ? payload : Array.isArray(payload?.clients) ? payload.clients : [];
 	return {
 		statuses: Array.isArray((payload as ClientsPayload)?.statuses) ? (payload as ClientsPayload).statuses! : [],

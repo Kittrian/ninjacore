@@ -236,9 +236,11 @@
                     reconnectionAttempts: 99999,
                     transports: ["websocket", "polling"],
                     auth: e => {
-                        const t = localStorage.getItem("token");
+                        const t = localStorage.getItem("token"),
+                            a = document.cookie.match(/(?:^|;\s*)ninja_token=([^;]+)/),
+                            o = t ? JSON.parse(t) : a ? decodeURIComponent(a[1]) : null;
                         e({
-                            token: t ? JSON.parse(t) : null
+                            token: o
                         })
                     }
                 }), console.log("--- NEW SOCKET INSTANCE CREATED ---", n.id, "Connecting to:", e), n.on("connect", () => {
@@ -246,7 +248,10 @@
                 }), n.on("disconnect", e => {
                     console.log("Singleton Socket Disconnected:", n.id, "Reason:", e)
                 }), n.on("connect_error", e => {
-                    console.error("Singleton Socket Connection Error:", e)
+                    const t = (null == e ? void 0 : e.message) || "";
+                    (t.indexOf("Invalid token") > -1 || t.indexOf("No token provided") > -1) && window.__ninjaDisputeResetLegacyAuth && window.__ninjaDisputeResetLegacyAuth({
+                        preserveRedirect: !1
+                    }), console.error("Singleton Socket Connection Error:", e)
                 })
             }
             return n
@@ -431,6 +436,7 @@
                         })
                     } catch (e) {
                         var r, s;
+                        if ("USE_SSO" === (null === (r = e.response) || void 0 === r || null === (s = r.data) || void 0 === s ? void 0 : s.error) && e.response.data.loginUrl) return void(window.location.href = e.response.data.loginUrl);
                         console.error(e), x.a.create({
                             type: "negative",
                             message: "Login failed: " + ((null === (r = e.response) || void 0 === r || null === (s = r.data) || void 0 === s ? void 0 : s.message) || "Unknown error"),
@@ -1678,8 +1684,10 @@
                     error: e
                 })
             }
-            const t = "Bearer " + JSON.parse(localStorage.getItem("token"));
-            return t && (e.headers.Authorization = t), e
+            const t = localStorage.getItem("token"),
+                a = t ? JSON.parse(t) : null,
+                o = a ? "Bearer " + a : null;
+            return o && (e.headers.Authorization = o), e
         }, e => {
             Promise.reject(e)
         }), m.interceptors.response.use(e => {
@@ -1707,17 +1715,23 @@
                     }), Promise.reject(e)
                 }
             }
-            return e.response && 401 === e.response.status ? (localStorage.clear(), localStorage.setItem("redirect", o), -1 === e.config.url.indexOf("logout") && (f(e), setTimeout(() => {
+            const n = (null == e || null == e.config ? void 0 : e.config.url) || "";
+            return e.response && 401 === e.response.status ? n.indexOf("/auth/login/") > -1 ? Promise.reject(e) : (window.__ninjaDisputeResetLegacyAuth && window.__ninjaDisputeResetLegacyAuth({
+                preserveRedirect: !0,
+                redirect: o
+            }), -1 === n.indexOf("logout") && "/login" !== o && (f(e), setTimeout(() => {
                 r.a.push({
                     name: "login"
+                }).catch(e => {
+                    "NavigationDuplicated" !== e.name && console.error(e)
                 })
-            }, 2e3))) : e.response && 500 === e.response.status ? f(e) : e.message.indexOf("timeout") > -1 && i.a.create({
+            }, 2e3)), Promise.reject(e)) : e.response && 500 === e.response.status ? (f(e), Promise.reject(e)) : e.message.indexOf("timeout") > -1 && i.a.create({
                 message: 'We waited a long time for an answer. Is everything "Ok" with the internet?',
                 position: "top",
                 type: "negative",
                 progress: !0,
                 html: !0
-            }), Promise.reject(e.response)
+            }), Promise.reject(e)
         });
         t.a = m
     },

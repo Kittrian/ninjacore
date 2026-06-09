@@ -1053,7 +1053,17 @@ const resetAddClientDerivedState = () => {
 const getClientForm = () => byId('clientForm');
 
 const normalizeClientDocuments = (value) => {
-  const rows = Array.isArray(value) ? value : [];
+  let rows = [];
+  if (Array.isArray(value)) {
+    rows = value;
+  } else if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      rows = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      rows = [];
+    }
+  }
   return rows
     .map((row, index) => ({
       id: String(row?.id || `doc-${index}-${Date.now()}`),
@@ -1068,6 +1078,37 @@ const normalizeClientDocuments = (value) => {
     }))
     .filter((row) => row.type);
 };
+
+const loadClientForEditDialog = async (clientId) => {
+  const encodedClientId = encodeURIComponent(clientId);
+  const attempts = [
+    `/api/full/clients/${encodedClientId}`,
+    `/api/clients/${encodedClientId}`,
+  ];
+
+  for (const endpoint of attempts) {
+    try {
+      const payload = await request(endpoint);
+      if (payload?.client?.id) {
+        return payload.client;
+      }
+    } catch {
+      // Keep trying the fallback endpoint when possible.
+    }
+  }
+
+  return null;
+};
+
+const getEditClientPayload = (listClient, editedClient) => ({
+  ...listClient,
+  ...editedClient,
+  documents: Array.isArray(editedClient?.documents)
+    ? editedClient.documents
+    : Array.isArray(listClient?.documents)
+      ? listClient.documents
+      : [],
+});
 
 const buildDefaultClientDocuments = () => fixedClientDocumentTypes.map((type, index) => ({
   id: `doc-fixed-${index}`,
@@ -3045,7 +3086,10 @@ const mergeClientOptimistic = (current, payloadBody) => {
     'spouseClientId', 'spouseClientLabel', 'assignedTo', 'status', 'phase',
     'ninjaAssigned', 'affiliateAssigned', 'monitoringAgency',
     'monitoringUsername', 'monitoringPassword', 'secretKey', 'tokenId',
-    'portalPassword', 'language',
+    'monitoringToken', 'portalPassword', 'portalEnabled', 'language',
+    'goal', 'notes', 'reportDate', 'nextImportInt', 'nextImportLabel',
+    'nextImportMode', 'manualNextImportStartDays', 'manualNextImportSetDate',
+    'refreshNextImportStartDate', 'documents',
   ];
   for (const key of copy) {
     if (Object.prototype.hasOwnProperty.call(payloadBody, key)) {
@@ -5791,24 +5835,17 @@ const openEditDialog = async (clientId) => {
     return;
   }
 
-  let detailedClient = client;
-  try {
-    const payload = await request(`/api/clients/${clientId}`);
-    if (payload?.client?.id) {
-      detailedClient = payload.client;
-    }
-  } catch (error) {
-    // Fall back to list payload if detailed fetch fails.
-  }
+  const detailedClient = await loadClientForEditDialog(clientId);
+  const mergedClient = detailedClient ? getEditClientPayload(client, detailedClient) : client;
 
   renderAddClientStatusOptions();
   renderAddClientPhaseOptions();
   renderAddClientAssignmentOptions();
   renderSpouseClientOptions();
-  setClientFormMode('edit', detailedClient);
-  populateAddClientFormFromClient(detailedClient);
+  setClientFormMode('edit', mergedClient);
+  populateAddClientFormFromClient(mergedClient);
   setHubMode('add', { preserveAddFormState: true });
-  setFormMessage(`Editing ${detailedClient.firstName} ${detailedClient.lastName}.`);
+  setFormMessage(`Editing ${mergedClient.firstName} ${mergedClient.lastName}.`);
 };
 
 const closeEditDialog = () => {

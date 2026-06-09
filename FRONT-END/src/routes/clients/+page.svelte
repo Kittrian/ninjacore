@@ -12,21 +12,34 @@
 	let filteredClients = [];
 	let searchWorker;
 	let totalCount = 0;
+	let activeTab = 'client'; // default to Clients
 
-	// Fetch full client payload once; backend already returns the whole list.
+	// Fetch Clients only by default (most negative days_left first, per backend sort)
 	const clientsQuery = createQuery({
-		queryKey: queryKeys.clients(),
-		queryFn: () => api.getClientsPayload(),
+		queryKey: queryKeys.clients('client'),
+		queryFn: () => api.getClientsPayload({ status: 'client' }),
 		staleTime: 1000 * 60, // 1 minute
 		gcTime: 1000 * 60 * 5, // 5 minutes
 	});
 
-	$: if ($clientsQuery.data) {
-		allClients = $clientsQuery.data.clients || [];
-		clients = allClients;
-		totalCount = $clientsQuery.data.totalCount || allClients.length;
+	// Lazy-load Leads only when tab is clicked
+	const leadsQuery = createQuery({
+		queryKey: queryKeys.clients('lead'),
+		queryFn: () => api.getClientsPayload({ status: 'lead' }),
+		staleTime: 1000 * 60,
+		gcTime: 1000 * 60 * 5,
+		enabled: activeTab === 'lead', // Only fetch when Leads tab is active
+	});
 
-		// Initialize FULL search index with ALL clients
+	// Use Clients or Leads query based on active tab
+	$: activeQuery = activeTab === 'client' ? clientsQuery : leadsQuery;
+
+	$: if ($activeQuery.data) {
+		allClients = $activeQuery.data.clients || [];
+		clients = allClients;
+		totalCount = $activeQuery.data.totalCount || allClients.length;
+
+		// Initialize search index with active tab's clients
 		initializeSearchIndex(allClients);
 		if (searchWorker) {
 			searchWorker.postMessage({
@@ -39,7 +52,7 @@
 	}
 
 	// Update filtered list when search/filter changes
-	$: if ($searchQuery || $filterStatus !== 'all') {
+	$: if ($searchQuery) {
 		updateFiltered();
 	}
 
@@ -47,16 +60,11 @@
 		const isSearching = $searchQuery.trim().length > 0;
 
 		if (isSearching) {
-			// SEARCH: Use full dataset (all loaded clients) via MiniSearch
-			// This will be empty if still loading, shows incremental results as data loads
+			// SEARCH: Use full dataset via MiniSearch (already filtered by status at API level)
 			filteredClients = searchClients($searchQuery);
 		} else {
-			const sourceClients = allClients.length ? allClients : clients;
-
-			// Apply status filter
-			filteredClients = sourceClients.filter(
-				(c) => $filterStatus === 'all' || String(c.status || '').toLowerCase() === $filterStatus
-			);
+			// No search: show all loaded clients (already filtered by active tab status at API level)
+			filteredClients = allClients.length ? allClients : clients;
 		}
 	}
 
@@ -94,59 +102,72 @@
 		</span>
 	</div>
 
-	<!-- Search and Filter -->
-	<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+	<!-- Tabs for Clients / Leads -->
+	<div class="flex gap-4 border-b border-gray-200">
+		<button
+			on:click={() => {
+				activeTab = 'client';
+				$searchQuery = '';
+			}}
+			class="px-4 py-2 font-medium transition border-b-2 {activeTab === 'client'
+				? 'border-blue-500 text-blue-600'
+				: 'border-transparent text-gray-600 hover:text-gray-900'}"
+		>
+			Clients
+		</button>
+		<button
+			on:click={() => {
+				activeTab = 'lead';
+				$searchQuery = '';
+			}}
+			class="px-4 py-2 font-medium transition border-b-2 {activeTab === 'lead'
+				? 'border-blue-500 text-blue-600'
+				: 'border-transparent text-gray-600 hover:text-gray-900'}"
+		>
+			Leads
+		</button>
+	</div>
+
+	<!-- Search -->
+	<div class="mt-4 flex gap-4">
 		<input
 			type="text"
-			placeholder="Search clients... (name, email, phone)"
+			placeholder="Search {activeTab === 'client' ? 'clients' : 'leads'}... (name, email, phone)"
 			bind:value={$searchQuery}
-			class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+			class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 		/>
 
-		<select
-			bind:value={$filterStatus}
-			class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-		>
-			<option value="all">All Status</option>
-			<option value="client">Client</option>
-			<option value="prospect">Prospect</option>
-			<option value="archived">Archived</option>
-		</select>
-
 		<button
-			class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+			class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
 			on:click={() => {
 				$searchQuery = '';
-				$filterStatus = 'all';
 			}}
 		>
-			Clear Filters
+			Clear Search
 		</button>
 	</div>
 
 	<!-- Status -->
-	{#if $clientsQuery.isLoading}
+	{#if $activeQuery.isLoading}
 		<div class="text-center py-12">
-			<p class="text-gray-600">Loading initial clients...</p>
+			<p class="text-gray-600">Loading {activeTab === 'client' ? 'clients' : 'leads'}...</p>
 		</div>
-	{:else if $clientsQuery.isError}
+	{:else if $activeQuery.isError}
 		<div class="bg-red-50 border border-red-200 rounded-lg p-4">
-			<p class="text-red-800">Error loading clients: {$clientsQuery.error?.message}</p>
+			<p class="text-red-800">Error loading {activeTab === 'client' ? 'clients' : 'leads'}: {$activeQuery.error?.message}</p>
 		</div>
 	{:else}
 		<!-- Status info -->
 		<div class="text-sm text-gray-500 mb-4">
 			{#if $searchQuery.trim()}
-				<!-- SEARCH MODE -->
 				<p>
-					Found {filteredClients.length} result{filteredClients.length !== 1 ? 's' : ''} in {totalCount} clients
-					<span class="ml-2 text-green-600">✅ Searched all {totalCount} clients</span>
+					Found {filteredClients.length} result{filteredClients.length !== 1 ? 's' : ''} in {totalCount} {activeTab === 'client' ? 'clients' : 'leads'}
+					<span class="ml-2 text-green-600">✅ Searched all {totalCount}</span>
 				</p>
 			{:else}
-				<!-- BROWSE MODE -->
 				<p>
-					Showing {filteredClients.length} of {totalCount} clients
-					<span class="ml-2 text-green-600">✅ All {allClients.length} clients ready for search</span>
+					Showing {filteredClients.length} of {totalCount} {activeTab === 'client' ? 'clients' : 'leads'}
+					<span class="ml-2 text-green-600">✅ Sorted by days left (most urgent first)</span>
 				</p>
 			{/if}
 		</div>

@@ -1619,7 +1619,7 @@ const normalizeClientRecord = (client = {}) => ({
   ghlSource: client.ghlSource || '',
   goal: client.goal || '',
   notes: client.notes || '',
-  documents: normalizeClientDocumentsInput(Array.isArray(client.documents) ? client.documents : []),
+  documents: normalizeClientDocumentsInput(client.documents),
   reportDate: client.reportDate || '',
   nextImportInt: client.nextImportInt || '',
   nextImportLabel: client.nextImportLabel || '',
@@ -2393,11 +2393,22 @@ const safeDecodeUri = (value = '') => {
 };
 
 const normalizeClientDocumentsInput = (documents) => {
-  if (!Array.isArray(documents)) {
+  const parsedDocuments = (() => {
+    if (Array.isArray(documents)) {
+      return documents;
+    }
+    if (typeof documents === 'string') {
+      const parsed = parseJsonValue(documents);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return [];
+  })();
+
+  if (!Array.isArray(parsedDocuments)) {
     return [];
   }
 
-  return documents
+  return parsedDocuments
     .filter((doc) => doc && typeof doc === 'object')
     .map((doc) => {
       const normalized = { ...doc };
@@ -5799,7 +5810,7 @@ const toSafeClient = (client) => {
     language: client.language || 'English',
     goal: client.goal || '',
     notes: client.notes || '',
-    documents: Array.isArray(client.documents) ? client.documents : [],
+    documents: normalizeClientDocumentsInput(client.documents),
     creditReportSource: client.creditReportSource || '',
     lastSyncedAt: client.lastSyncedAt || '',
     creditReportFileName: client.creditReportFileName,
@@ -10409,8 +10420,19 @@ const server = createServer((req, res) => {
     return;
   }
 
+  const decodePathSegment = (value) => {
+    if (!value) {
+      return '';
+    }
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  };
+
   if (pathname.startsWith('/api/full/clients/') && req.method === 'GET') {
-    const id = decodeURIComponent(pathname.split('/')[4] || '');
+    const id = decodePathSegment(pathname.split('/')[4]);
     const store = await readStore();
     const client = store.clients.find((entry) => String(entry.id) === String(id));
     if (!client) {
@@ -11144,7 +11166,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/integrations/') && req.method === 'PUT') {
     try {
-      const service = pathname.split('/')[3];
+      const service = decodePathSegment(pathname.split('/')[3]);
       const body = await readBody(req);
       const integration = await saveIntegration(service, body);
       send(res, 200, { ok: true, service, integration });
@@ -11183,7 +11205,7 @@ const server = createServer((req, res) => {
   }
 
   if (pathname.startsWith('/api/clients/') && !pathname.endsWith('/report') && !pathname.endsWith('/report-history') && req.method === 'GET') {
-    const id = pathname.split('/')[3];
+    const id = decodePathSegment(pathname.split('/')[3]);
     const store = await readStore();
     const client = store.clients.find((entry) => entry.id === id);
 
@@ -11197,7 +11219,7 @@ const server = createServer((req, res) => {
   }
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/report-history') && req.method === 'GET') {
-    const id = pathname.split('/')[3];
+    const id = decodePathSegment(pathname.split('/')[3]);
     const store = await readStore();
     const client = store.clients.find((entry) => entry.id === id);
 
@@ -11214,7 +11236,7 @@ const server = createServer((req, res) => {
   }
 
   if (pathname.startsWith('/api/report-runs/') && req.method === 'GET') {
-    const runId = pathname.split('/')[3];
+    const runId = decodePathSegment(pathname.split('/')[3]);
     const run = reportRuns.get(runId);
 
     if (!run) {
@@ -11246,7 +11268,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/send-text') && req.method === 'POST') {
     try {
-      const id = pathname.split('/')[3];
+      const id = decodePathSegment(pathname.split('/')[3]);
       const body = await readBody(req);
       const message = String(body.message || '').trim();
       const attachments = Array.isArray(body.attachments) ? body.attachments : [];
@@ -11314,7 +11336,7 @@ const server = createServer((req, res) => {
   }
 
   if (pathname.startsWith('/api/clients/') && !pathname.endsWith('/report') && req.method === 'DELETE') {
-    const id = pathname.split('/')[3];
+    const id = decodePathSegment(pathname.split('/')[3]);
     const store = await readStore();
     const nextClients = store.clients.filter((entry) => entry.id !== id);
 
@@ -11373,7 +11395,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/status') && req.method === 'PATCH') {
     try {
-      const id = pathname.split('/')[3];
+      const id = decodePathSegment(pathname.split('/')[3]);
       const body = await readBody(req);
       const nextStatus = String(body.status || '').trim();
 
@@ -11402,7 +11424,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/phase') && req.method === 'PATCH') {
     try {
-      const id = pathname.split('/')[3];
+      const id = decodePathSegment(pathname.split('/')[3]);
       const body = await readBody(req);
       const nextPhase = String(body.phase || '').trim();
 
@@ -11431,7 +11453,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/next-import') && req.method === 'PATCH') {
     try {
-      const id = pathname.split('/')[3];
+      const id = decodePathSegment(pathname.split('/')[3]);
       const body = await readBody(req);
       const inputDays = Number.parseInt(String(body.days ?? '').trim(), 10);
 
@@ -11465,7 +11487,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/financial-profile') && req.method === 'PATCH') {
     try {
-      const id = pathname.split('/')[3];
+      const id = decodePathSegment(pathname.split('/')[3]);
       const body = await readBody(req);
       const yearlyIncome = String(body.yearlyIncome || '').trim();
 
@@ -11488,7 +11510,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/profile') && req.method === 'PATCH') {
     try {
-      const id = pathname.split('/')[3];
+      const id = decodePathSegment(pathname.split('/')[3]);
       const body = await readBody(req);
       const store = await readStore();
       const ownerKey = normalizeOwnerKey(getAuthenticatedUsername(req) || appLoginUsername);
@@ -11562,7 +11584,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/refresh-report') && req.method === 'POST') {
     try {
-      const id = pathname.split('/')[3];
+      const id = decodePathSegment(pathname.split('/')[3]);
       const body = await readBody(req);
       const forcePaid = Boolean(body.forcePaid);
       const store = await readStore();
@@ -11984,7 +12006,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/run-ulta-zap') && req.method === 'POST') {
     try {
-      const id = pathname.split('/')[3];
+      const id = decodePathSegment(pathname.split('/')[3]);
       const store = await readStore();
       const client = store.clients.find((entry) => entry.id === id);
       if (!client) {
@@ -12001,7 +12023,7 @@ const server = createServer((req, res) => {
 
   if (pathname.startsWith('/api/clients/') && pathname.endsWith('/sync-gohighlevel') && req.method === 'POST') {
     try {
-      const id = pathname.split('/')[3];
+      const id = decodePathSegment(pathname.split('/')[3]);
       const store = await readStore();
       const client = store.clients.find((entry) => entry.id === id);
       if (!client) {

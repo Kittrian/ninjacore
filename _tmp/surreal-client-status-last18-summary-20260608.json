@@ -1,0 +1,55 @@
+{
+  "deleted": 8,
+  "unsured": 10,
+  "live_client_count": 445,
+  "status_counts": [
+    {
+      "status": null,
+      "total": 6
+    },
+    {
+      "status": "Canceled",
+      "total": 105
+    },
+    {
+      "status": "Client",
+      "total": 445
+    },
+    {
+      "status": "E-Campaign",
+      "total": 1
+    },
+    {
+      "status": "Ghosting",
+      "total": 56
+    },
+    {
+      "status": "IDIQ Issue",
+      "total": 134
+    },
+    {
+      "status": "Inactive - Completed Credit Repair",
+      "total": 1
+    },
+    {
+      "status": "Inactive - Needs More Credit Repair",
+      "total": 3
+    },
+    {
+      "status": "Lead",
+      "total": 1978
+    },
+    {
+      "status": "Not Qualified",
+      "total": 38
+    },
+    {
+      "status": "Prospect",
+      "total": 77
+    },
+    {
+      "status": "UNSURE",
+      "total": 422
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "created_at": "2026-06-08",
+  "server": "5.78.214.176",
+  "csv_active_count": 427,
+  "patched_keep": 4,
+  "deleted_extra_client_dupes": 20,
+  "set_unsure": 10,
+  "created_collision_rows": 1,
+  "live_client_count": 445,
+  "live_status_counts": [
+    {
+      "status": null,
+      "total": 6
+    },
+    {
+      "status": "Canceled",
+      "total": 105
+    },
+    {
+      "status": "Client",
+      "total": 445
+    },
+    {
+      "status": "E-Campaign",
+      "total": 1
+    },
+    {
+      "status": "Ghosting",
+      "total": 56
+    },
+    {
+      "status": "IDIQ Issue",
+      "total": 134
+    },
+    {
+      "status": "Inactive - Completed Credit Repair",
+      "total": 1
+    },
+    {
+      "status": "Inactive - Needs More Credit Repair",
+      "total": 3
+    },
+    {
+      "status": "Lead",
+      "total": 1978
+    },
+    {
+      "status": "Not Qualified",
+      "total": 38
+    },
+    {
+      "status": "Prospect",
+      "total": 77
+    },
+    {
+      "status": "UNSURE",
+      "total": 422
+    }
+  ]
+}

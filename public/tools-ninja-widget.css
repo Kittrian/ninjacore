@@ -55,8 +55,8 @@ div {
 
 .ninja {
   animation: kataMain var(--animationDuration) var(--animationDelay) var(--animationTiming) var(--animationCount);
-  min-width: 400px;
-  height: 330px;
+  min-width: auto !important;
+  height: auto !important;
   display: flex;
   justify-content: center;
   transform-origin: bottom center;
@@ -94,7 +94,7 @@ div {
   top: 0;
   display: flex;
   justify-content: center;
-  overflow: hidden;
+  overflow: visible !important;
   transition: 0.2s;
 }
 .noggin::before {
@@ -130,7 +130,7 @@ div {
   border-radius: 100px/50px;
   bottom: 20px;
   border: var(--ninjaBorderWidth) solid var(--ninjaBorder);
-  overflow: hidden;
+  overflow: visible !important;
 }
 .eyeHole::after {
   content: "";
@@ -389,7 +389,7 @@ div {
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  overflow: hidden;
+  overflow: visible !important;
   pointer-events: none;
 }
 
@@ -865,8 +865,7 @@ div {
 }
 html {
   width: 100%;
-  height: auto;
-  min-height: 100vh;
+  height: auto !important;
   box-sizing: border-box;
   -webkit-font-smoothing: antialiased;
 }
@@ -888,10 +887,8 @@ body {
   justify-content: flex-start;
   flex-direction: column;
   width: 100%;
-  height: auto;
-  min-height: auto;
-  overflow: visible;
-  overflow-x: hidden;
+  min-height: auto !important;
+  overflow: visible !important;
   padding-top: 1.2rem;
 }
 
@@ -948,7 +945,7 @@ h1 {
   justify-content: center;
   text-align: center;
   border: 1px solid #000;
-  overflow: hidden;
+  overflow: visible !important;
 }
 .outlineToggle label:hover,
 .animTrigger label:hover {
@@ -980,8 +977,8 @@ body.outlineIt *::after {
 
 .widget-console {
   width: min(28rem, calc(100% - 2rem));
-  min-height: 10.9rem;
-  max-height: 10.9rem;
+  min-height: auto !important;
+  max-height: none !important;
   margin: 0 auto;
   padding: 0.7rem 0.9rem;
   border-radius: 14px;
@@ -1028,7 +1025,19 @@ body.outlineIt *::after {
   border-color: var(--widget-console-border, rgba(156, 255, 178, 0.42));
 }
 
-/* Removed old height constraints - now handled by flexible html/body rules above */
+html,
+body {
+  width: 100%;
+  height: auto !important;
+  min-height: 100% !important;
+}
+
+body {
+  display: block;
+  min-height: 100vh !important;
+  padding: 0;
+  overflow: visible !important;
+}
 
 .widget-shell {
   --widget-frame-scale-y: 1;
@@ -1037,31 +1046,33 @@ body.outlineIt *::after {
   align-items: start;
   gap: 0.5rem;
   width: 100%;
-  min-height: auto;
-  height: auto;
+  height: auto !important;
+  min-height: 100vh !important;
   aspect-ratio: auto;
-  padding: 3rem 1.2rem 1.2rem !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  border: 0 !important;
-  outline: none !important;
-  box-shadow: none !important;
-  overflow: visible;
-}
-
-/* Hard-kill any pseudo-element borders */
-.widget-shell::before,
-.widget-shell::after {
-  display: none !important;
+  box-sizing: border-box;
+  padding: 1.55rem 1.7rem 1.1rem;
+  border-radius: 0;
+  background-image: url("/assets/widget-console-frame-square-v6.png");
+  background-image: -webkit-image-set(
+    url("/assets/widget-console-frame-square-v6.webp") type("image/webp"),
+    url("/assets/widget-console-frame-square-v6.png") type("image/png")
+  );
+  background-image: image-set(
+    url("/assets/widget-console-frame-square-v6.webp") type("image/webp"),
+    url("/assets/widget-console-frame-square-v6.png") type("image/png")
+  );
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-size: 100% 100%;
+  box-shadow: none;
 }
 
 .widget-top-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 1rem;
   width: 100%;
-  auto-rows: max-content;
 }
 
 .widget-column {
@@ -1103,7 +1114,7 @@ body.outlineIt *::after {
   max-width: 100%;
   padding: 0.86rem 2.5rem 0.86rem 1.55rem;
   border-radius: 26px;
-  overflow: hidden;
+  overflow: visible !important;
   transform: skew(-10deg);
   background:
     linear-gradient(95deg, rgba(9, 18, 43, 0.54), rgba(24, 44, 94, 0.46), rgba(77, 112, 192, 0.42)),
@@ -1185,7 +1196,7 @@ body.outlineIt *::after {
 .widget-refresh-summary {
   width: 100%;
   min-height: 3.8rem;
-  max-height: 4rem;
+  max-height: none !important;
   padding: 0.56rem 0.82rem;
   border-radius: 1.25rem;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -1231,7 +1242,7 @@ body.outlineIt *::after {
 .ninja {
   min-width: 0;
   width: 13.8rem;
-  height: 15rem;
+  height: auto !important;
   transform: scale(0.72);
   transform-origin: left center;
   margin-top: 1.35rem;
@@ -1239,8 +1250,8 @@ body.outlineIt *::after {
 
 .widget-console {
   width: 100%;
-  min-height: 10.9rem;
-  max-height: 10.9rem;
+  min-height: auto !important;
+  max-height: none !important;
   margin: 0;
   padding: 0.72rem 0.95rem;
   opacity: 1;
@@ -1513,7 +1524,7 @@ body.outlineIt *::after {
 .widget-status-col-right {
   align-items: stretch;
   justify-content: flex-start;
-  min-height: auto;
+  min-height: 100%;
   padding-top: 0;
   padding-right: 1.25rem;
 }
@@ -1589,7 +1600,7 @@ body.outlineIt *::after {
 }
 
 .widget-logo-panel.has-logo .widget-logo-preview {
-  max-height: 11.8rem;
+  max-height: none !important;
 }
 
 .widget-logo-title {
@@ -1638,7 +1649,7 @@ body.outlineIt *::after {
 
 .widget-logo-preview {
   max-width: 108%;
-  max-height: 8.7rem;
+  max-height: none !important;
   object-fit: contain;
 }
 

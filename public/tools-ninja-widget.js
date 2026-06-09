@@ -51,7 +51,7 @@ const widgetLogoStorageKey = "tools-ninja-widget-logo";
 const widgetBusinessNameStorageKey = "tools-ninja-widget-business-name";
 const widgetBrandColorStorageKey = "tools-ninja-widget-brand-color";
 const homeSettingsStorageKey = "tools-ninja-home-settings";
-const widgetVersionFallback = "v2.68 loaded";
+const widgetVersionFallback = "v2.84 loaded";
 
 const normalizeBrandColor = (value) => {
   const color = String(value || "").trim();
