@@ -94,6 +94,278 @@ const affiliateMonitoringFallbacks = {
 };
 
 const byId = (id) => document.getElementById(id);
+const getClientDropdownSkinClass = (select) => {
+  if (select.classList.contains('add-client-select') && select.classList.contains('add-client-select-compact')) {
+    return 'is-add-client-select is-add-client-select-compact';
+  }
+  if (select.classList.contains('add-client-select')) return 'is-add-client-select';
+  if (select.classList.contains('client-status-select')) return 'is-client-status-select';
+  if (select.classList.contains('client-phase-select')) return 'is-client-phase-select';
+  if (select.classList.contains('status-filter-select')) return 'is-status-filter-select';
+  if (select.classList.contains('nt-liquid-toolbar-select')) return 'is-nt-liquid-toolbar-select';
+  if (select.id === 'clientEditStatus') return 'is-client-edit-select';
+  if (select.name === 'status' && select.closest('#clientEditDialog')) return 'is-client-edit-select';
+  if (select.name === 'monitoringAgency' && select.closest('#clientEditDialog')) return 'is-client-edit-select';
+  return '';
+};
+
+const closeClientDropdown = (dropdown) => {
+  if (!dropdown) {
+    return;
+  }
+  const button = dropdown.querySelector('.nt-dropdown-btn');
+  const menu = dropdown.querySelector('.nt-dropdown-menu');
+  button?.setAttribute('aria-expanded', 'false');
+  menu?.setAttribute('hidden', '');
+  dropdown.classList.remove('is-open');
+};
+
+const closeAllClientDropdowns = () => {
+  document.querySelectorAll('.nt-dropdown').forEach(closeClientDropdown);
+};
+
+const getSelectOptionItems = (select) => Array.from(select.options || []);
+
+const syncClientDropdownValue = (dropdown, select) => {
+  const buttonLabel = dropdown.querySelector('.nt-dropdown-label');
+  if (!buttonLabel) {
+    return;
+  }
+  const button = dropdown.querySelector('.nt-dropdown-btn');
+  if (button) {
+    button.setAttribute('data-dropdown-value', select.value || '');
+  }
+  const selected = getSelectOptionItems(select).find((option) => option.selected);
+  buttonLabel.textContent = String(select.value || selected?.text || '');
+  dropdown.querySelectorAll('.nt-dropdown-menu-item').forEach((item) => {
+    const isSelected = item.dataset.value === select.value;
+    item.classList.toggle('is-active', isSelected);
+    item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+  });
+};
+
+const getDropdownId = () => `nt-dd-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const renderClientDropdownItems = (select, menu) => {
+  if (!select || !menu) {
+    return;
+  }
+
+  menu.textContent = '';
+  getSelectOptionItems(select).forEach((option) => {
+    const item = document.createElement('button');
+    const isSelected = option.selected;
+    item.type = 'button';
+    item.className = 'nt-dropdown-menu-item nt-menu-link';
+    item.role = 'option';
+    item.tabIndex = -1;
+    item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    item.dataset.value = option.value;
+    item.dataset.dropdownAction = 'select';
+    item.textContent = option.text;
+    menu.appendChild(item);
+  });
+
+  menu.dataset.itemCount = String(menu.children.length);
+};
+
+const refreshClientDropdown = (select) => {
+  const dropdown = select.closest('.nt-dropdown');
+  const menu = dropdown?.querySelector('.nt-dropdown-menu');
+  if (!dropdown || !menu) {
+    return;
+  }
+
+  renderClientDropdownItems(select, menu);
+  const selectedOption = getSelectOptionItems(select).find((option) => option.selected);
+  const selectedValue = selectedOption ? selectedOption.value : select.value;
+  select.value = selectedValue || '';
+  syncClientDropdownValue(dropdown, select);
+
+  const isDisabled = select.disabled || menu.childElementCount === 0;
+  const button = dropdown.querySelector('.nt-dropdown-btn');
+  if (button) {
+    button.disabled = isDisabled;
+  }
+  dropdown.classList.toggle('is-empty', menu.childElementCount === 0);
+  dropdown.classList.toggle('is-disabled', isDisabled);
+};
+
+const initClientDropdown = (select) => {
+  if (!select || select.dataset.ntDropdownReady === '1') {
+    return;
+  }
+  const root = document.createElement('div');
+  const dropdownId = getDropdownId();
+  const wrapper = document.createElement('div');
+  const btn = document.createElement('button');
+  const btnLabel = document.createElement('span');
+  const menu = document.createElement('div');
+
+  const hasValue = Boolean(select.options?.length);
+  const selected = getSelectOptionItems(select).find((option) => option.selected) || null;
+
+  select.setAttribute('tabindex', '-1');
+  select.setAttribute('aria-hidden', 'true');
+  select.classList.add('nt-dropdown-native');
+  select.dataset.ntDropdownReady = '1';
+
+  wrapper.className = `nt-dropdown nt-dropdown-root ${getClientDropdownSkinClass(select)}`.trim();
+  wrapper.dataset.dropdownFor = dropdownId;
+  wrapper.dataset.origin = select.id || '';
+  select.parentNode?.insertBefore(wrapper, select);
+  wrapper.appendChild(select);
+
+  root.className = 'nt-dropdown-root-inner';
+  btn.type = 'button';
+  btn.className = 'nt-dropdown-btn';
+  btn.setAttribute('aria-haspopup', 'listbox');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.setAttribute('aria-controls', dropdownId);
+  btn.setAttribute('data-dropdown-button', '1');
+
+  btnLabel.className = 'nt-dropdown-label';
+  btnLabel.textContent = String(select.value || selected?.text || '');
+  btn.setAttribute('data-dropdown-value', select.value || '');
+
+  menu.className = 'nt-dropdown-menu';
+  menu.id = dropdownId;
+  menu.setAttribute('role', 'listbox');
+  menu.setAttribute('tabindex', '-1');
+  menu.setAttribute('hidden', '');
+  renderClientDropdownItems(select, menu);
+
+  btn.addEventListener('click', () => {
+    const isOpen = btn.getAttribute('aria-expanded') === 'true';
+    if (isOpen) {
+      closeClientDropdown(wrapper);
+      return;
+    }
+    closeAllClientDropdowns();
+    btn.setAttribute('aria-expanded', 'true');
+    menu.hidden = false;
+    wrapper.classList.add('is-open');
+    const selectedItem = menu.querySelector('.nt-dropdown-menu-item.is-active');
+    (selectedItem || menu.firstElementChild)?.focus();
+  });
+
+  btn.addEventListener('keydown', (event) => {
+    if (!['Enter', 'ArrowDown', 'ArrowUp', 'Escape', ' '].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    if (event.key === 'Escape') {
+      closeClientDropdown(wrapper);
+      btn.focus();
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
+      if (btn.getAttribute('aria-expanded') === 'true') {
+        const firstItem = menu.querySelector('.nt-dropdown-menu-item');
+        firstItem?.focus();
+      } else {
+        btn.click();
+      }
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      if (btn.getAttribute('aria-expanded') !== 'true') {
+        btn.click();
+      } else {
+        const lastItem = menu.querySelector('.nt-dropdown-menu-item:last-child');
+        lastItem?.focus();
+      }
+    }
+  });
+
+  menu.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeClientDropdown(wrapper);
+      btn.focus();
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+      return;
+    }
+    event.preventDefault();
+    const items = Array.from(menu.querySelectorAll('.nt-dropdown-menu-item'));
+    if (!items.length) {
+      return;
+    }
+    const active = items.indexOf(document.activeElement);
+    const next = event.key === 'ArrowDown'
+      ? (active + 1) % items.length
+      : (active - 1 + items.length) % items.length;
+    items[next]?.focus();
+  });
+
+  menu.addEventListener('click', (event) => {
+    const button = event.target.closest('.nt-dropdown-menu-item[data-value]');
+    if (!button) {
+      return;
+    }
+    const optionValue = button.dataset.value;
+    select.value = optionValue;
+    syncClientDropdownValue(wrapper, select);
+    const changeEvent = new Event('change', { bubbles: true });
+    select.dispatchEvent(changeEvent);
+    closeClientDropdown(wrapper);
+    btn.focus();
+  });
+
+  const onNativeChange = () => {
+    if (select.value !== btn.getAttribute('data-dropdown-value')) {
+      syncClientDropdownValue(wrapper, select);
+      btn.setAttribute('data-dropdown-value', select.value || '');
+    }
+  };
+  select.addEventListener('change', onNativeChange);
+
+  if (select.classList.contains('nt-liquid-select') || select.classList.contains('client-status-select') || select.classList.contains('client-phase-select')) {
+    btnLabel.textContent = selected?.text || btnLabel.textContent || '';
+  }
+
+  wrapper.appendChild(root);
+  root.appendChild(btn);
+  root.appendChild(menu);
+  wrapper.classList.add(select.disabled ? 'is-disabled' : '');
+  refreshClientDropdown(select);
+  if (!hasValue) {
+    btn.setAttribute('disabled', 'disabled');
+    wrapper.classList.add('is-disabled');
+  }
+};
+
+const initClientDropdowns = (root = document) => {
+  if (!root) {
+    return;
+  }
+  if (!('addEventListener' in document)) {
+    return;
+  }
+  root.querySelectorAll('select[data-client-dropdown="1"]').forEach((select) => {
+    if (!select.closest('.nt-dropdown')) {
+      initClientDropdown(select);
+    } else {
+      refreshClientDropdown(select);
+    }
+  });
+};
+
+document.addEventListener('click', (event) => {
+  const clickedDropdown = event.target.closest('.nt-dropdown');
+  if (!clickedDropdown) {
+    closeAllClientDropdowns();
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    closeAllClientDropdowns();
+  }
+});
+
 const setBootLoadingOverlay = (isActive, message = '') => {
   const overlay = byId('appBootLoader');
   if (!overlay) {
@@ -887,6 +1159,7 @@ const renderAddClientStatusOptions = () => {
   if (!options.includes(selected)) {
     select.value = options[0] || 'Client';
   }
+  initClientDropdowns();
 };
 
 const renderAddClientPhaseOptions = () => {
@@ -902,6 +1175,7 @@ const renderAddClientPhaseOptions = () => {
   if (!options.includes(selected)) {
     select.value = options[0] || 'None';
   }
+  initClientDropdowns();
 };
 
 const renderAddClientAssignmentOptions = () => {
@@ -916,6 +1190,7 @@ const renderAddClientAssignmentOptions = () => {
     affiliateSelect.innerHTML = '<option value="None">None</option>';
     affiliateSelect.value = 'None';
   }
+  initClientDropdowns();
 };
 
 const renderSpouseClientOptions = () => {
@@ -3892,14 +4167,14 @@ const renderClientsTable = (clients, options = {}) => {
           </div>
         </td>
         <td class="nt-liquid-col-stage">
-          <select class="client-status-select nt-liquid-select" data-action="status" data-client-id="${client.id}">
+          <select class="client-status-select nt-liquid-select" data-action="status" data-client-id="${client.id}" data-client-dropdown="1">
             ${state.statuses.map((status) => `
               <option value="${status}"${status === (client.status || 'Client') ? ' selected' : ''}>${status}</option>
             `).join('')}
           </select>
         </td>
         <td class="nt-liquid-col-phase">
-          <select class="client-phase-select nt-liquid-select" data-action="phase" data-client-id="${client.id}">
+          <select class="client-phase-select nt-liquid-select" data-action="phase" data-client-id="${client.id}" data-client-dropdown="1">
             ${state.phases.map((phase) => `
               <option value="${phase}"${phase === (client.phase || 'None') ? ' selected' : ''}>${phase}</option>
             `).join('')}
@@ -3958,7 +4233,7 @@ const renderClientsTable = (clients, options = {}) => {
         </div>
         <div class="nt-liquid-toolbar-buttons">
           <button id="clientsTableBackgroundTrigger" class="nt-liquid-toolbar-btn nt-liquid-bg-btn" type="button">Background</button>
-          <select id="clientsTableStatusFilter" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" aria-label="Filter clients by status">
+          <select id="clientsTableStatusFilter" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" data-client-dropdown="1" aria-label="Filter clients by status">
             <option value="__all__"${state.statusFilter === '__all__' ? ' selected' : ''}>All Statuses</option>
             ${state.statuses.map((status) => `<option value="${escapeHtml(status)}"${status === state.statusFilter ? ' selected' : ''}>${escapeHtml(status)}</option>`).join('')}
           </select>
@@ -4190,6 +4465,7 @@ const renderClients = () => {
     });
   }
 
+  initClientDropdowns(list);
   bindClientTableRowInteractionListeners(list);
   bindProgressiveClientTableHandlers(list, hasMoreRows);
 
@@ -4555,6 +4831,7 @@ const renderClientsRowsOnly = () => {
       : `${sortedClients.length} client${sortedClients.length === 1 ? '' : 's'}`;
   }
   list.classList.toggle('clients-table-wrap--compact', visibleClients.length === 1);
+  initClientDropdowns(list);
   bindClientTableRowInteractionListeners(list);
   bindProgressiveClientTableHandlers(list, hasMoreRows);
 };
@@ -4570,6 +4847,7 @@ const syncStatusFilterOptions = () => {
   `)];
 
   select.innerHTML = options.join('');
+  initClientDropdowns();
 };
 
 const renderClientDetail = (client) => {
@@ -5777,6 +6055,7 @@ const openEditDialog = async (clientId) => {
   setClientFormMode('edit', detailedClient);
   populateAddClientFormFromClient(detailedClient);
   setHubMode('add', { preserveAddFormState: true });
+  initClientDropdowns();
   setFormMessage(`Editing ${detailedClient.firstName} ${detailedClient.lastName}.`);
 };
 
@@ -6809,6 +7088,7 @@ const bindEvents = () => {
   renderAddClientAssignmentOptions();
   renderSpouseClientOptions();
   resetAddClientDerivedState();
+  initClientDropdowns();
 
   const homeForm = byId('homeSettingsForm');
   const homeLogoInput = byId('homeLogoInput');

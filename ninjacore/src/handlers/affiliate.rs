@@ -37,17 +37,16 @@ async fn save(state: &AppState, key: &str, value: &Value) -> AppResult<()> {
     let payload = serde_json::to_string(value).unwrap_or("[]".into());
     state
         .db
-        .query("UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()")
+        .query(
+            "UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()",
+        )
         .bind(("k", key.to_string()))
         .bind(("v", payload))
         .await?;
     Ok(())
 }
 
-pub async fn list_links(
-    _user: AuthUser,
-    State(state): State<AppState>,
-) -> AppResult<Json<Value>> {
+pub async fn list_links(_user: AuthUser, State(state): State<AppState>) -> AppResult<Json<Value>> {
     let builder = load(&state, KEY_BUILDER).await?;
     let monitoring = load(&state, KEY_MONITORING).await?;
     Ok(Json(json!({
@@ -60,7 +59,8 @@ pub async fn list_links(
 
 #[derive(Deserialize)]
 pub struct LinksBody {
-    #[serde(default)] pub rows: Value,
+    #[serde(default)]
+    pub rows: Value,
 }
 
 pub async fn put_builder(

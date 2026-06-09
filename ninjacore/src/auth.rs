@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-use rand_core::OsRng;
-use sha2::{Digest, Sha256};
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use rusty_paseto::core::{Key, Paseto, PasetoNonce, V4, Local, Footer, Payload};
+use rand_core::OsRng;
+use rusty_paseto::core::{Footer, Key, Local, Paseto, PasetoNonce, Payload, V4};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::error::AppError;
 use crate::state::{AppState, SessionEntry};
@@ -37,7 +37,9 @@ pub fn default_salt(username: &str) -> String {
 pub fn verify_password(password: &str, salt: &str, expected_hex: &str) -> bool {
     let actual = hash_password_with_salt(salt, password);
     // Constant-time compare.
-    if actual.len() != expected_hex.len() { return false; }
+    if actual.len() != expected_hex.len() {
+        return false;
+    }
     let mut diff = 0u8;
     for (a, b) in actual.bytes().zip(expected_hex.bytes()) {
         diff |= a ^ b;
@@ -71,7 +73,10 @@ pub fn issue_token(state: &AppState, username: &str, ttl_secs: i64) -> anyhow::R
 
     state.sessions.insert(
         token.clone(),
-        SessionEntry { username: username.to_string(), issued_at: now },
+        SessionEntry {
+            username: username.to_string(),
+            issued_at: now,
+        },
     );
     Ok(token)
 }
@@ -99,7 +104,11 @@ pub fn clear_cookie() -> String {
 }
 
 fn read_cookie_token(parts: &Parts) -> Option<String> {
-    let header = parts.headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
+    let header = parts
+        .headers
+        .get(axum::http::header::COOKIE)?
+        .to_str()
+        .ok()?;
     for piece in header.split(';') {
         let piece = piece.trim();
         if let Some(rest) = piece.strip_prefix(&format!("{COOKIE_NAME}=")) {
@@ -119,23 +128,24 @@ pub struct AuthUser {
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let token = read_cookie_token(parts).ok_or(AppError::Unauthorized)?;
 
         if let Some(entry) = state.sessions.get(&token) {
-            return Ok(AuthUser { username: entry.username.clone() });
+            return Ok(AuthUser {
+                username: entry.username.clone(),
+            });
         }
 
-        let decrypted = Paseto::<V4, Local>::try_decrypt(
-            &token,
-            &state.paseto_key,
-            None::<Footer>,
-            None,
-        )
-        .map_err(|_| AppError::Unauthorized)?;
+        let decrypted =
+            Paseto::<V4, Local>::try_decrypt(&token, &state.paseto_key, None::<Footer>, None)
+                .map_err(|_| AppError::Unauthorized)?;
 
-        let claims: TokenClaims = serde_json::from_str(&decrypted)
-            .map_err(|_| AppError::Unauthorized)?;
+        let claims: TokenClaims =
+            serde_json::from_str(&decrypted).map_err(|_| AppError::Unauthorized)?;
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         if claims.exp < now {
             return Err(AppError::Unauthorized);
@@ -148,7 +158,9 @@ impl FromRequestParts<AppState> for AuthUser {
                     .unwrap_or_else(|_| time::OffsetDateTime::now_utc()),
             },
         );
-        Ok(AuthUser { username: claims.sub })
+        Ok(AuthUser {
+            username: claims.sub,
+        })
     }
 }
 

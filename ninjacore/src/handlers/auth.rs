@@ -36,12 +36,16 @@ pub async fn login(
 ) -> AppResult<impl IntoResponse> {
     let username = body.username.trim().to_lowercase();
     if username.is_empty() || body.password.is_empty() {
-        return Err(AppError::BadRequest("username and password required".into()));
+        return Err(AppError::BadRequest(
+            "username and password required".into(),
+        ));
     }
 
     let mut resp = state
         .db
-        .query("SELECT username, password_hash, password_salt FROM users WHERE username = $u LIMIT 1")
+        .query(
+            "SELECT username, password_hash, password_salt FROM users WHERE username = $u LIMIT 1",
+        )
         .bind(("u", username.clone()))
         .await?;
     let user: Option<UserRow> = crate::db::take_one(&mut resp, 0)?;
@@ -49,13 +53,16 @@ pub async fn login(
     let Some(user) = user else {
         return Err(AppError::Unauthorized);
     };
-    let salt = if user.password_salt.is_empty() { default_salt(&user.username) } else { user.password_salt.clone() };
+    let salt = if user.password_salt.is_empty() {
+        default_salt(&user.username)
+    } else {
+        user.password_salt.clone()
+    };
     if !verify_password(&body.password, &salt, &user.password_hash) {
         return Err(AppError::Unauthorized);
     }
 
-    let token = issue_token(&state, &user.username, SESSION_TTL_SECS)
-        .map_err(AppError::Other)?;
+    let token = issue_token(&state, &user.username, SESSION_TTL_SECS).map_err(AppError::Other)?;
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -63,10 +70,14 @@ pub async fn login(
         HeaderValue::from_str(&build_cookie(&token, SESSION_TTL_SECS))
             .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?,
     );
-    Ok((StatusCode::OK, headers, Json(json!({
-        "success": true,
-        "user": user.username,
-    }))))
+    Ok((
+        StatusCode::OK,
+        headers,
+        Json(json!({
+            "success": true,
+            "user": user.username,
+        })),
+    ))
 }
 
 pub async fn signup(
@@ -78,11 +89,15 @@ pub async fn signup(
         return Err(AppError::BadRequest("username required".into()));
     }
     if body.password.len() < 8 {
-        return Err(AppError::BadRequest("password must be at least 8 characters".into()));
+        return Err(AppError::BadRequest(
+            "password must be at least 8 characters".into(),
+        ));
     }
     if let Some(c) = body.confirm_password.as_deref() {
         if !c.is_empty() && c != body.password {
-            return Err(AppError::BadRequest("password confirmation does not match".into()));
+            return Err(AppError::BadRequest(
+                "password confirmation does not match".into(),
+            ));
         }
     }
 
@@ -98,18 +113,21 @@ pub async fn signup(
         .await?;
     let _: Option<UserRow> = crate::db::take_one(&mut resp, 0)?;
 
-    let token = issue_token(&state, &username, SESSION_TTL_SECS)
-        .map_err(AppError::Other)?;
+    let token = issue_token(&state, &username, SESSION_TTL_SECS).map_err(AppError::Other)?;
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
         HeaderValue::from_str(&build_cookie(&token, SESSION_TTL_SECS))
             .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?,
     );
-    Ok((StatusCode::CREATED, headers, Json(json!({
-        "success": true,
-        "user": username,
-    }))))
+    Ok((
+        StatusCode::CREATED,
+        headers,
+        Json(json!({
+            "success": true,
+            "user": username,
+        })),
+    ))
 }
 
 pub async fn logout() -> impl IntoResponse {

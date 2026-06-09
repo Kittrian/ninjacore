@@ -21,7 +21,8 @@ const SSO_TTL_SECS: i64 = 3600;
 
 #[derive(Deserialize, Default)]
 pub struct SsoBody {
-    #[serde(default)] pub token: Option<String>,
+    #[serde(default)]
+    pub token: Option<String>,
 }
 
 pub async fn sso_login(
@@ -31,9 +32,12 @@ pub async fn sso_login(
 ) -> AppResult<impl IntoResponse> {
     // Short-circuit if already authenticated.
     if let Some(user) = existing {
-        return Ok((HeaderMap::new(), Json(json!({
-            "authenticated": true, "user": user.username,
-        }))));
+        return Ok((
+            HeaderMap::new(),
+            Json(json!({
+                "authenticated": true, "user": user.username,
+            })),
+        ));
     }
 
     let token = body.token.unwrap_or_default();
@@ -74,5 +78,8 @@ pub async fn sso_login(
         HeaderValue::from_str(&build_cookie(&issued, SSO_TTL_SECS))
             .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?,
     );
-    Ok((headers, Json(json!({ "authenticated": true, "user": username }))))
+    Ok((
+        headers,
+        Json(json!({ "authenticated": true, "user": username })),
+    ))
 }

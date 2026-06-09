@@ -37,28 +37,41 @@ pub async fn connect_db(cfg: &Config) -> Result<Db> {
 ///
 /// Mirrors the v2 `.take::<Option<T>>(idx)` ergonomic on top of v3's
 /// `SurrealValue` trait bound, without forcing a derive on every struct.
-pub fn take_one<T: DeserializeOwned>(resp: &mut IndexedResults, index: usize) -> AppResult<Option<T>> {
+pub fn take_one<T: DeserializeOwned>(
+    resp: &mut IndexedResults,
+    index: usize,
+) -> AppResult<Option<T>> {
     let raw: SValue = resp.take(index).map_err(AppError::Surreal)?;
     let json: JsonValue = raw.into_json_value();
     let cand = match json {
         JsonValue::Array(mut arr) => {
-            if arr.is_empty() { return Ok(None); }
+            if arr.is_empty() {
+                return Ok(None);
+            }
             arr.swap_remove(0)
         }
         JsonValue::Null => return Ok(None),
         other => other,
     };
-    Ok(Some(serde_json::from_value(cand).map_err(|e| AppError::Other(anyhow::anyhow!(e)))?))
+    Ok(Some(
+        serde_json::from_value(cand).map_err(|e| AppError::Other(anyhow::anyhow!(e)))?,
+    ))
 }
 
-pub fn take_many<T: DeserializeOwned>(resp: &mut IndexedResults, index: usize) -> AppResult<Vec<T>> {
+pub fn take_many<T: DeserializeOwned>(
+    resp: &mut IndexedResults,
+    index: usize,
+) -> AppResult<Vec<T>> {
     let raw: SValue = resp.take(index).map_err(AppError::Surreal)?;
     let json: JsonValue = raw.into_json_value();
     match json {
-        JsonValue::Array(arr) => arr.into_iter()
+        JsonValue::Array(arr) => arr
+            .into_iter()
             .map(|v| serde_json::from_value(v).map_err(|e| AppError::Other(anyhow::anyhow!(e))))
             .collect(),
         JsonValue::Null => Ok(Vec::new()),
-        other => Ok(vec![serde_json::from_value(other).map_err(|e| AppError::Other(anyhow::anyhow!(e)))?]),
+        other => Ok(vec![
+            serde_json::from_value(other).map_err(|e| AppError::Other(anyhow::anyhow!(e)))?
+        ]),
     }
 }

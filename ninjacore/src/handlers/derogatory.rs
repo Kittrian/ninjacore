@@ -42,10 +42,13 @@ pub struct DerogatoryResponse {
 #[derive(Serialize)]
 pub struct ClientView {
     pub id: String,
-    #[serde(rename = "firstName")] pub first_name: String,
-    #[serde(rename = "lastName")] pub last_name: String,
+    #[serde(rename = "firstName")]
+    pub first_name: String,
+    #[serde(rename = "lastName")]
+    pub last_name: String,
     pub email: String,
-    #[serde(rename = "reportDate")] pub report_date: String,
+    #[serde(rename = "reportDate")]
+    pub report_date: String,
 }
 
 pub async fn get_derogatory(
@@ -56,15 +59,22 @@ pub async fn get_derogatory(
     #[derive(Deserialize, Default)]
     struct ClientRow {
         id: Option<String>,
-        #[serde(default)] first_name: String,
-        #[serde(default)] last_name: String,
-        #[serde(default)] email: String,
-        #[serde(default)] phone: String,
-        #[serde(default)] report_date: String,
-        #[serde(default)] credit_report_json: String,
+        #[serde(default)]
+        first_name: String,
+        #[serde(default)]
+        last_name: String,
+        #[serde(default)]
+        email: String,
+        #[serde(default)]
+        phone: String,
+        #[serde(default)]
+        report_date: String,
+        #[serde(default)]
+        credit_report_json: String,
     }
 
-    let mut __resp = state.db
+    let mut __resp = state
+        .db
         .query("SELECT * FROM ONLY type::thing('clients', $id) LIMIT 1")
         .bind(("id", client_id.clone()))
         .await?;
@@ -86,7 +96,15 @@ pub async fn get_derogatory(
 
     // Try remote first.
     let remote = if integration.is_configured() {
-        match pull_from_ninjadispute(&integration, &client.first_name, &client.last_name, &client.email, &client.phone).await {
+        match pull_from_ninjadispute(
+            &integration,
+            &client.first_name,
+            &client.last_name,
+            &client.email,
+            &client.phone,
+        )
+        .await
+        {
             Ok(r) => Some(r),
             Err(e) => {
                 warnings.push(format!("Remote NinjaDispute pull failed: {e}"));
@@ -116,10 +134,18 @@ pub async fn get_derogatory(
         } else if accounts.is_empty() && !local_derog.is_empty() {
             accounts = local_derog;
             source = "local-json-fallback-after-remote-empty".into();
-            warnings.push("Remote source returned zero derogatory rows; used local JSON fallback.".into());
-        } else if accounts.is_empty() && !is_dispute_row_shape(v) && !v.get("creditReport").is_none() {
-            warnings.push("Local credit report appears to be SmartCredit-shaped; parser pending. \
-                Remote NinjaDispute remains the recommended source.".into());
+            warnings.push(
+                "Remote source returned zero derogatory rows; used local JSON fallback.".into(),
+            );
+        } else if accounts.is_empty()
+            && !is_dispute_row_shape(v)
+            && !v.get("creditReport").is_none()
+        {
+            warnings.push(
+                "Local credit report appears to be SmartCredit-shaped; parser pending. \
+                Remote NinjaDispute remains the recommended source."
+                    .into(),
+            );
         }
     } else if accounts.is_empty() {
         source = "none".into();
@@ -139,10 +165,14 @@ pub async fn get_derogatory(
 
 #[derive(Debug, Default, Clone, Deserialize)]
 struct NinjaDisputeIntegration {
-    #[serde(default, rename = "baseUrl")] base_url: String,
-    #[serde(default)] username: String,
-    #[serde(default)] password: String,
-    #[serde(default, rename = "apiToken")] api_token: String,
+    #[serde(default, rename = "baseUrl")]
+    base_url: String,
+    #[serde(default)]
+    username: String,
+    #[serde(default)]
+    password: String,
+    #[serde(default, rename = "apiToken")]
+    api_token: String,
 }
 
 impl NinjaDisputeIntegration {
@@ -154,7 +184,10 @@ impl NinjaDisputeIntegration {
 }
 
 async fn load_ninjadispute_integration(state: &AppState) -> AppResult<NinjaDisputeIntegration> {
-    #[derive(Deserialize)] struct Row { value_json: String }
+    #[derive(Deserialize)]
+    struct Row {
+        value_json: String,
+    }
     let mut __resp = state.db
         .query("SELECT value_json FROM settings WHERE setting_key = 'integration.ninjadispute' LIMIT 1")
         .await?;
@@ -172,7 +205,10 @@ struct RemoteResult {
 
 async fn pull_from_ninjadispute(
     integ: &NinjaDisputeIntegration,
-    first: &str, last: &str, email: &str, phone: &str,
+    first: &str,
+    last: &str,
+    email: &str,
+    phone: &str,
 ) -> anyhow::Result<RemoteResult> {
     let base = integ.base_url.trim_end_matches('/').to_string();
     let token = resolve_bearer(integ).await?;
@@ -180,11 +216,17 @@ async fn pull_from_ninjadispute(
 
     // Compose distinct search terms.
     let mut terms: Vec<String> = Vec::new();
-    if !email.trim().is_empty() { terms.push(email.trim().to_string()); }
+    if !email.trim().is_empty() {
+        terms.push(email.trim().to_string());
+    }
     let name = format!("{first} {last}").trim().to_string();
-    if !name.is_empty() { terms.push(name.clone()); }
+    if !name.is_empty() {
+        terms.push(name.clone());
+    }
     let phone_digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
-    if !phone_digits.is_empty() { terms.push(phone_digits.clone()); }
+    if !phone_digits.is_empty() {
+        terms.push(phone_digits.clone());
+    }
 
     // Issue every term search concurrently — they hit the same upstream but
     // are independent reads, so Tokio can overlap their RTTs.
@@ -201,7 +243,9 @@ async fn pull_from_ninjadispute(
                 .send()
                 .await
                 .ok()?;
-            if !resp.status().is_success() { return None; }
+            if !resp.status().is_success() {
+                return None;
+            }
             resp.json::<Value>().await.ok()
         }
     });
@@ -211,27 +255,47 @@ async fn pull_from_ninjadispute(
     let mut candidates: Vec<Value> = Vec::new();
     for v in term_responses.into_iter().flatten() {
         let empty: Vec<Value> = Vec::new();
-        let rows = v.get("clients").and_then(|x| x.as_array())
+        let rows = v
+            .get("clients")
+            .and_then(|x| x.as_array())
             .or_else(|| v.get("data").and_then(|x| x.as_array()))
             .or_else(|| v.as_array())
             .unwrap_or(&empty);
         for row in rows {
-            let id = row["id"].as_str().or(row["client_id"].as_str()).unwrap_or("").trim().to_string();
-            if id.is_empty() || !seen.insert(id.clone()) { continue; }
+            let id = row["id"]
+                .as_str()
+                .or(row["client_id"].as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if id.is_empty() || !seen.insert(id.clone()) {
+                continue;
+            }
             candidates.push(row.clone());
         }
     }
 
-    let matched = pick_best_match(&candidates, first, last, email, &phone_digits)
-        .ok_or_else(|| anyhow::anyhow!("No matching NinjaDispute client was found for this contact."))?;
+    let matched =
+        pick_best_match(&candidates, first, last, email, &phone_digits).ok_or_else(|| {
+            anyhow::anyhow!("No matching NinjaDispute client was found for this contact.")
+        })?;
 
-    let id = matched["id"].as_str().or(matched["client_id"].as_str()).unwrap_or("").trim().to_string();
+    let id = matched["id"]
+        .as_str()
+        .or(matched["client_id"].as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let resp = client
         .get(format!("{base}/clients/{id}?all=true"))
         .bearer_auth(&token)
-        .send().await?;
+        .send()
+        .await?;
     if !resp.status().is_success() {
-        return Err(anyhow::anyhow!("NinjaDispute fetch /clients/{id} returned {}", resp.status()));
+        return Err(anyhow::anyhow!(
+            "NinjaDispute fetch /clients/{id} returned {}",
+            resp.status()
+        ));
     }
     let payload: Value = resp.json().await.unwrap_or(json!({}));
     let accounts = extract_derogatory_from_remote_client(&payload);
@@ -251,12 +315,17 @@ async fn resolve_bearer(integ: &NinjaDisputeIntegration) -> anyhow::Result<Strin
     let resp = client
         .post(format!("{base}/auth/login"))
         .json(&json!({ "username": integ.username, "password": integ.password }))
-        .send().await?;
+        .send()
+        .await?;
     if !resp.status().is_success() {
-        return Err(anyhow::anyhow!("NinjaDispute login returned {}", resp.status()));
+        return Err(anyhow::anyhow!(
+            "NinjaDispute login returned {}",
+            resp.status()
+        ));
     }
     let v: Value = resp.json().await.unwrap_or(json!({}));
-    let token = v["token"].as_str()
+    let token = v["token"]
+        .as_str()
         .or(v["access_token"].as_str())
         .or(v["jwt"].as_str())
         .map(|s| s.trim().to_string())
@@ -266,7 +335,11 @@ async fn resolve_bearer(integ: &NinjaDisputeIntegration) -> anyhow::Result<Strin
 }
 
 fn pick_best_match<'a>(
-    cands: &'a [Value], first: &str, last: &str, email: &str, phone_digits: &str,
+    cands: &'a [Value],
+    first: &str,
+    last: &str,
+    email: &str,
+    phone_digits: &str,
 ) -> Option<&'a Value> {
     let e = email.trim().to_lowercase();
     let p = phone_digits;
@@ -274,14 +347,22 @@ fn pick_best_match<'a>(
     let l = last.trim().to_lowercase();
     // 1. exact email
     if !e.is_empty() {
-        if let Some(c) = cands.iter().find(|c| c["email"].as_str().unwrap_or("").trim().to_lowercase() == e) {
+        if let Some(c) = cands
+            .iter()
+            .find(|c| c["email"].as_str().unwrap_or("").trim().to_lowercase() == e)
+        {
             return Some(c);
         }
     }
     // 2. exact phone digits
     if !p.is_empty() {
         if let Some(c) = cands.iter().find(|c| {
-            let cp: String = c["phone"].as_str().unwrap_or("").chars().filter(|x| x.is_ascii_digit()).collect();
+            let cp: String = c["phone"]
+                .as_str()
+                .unwrap_or("")
+                .chars()
+                .filter(|x| x.is_ascii_digit())
+                .collect();
             cp == p
         }) {
             return Some(c);
@@ -290,8 +371,18 @@ fn pick_best_match<'a>(
     // 3. first + last
     if !f.is_empty() && !l.is_empty() {
         if let Some(c) = cands.iter().find(|c| {
-            let cf = c["first_name"].as_str().or(c["firstName"].as_str()).unwrap_or("").trim().to_lowercase();
-            let cl = c["last_name"].as_str().or(c["lastName"].as_str()).unwrap_or("").trim().to_lowercase();
+            let cf = c["first_name"]
+                .as_str()
+                .or(c["firstName"].as_str())
+                .unwrap_or("")
+                .trim()
+                .to_lowercase();
+            let cl = c["last_name"]
+                .as_str()
+                .or(c["lastName"].as_str())
+                .unwrap_or("")
+                .trim()
+                .to_lowercase();
             cf == f && cl == l
         }) {
             return Some(c);
@@ -305,7 +396,9 @@ fn extract_derogatory_from_remote_client(payload: &Value) -> Vec<Value> {
     for key in ["accounts", "tradelines", "rows", "report", "creditReport"] {
         if let Some(arr) = payload.get(key).and_then(|v| v.as_array()) {
             let parsed = parse_derogatory_rows(&Value::Array(arr.clone()), false);
-            if !parsed.is_empty() { return parsed; }
+            if !parsed.is_empty() {
+                return parsed;
+            }
         }
     }
     // Fall through: treat the whole payload as the rows array.
@@ -342,10 +435,29 @@ fn parse_derogatory_rows(value: &Value, include_non_derogatory: bool) -> Vec<Val
         let tu = to_bureau_view(row.get("transunion"), include_non_derogatory);
         let ex = to_bureau_view(row.get("experian"), include_non_derogatory);
         let eq = to_bureau_view(row.get("equifax"), include_non_derogatory);
-        if tu.is_none() && ex.is_none() && eq.is_none() { continue; }
-        let creditor = row.get("acc_name").or(row.get("name")).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-        let acct_num = row.get("acc_num").or(row.get("accountNumber")).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-        let acct_type = row.get("type").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+        if tu.is_none() && ex.is_none() && eq.is_none() {
+            continue;
+        }
+        let creditor = row
+            .get("acc_name")
+            .or(row.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let acct_num = row
+            .get("acc_num")
+            .or(row.get("accountNumber"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let acct_type = row
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
         accounts.push(json!({
             "id": format!("derog-{row_id}"),
             "creditorName": creditor,
@@ -361,31 +473,68 @@ fn parse_derogatory_rows(value: &Value, include_non_derogatory: bool) -> Vec<Val
 
 fn to_bureau_view(entry: Option<&Value>, include_non_derogatory: bool) -> Option<Value> {
     let e = entry?;
-    if !e.is_object() { return None; }
+    if !e.is_object() {
+        return None;
+    }
     let pick = |keys: &[&[&str]]| -> String {
         for path in keys {
             let mut cur = e;
             let mut ok = true;
             for k in *path {
-                if let Some(n) = cur.get(*k) { cur = n; } else { ok = false; break; }
+                if let Some(n) = cur.get(*k) {
+                    cur = n;
+                } else {
+                    ok = false;
+                    break;
+                }
             }
             if ok {
                 if let Some(s) = cur.as_str() {
                     let t = s.trim();
-                    if !t.is_empty() { return t.to_string(); }
+                    if !t.is_empty() {
+                        return t.to_string();
+                    }
                 }
             }
         }
         String::new()
     };
-    let status         = pick(&[&["status"], &["AccountCondition","description"], &["AccountCondition","@description"], &["classifycations","dataButton","paymentStatus"]]);
-    let payment_status = pick(&[&["paymentStatus"], &["PayStatus","description"], &["PayStatus","@description"], &["classifycations","dataButton","paymentStatus"]]);
-    let account_type   = pick(&[&["accountType"], &["classifycations","dataButton","accountType"]]);
-    let account_type_d = pick(&[&["accountTypeDetail"], &["classifycations","dataButton","accountTypeDetail"]]);
-    let account_rating = pick(&[&["accountRating"], &["AccountCondition","description"], &["AccountCondition","@description"]]);
+    let status = pick(&[
+        &["status"],
+        &["AccountCondition", "description"],
+        &["AccountCondition", "@description"],
+        &["classifycations", "dataButton", "paymentStatus"],
+    ]);
+    let payment_status = pick(&[
+        &["paymentStatus"],
+        &["PayStatus", "description"],
+        &["PayStatus", "@description"],
+        &["classifycations", "dataButton", "paymentStatus"],
+    ]);
+    let account_type = pick(&[
+        &["accountType"],
+        &["classifycations", "dataButton", "accountType"],
+    ]);
+    let account_type_d = pick(&[
+        &["accountTypeDetail"],
+        &["classifycations", "dataButton", "accountTypeDetail"],
+    ]);
+    let account_rating = pick(&[
+        &["accountRating"],
+        &["AccountCondition", "description"],
+        &["AccountCondition", "@description"],
+    ]);
 
-    let is_derog = is_derogatory_candidate(&status, &payment_status, &account_type, &account_type_d, &account_rating);
-    if !include_non_derogatory && !is_derog { return None; }
+    let is_derog = is_derogatory_candidate(
+        &status,
+        &payment_status,
+        &account_type,
+        &account_type_d,
+        &account_rating,
+    );
+    if !include_non_derogatory && !is_derog {
+        return None;
+    }
 
     let s_field = |k: &str| e.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
     Some(json!({
@@ -406,7 +555,11 @@ fn to_bureau_view(entry: Option<&Value>, include_non_derogatory: bool) -> Option
 }
 
 fn is_derogatory_candidate(
-    status: &str, pay_status: &str, account_type: &str, _atd: &str, rating: &str,
+    status: &str,
+    pay_status: &str,
+    account_type: &str,
+    _atd: &str,
+    rating: &str,
 ) -> bool {
     let bag = format!(
         "{} {} {} {}",
@@ -416,26 +569,51 @@ fn is_derogatory_candidate(
         rating.to_lowercase(),
     );
     [
-        "charge", "charged off", "collection", "late", "past due", "delinquent",
-        "repossess", "foreclos", "settled", "default", "derogatory", "30 days",
-        "60 days", "90 days", "120 days", "judgment", "bankruptcy",
-    ].iter().any(|kw| bag.contains(kw))
+        "charge",
+        "charged off",
+        "collection",
+        "late",
+        "past due",
+        "delinquent",
+        "repossess",
+        "foreclos",
+        "settled",
+        "default",
+        "derogatory",
+        "30 days",
+        "60 days",
+        "90 days",
+        "120 days",
+        "judgment",
+        "bankruptcy",
+    ]
+    .iter()
+    .any(|kw| bag.contains(kw))
 }
 
 fn merge_derogatory(primary: Vec<Value>, fallback: Vec<Value>) -> Vec<Value> {
-    if primary.is_empty() { return fallback; }
-    if fallback.is_empty() { return primary; }
+    if primary.is_empty() {
+        return fallback;
+    }
+    if fallback.is_empty() {
+        return primary;
+    }
     let key = |v: &Value| -> String {
-        v["accountNumber"].as_str().unwrap_or("").chars()
+        v["accountNumber"]
+            .as_str()
+            .unwrap_or("")
+            .chars()
             .filter(|c| c.is_ascii_alphanumeric())
             .map(|c| c.to_ascii_lowercase())
             .collect()
     };
-    let mut by_key: std::collections::HashMap<String, Value> = primary.iter()
-        .map(|p| (key(p), p.clone())).collect();
+    let mut by_key: std::collections::HashMap<String, Value> =
+        primary.iter().map(|p| (key(p), p.clone())).collect();
     for fb in fallback {
         let k = key(&fb);
-        if k.is_empty() { continue; }
+        if k.is_empty() {
+            continue;
+        }
         by_key.entry(k).or_insert(fb);
     }
     by_key.into_values().collect()
@@ -443,6 +621,8 @@ fn merge_derogatory(primary: Vec<Value>, fallback: Vec<Value>) -> Vec<Value> {
 
 fn parse_json_loose(text: &str) -> Option<Value> {
     let t = text.trim();
-    if t.is_empty() { return None; }
+    if t.is_empty() {
+        return None;
+    }
     serde_json::from_str(t).ok()
 }

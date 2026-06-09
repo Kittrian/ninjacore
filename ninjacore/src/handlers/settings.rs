@@ -48,8 +48,7 @@ async fn load_setting(state: &AppState, key: &str) -> AppResult<Option<Value>> {
 }
 
 async fn upsert_setting(state: &AppState, key: &str, value: &Value) -> AppResult<()> {
-    let json = serde_json::to_string(value)
-        .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
+    let json = serde_json::to_string(value).map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
     state
         .db
         .query(
@@ -123,7 +122,10 @@ pub async fn list_integrations(
 
     let mut map: HashMap<String, Value> = HashMap::new();
     for row in rows {
-        let svc = row.setting_key.trim_start_matches("integration.").to_string();
+        let svc = row
+            .setting_key
+            .trim_start_matches("integration.")
+            .to_string();
         let parsed: Value = serde_json::from_str(&row.value_json).unwrap_or(json!({}));
         map.insert(svc, parsed);
     }
@@ -143,9 +145,13 @@ pub async fn put_integration(
 ) -> AppResult<Json<Value>> {
     let service = service.trim().to_lowercase();
     if !INTEGRATION_SERVICES.iter().any(|s| **s == service) {
-        return Err(AppError::BadRequest("unsupported integration service".into()));
+        return Err(AppError::BadRequest(
+            "unsupported integration service".into(),
+        ));
     }
     let key = format!("integration.{service}");
     upsert_setting(&state, &key, &body).await?;
-    Ok(Json(json!({ "ok": true, "service": service, "integration": body })))
+    Ok(Json(
+        json!({ "ok": true, "service": service, "integration": body }),
+    ))
 }

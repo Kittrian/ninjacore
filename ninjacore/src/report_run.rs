@@ -145,9 +145,7 @@ pub async fn start_browser_report_run(
     // Dedup: if an existing run for this client is queued/running, return it.
     for entry in runs.iter() {
         let guard = entry.value().read().await;
-        if guard.client_id == client_id
-            && (guard.status == "queued" || guard.status == "running")
-        {
+        if guard.client_id == client_id && (guard.status == "queued" || guard.status == "running") {
             drop(guard);
             return Ok(entry.value().clone());
         }

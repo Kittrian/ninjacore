@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use dashmap::DashMap;
-use rusty_paseto::core::{Key, PasetoSymmetricKey, V4, Local};
+use rusty_paseto::core::{Key, Local, PasetoSymmetricKey, V4};
 
 use crate::config::Config;
 use crate::db::Db;
@@ -60,4 +60,3 @@ fn hex_decode_32(s: &str) -> anyhow::Result<[u8; 32]> {
     }
     Ok(out)
 }
-

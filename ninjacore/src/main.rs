@@ -10,6 +10,7 @@ mod state;
 
 use std::time::Duration;
 
+use axum::response::Redirect;
 use axum::routing::{get, post, put};
 use axum::Router;
 use tower_http::compression::CompressionLayer;
@@ -17,7 +18,6 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
-use axum::response::Redirect;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use crate::config::Config;
@@ -26,7 +26,10 @@ use crate::state::AppState;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("ninjacore=debug,tower_http=info")))
+        .with(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("ninjacore=debug,tower_http=info")),
+        )
         .with(fmt::layer())
         .init();
 
@@ -49,7 +52,10 @@ async fn main() -> anyhow::Result<()> {
         )
         // Integrations
         .route("/integrations", get(handlers::settings::list_integrations))
-        .route("/integrations/:service", put(handlers::settings::put_integration))
+        .route(
+            "/integrations/:service",
+            put(handlers::settings::put_integration),
+        )
         // GHL webhook (no auth — keyed)
         .route(
             "/integrations/gohighlevel/webhook",
@@ -58,18 +64,30 @@ async fn main() -> anyhow::Result<()> {
         // Payments
         .route("/payments/overview", get(handlers::payments::overview))
         .route("/payments/config", put(handlers::payments::put_config))
-        .route("/payments/merchants", post(handlers::payments::create_merchant))
+        .route(
+            "/payments/merchants",
+            post(handlers::payments::create_merchant),
+        )
         .route(
             "/payments/merchants/:id",
             put(handlers::payments::update_merchant).delete(handlers::payments::delete_merchant),
         )
-        .route("/payments/test-square", post(handlers::payments::test_square))
-        .route("/payments/products", post(handlers::payments::create_product))
+        .route(
+            "/payments/test-square",
+            post(handlers::payments::test_square),
+        )
+        .route(
+            "/payments/products",
+            post(handlers::payments::create_product),
+        )
         .route(
             "/payments/products/:id",
             put(handlers::payments::update_product).delete(handlers::payments::delete_product),
         )
-        .route("/payments/autopay", post(handlers::payments::create_autopay))
+        .route(
+            "/payments/autopay",
+            post(handlers::payments::create_autopay),
+        )
         .route(
             "/payments/autopay/:id",
             put(handlers::payments::update_autopay).delete(handlers::payments::delete_autopay),
@@ -77,10 +95,16 @@ async fn main() -> anyhow::Result<()> {
         // SSO
         .route("/auth/sso-login", post(handlers::sso::sso_login))
         // Address suggestions (public)
-        .route("/address-suggestions", get(handlers::misc::address_suggestions))
+        .route(
+            "/address-suggestions",
+            get(handlers::misc::address_suggestions),
+        )
         // Documents
         .route("/documents/proxy", get(handlers::documents::proxy))
-        .route("/admin/migrate-documents-to-s3", post(handlers::documents::migrate_to_s3))
+        .route(
+            "/admin/migrate-documents-to-s3",
+            post(handlers::documents::migrate_to_s3),
+        )
         // Vantage simulator (stub)
         .route("/simulator/vantage", post(handlers::misc::vantage))
         // Training
@@ -99,12 +123,24 @@ async fn main() -> anyhow::Result<()> {
             get(handlers::derogatory::get_derogatory),
         )
         // Billing
-        .route("/billing/failed-payments", get(handlers::billing::failed_payments))
-        .route("/billing/safe-query-all-failed-trans", post(handlers::billing::safe_query))
+        .route(
+            "/billing/failed-payments",
+            get(handlers::billing::failed_payments),
+        )
+        .route(
+            "/billing/safe-query-all-failed-trans",
+            post(handlers::billing::safe_query),
+        )
         // Affiliate links
         .route("/affiliate-links", get(handlers::affiliate::list_links))
-        .route("/affiliate-links/credit-builder", put(handlers::affiliate::put_builder))
-        .route("/affiliate-links/credit-monitoring", put(handlers::affiliate::put_monitoring))
+        .route(
+            "/affiliate-links/credit-builder",
+            put(handlers::affiliate::put_builder),
+        )
+        .route(
+            "/affiliate-links/credit-monitoring",
+            put(handlers::affiliate::put_monitoring),
+        )
         // Letter templates
         .route(
             "/templates",
@@ -130,7 +166,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .route(
             "/alternate/:id",
-            put(handlers::alternate::update_alternate).delete(handlers::alternate::delete_alternate),
+            put(handlers::alternate::update_alternate)
+                .delete(handlers::alternate::delete_alternate),
         )
         // Creditor contacts
         .route(
@@ -145,27 +182,59 @@ async fn main() -> anyhow::Result<()> {
         .route("/client-statuses", post(handlers::misc::add_status))
         .route("/client-phases", post(handlers::misc::add_phase))
         // Uploads
-        .route("/uploads/text-attachment", post(handlers::misc::upload_text_attachment))
+        .route(
+            "/uploads/text-attachment",
+            post(handlers::misc::upload_text_attachment),
+        )
         .route("/uploads/presign", post(handlers::uploads::presign))
         // Clients full CRUD
-        .route("/clients", get(handlers::clients::list_clients).post(handlers::misc::create_client))
+        .route(
+            "/clients",
+            get(handlers::clients::list_clients).post(handlers::misc::create_client),
+        )
         .route(
             "/clients/:id",
             get(handlers::clients::get_client).delete(handlers::clients::delete_client),
         )
-        .route("/clients/:id/status", axum::routing::patch(handlers::clients::patch_status))
-        .route("/clients/:id/phase", axum::routing::patch(handlers::clients::patch_phase))
-        .route("/clients/:id/next-import", axum::routing::patch(handlers::clients::patch_next_import))
-        .route("/clients/:id/financial-profile", axum::routing::patch(handlers::clients::patch_financial))
-        .route("/clients/:id/profile", axum::routing::patch(handlers::clients::patch_profile))
-        .route("/clients/:id/refresh-report", post(handlers::clients::refresh_report))
-        .route("/clients/:id/documents/attach", post(handlers::uploads::attach))
+        .route(
+            "/clients/:id/status",
+            axum::routing::patch(handlers::clients::patch_status),
+        )
+        .route(
+            "/clients/:id/phase",
+            axum::routing::patch(handlers::clients::patch_phase),
+        )
+        .route(
+            "/clients/:id/next-import",
+            axum::routing::patch(handlers::clients::patch_next_import),
+        )
+        .route(
+            "/clients/:id/financial-profile",
+            axum::routing::patch(handlers::clients::patch_financial),
+        )
+        .route(
+            "/clients/:id/profile",
+            axum::routing::patch(handlers::clients::patch_profile),
+        )
+        .route(
+            "/clients/:id/refresh-report",
+            post(handlers::clients::refresh_report),
+        )
+        .route(
+            "/clients/:id/documents/attach",
+            post(handlers::uploads::attach),
+        )
         .route("/report-runs/:id", get(handlers::clients::get_report_run))
         .route("/clients/import-csv", post(handlers::misc::import_csv))
         // Report sync (stubs)
-        .route("/report-sync/identityiq", post(handlers::misc::report_sync_iiq))
-        .route("/report-sync/smartcredit", post(handlers::misc::report_sync_sc));
-
+        .route(
+            "/report-sync/identityiq",
+            post(handlers::misc::report_sync_iiq),
+        )
+        .route(
+            "/report-sync/smartcredit",
+            post(handlers::misc::report_sync_sc),
+        );
 
     // Static file serving + pretty URL aliases (mirrors server.mjs).
     let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "public".into());
@@ -174,14 +243,38 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .nest("/api", api)
         // Pretty URLs — Node served specific HTML for these paths.
-        .route("/billing", get(|| async { Redirect::permanent("/billing.html") }))
-        .route("/payments", get(|| async { Redirect::permanent("/payments.html") }))
-        .route("/add-clients", get(|| async { Redirect::permanent("/add-client.html") }))
-        .route("/add-client", get(|| async { Redirect::permanent("/add-client.html") }))
-        .route("/training", get(|| async { Redirect::permanent("/training.html") }))
-        .route("/Training", get(|| async { Redirect::permanent("/training.html") }))
-        .route("/learning", get(|| async { Redirect::permanent("/learning.html") }))
-        .route("/Learning", get(|| async { Redirect::permanent("/learning.html") }))
+        .route(
+            "/billing",
+            get(|| async { Redirect::permanent("/billing.html") }),
+        )
+        .route(
+            "/payments",
+            get(|| async { Redirect::permanent("/payments.html") }),
+        )
+        .route(
+            "/add-clients",
+            get(|| async { Redirect::permanent("/add-client.html") }),
+        )
+        .route(
+            "/add-client",
+            get(|| async { Redirect::permanent("/add-client.html") }),
+        )
+        .route(
+            "/training",
+            get(|| async { Redirect::permanent("/training.html") }),
+        )
+        .route(
+            "/Training",
+            get(|| async { Redirect::permanent("/training.html") }),
+        )
+        .route(
+            "/learning",
+            get(|| async { Redirect::permanent("/learning.html") }),
+        )
+        .route(
+            "/Learning",
+            get(|| async { Redirect::permanent("/learning.html") }),
+        )
         // Static assets fall through to ServeDir.
         .fallback_service(serve_dir)
         .layer(TraceLayer::new_for_http())
@@ -202,7 +295,9 @@ async fn main() -> anyhow::Result<()> {
     let tcp_listener = tokio::net::TcpListener::bind(&cfg.bind_addr).await?;
     tracing::info!(addr = %cfg.bind_addr, "ninjacore listening (tcp)");
 
-    let unix_socket_path = std::env::var("UNIX_SOCKET").ok().filter(|s| !s.trim().is_empty());
+    let unix_socket_path = std::env::var("UNIX_SOCKET")
+        .ok()
+        .filter(|s| !s.trim().is_empty());
 
     let tcp_app = app.clone();
     let tcp_handle = tokio::spawn(async move {

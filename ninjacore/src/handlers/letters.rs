@@ -39,27 +39,36 @@ fn str_field<'a>(v: &'a Value, key: &str) -> &'a str {
 
 #[derive(Deserialize)]
 pub struct TemplateBody {
-    #[serde(default)] pub title: String,
-    #[serde(default)] pub content: String,
-    #[serde(rename = "type", default)] pub tpl_type: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub content: String,
+    #[serde(rename = "type", default)]
+    pub tpl_type: String,
 }
 
 pub async fn list_templates(
     user: AuthUser,
     State(state): State<AppState>,
 ) -> AppResult<Json<Value>> {
-    let mut resp = state.db
+    let mut resp = state
+        .db
         .query("SELECT * FROM templates WHERE owner = $owner ORDER BY createdAt DESC")
         .bind(("owner", user.username.clone()))
         .await?;
     let rows = crate::db::take_many::<Value>(&mut resp, 0)?;
-    let out: Vec<Value> = rows.iter().map(|r| json!({
-        "id":        rec_key(r),
-        "title":     str_field(r, "title"),
-        "content":   str_field(r, "content"),
-        "type":      str_field(r, "type"),
-        "createdAt": str_field(r, "createdAt"),
-    })).collect();
+    let out: Vec<Value> = rows
+        .iter()
+        .map(|r| {
+            json!({
+                "id":        rec_key(r),
+                "title":     str_field(r, "title"),
+                "content":   str_field(r, "content"),
+                "type":      str_field(r, "type"),
+                "createdAt": str_field(r, "createdAt"),
+            })
+        })
+        .collect();
     Ok(Json(json!({ "templates": out })))
 }
 
@@ -72,7 +81,11 @@ pub async fn create_template(
         return Err(AppError::BadRequest("title is required".into()));
     }
     let id = Uuid::new_v4().simple().to_string();
-    let tpl_type = if body.tpl_type.trim().is_empty() { "all" } else { body.tpl_type.trim() };
+    let tpl_type = if body.tpl_type.trim().is_empty() {
+        "all"
+    } else {
+        body.tpl_type.trim()
+    };
     state.db
         .query("CREATE type::thing('templates', $id) SET title = $title, content = $content, type = $type, owner = $owner, createdAt = time::now()")
         .bind(("id",      id.clone()))
@@ -90,7 +103,11 @@ pub async fn update_template(
     Path(id): Path<String>,
     Json(body): Json<TemplateBody>,
 ) -> AppResult<Json<Value>> {
-    let tpl_type = if body.tpl_type.trim().is_empty() { "all" } else { body.tpl_type.trim() };
+    let tpl_type = if body.tpl_type.trim().is_empty() {
+        "all"
+    } else {
+        body.tpl_type.trim()
+    };
     let mut resp = state.db
         .query("UPDATE type::thing('templates', $id) SET title = $title, content = $content, type = $type WHERE owner = $owner RETURN AFTER")
         .bind(("id",      id.clone()))
@@ -109,9 +126,10 @@ pub async fn delete_template(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
-    let mut resp = state.db
+    let mut resp = state
+        .db
         .query("DELETE type::thing('templates', $id) WHERE owner = $owner RETURN BEFORE")
-        .bind(("id",    id.clone()))
+        .bind(("id", id.clone()))
         .bind(("owner", user.username.clone()))
         .await?;
     let deleted: Option<Value> = crate::db::take_one(&mut resp, 0)?;
@@ -125,27 +143,36 @@ pub async fn delete_template(
 
 #[derive(Deserialize)]
 pub struct ParagraphBody {
-    #[serde(default)] pub title: String,
-    #[serde(default)] pub content: String,
-    #[serde(default)] pub category: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub category: String,
 }
 
 pub async fn list_paragraphs(
     user: AuthUser,
     State(state): State<AppState>,
 ) -> AppResult<Json<Value>> {
-    let mut resp = state.db
+    let mut resp = state
+        .db
         .query("SELECT * FROM paragraphs WHERE owner = $owner ORDER BY createdAt DESC")
         .bind(("owner", user.username.clone()))
         .await?;
     let rows = crate::db::take_many::<Value>(&mut resp, 0)?;
-    let out: Vec<Value> = rows.iter().map(|r| json!({
-        "id":        rec_key(r),
-        "title":     str_field(r, "title"),
-        "content":   str_field(r, "content"),
-        "category":  str_field(r, "category"),
-        "createdAt": str_field(r, "createdAt"),
-    })).collect();
+    let out: Vec<Value> = rows
+        .iter()
+        .map(|r| {
+            json!({
+                "id":        rec_key(r),
+                "title":     str_field(r, "title"),
+                "content":   str_field(r, "content"),
+                "category":  str_field(r, "category"),
+                "createdAt": str_field(r, "createdAt"),
+            })
+        })
+        .collect();
     Ok(Json(json!({ "paragraphs": out })))
 }
 
@@ -193,9 +220,10 @@ pub async fn delete_paragraph(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
-    let mut resp = state.db
+    let mut resp = state
+        .db
         .query("DELETE type::thing('paragraphs', $id) WHERE owner = $owner RETURN BEFORE")
-        .bind(("id",    id.clone()))
+        .bind(("id", id.clone()))
         .bind(("owner", user.username.clone()))
         .await?;
     let deleted: Option<Value> = crate::db::take_one(&mut resp, 0)?;

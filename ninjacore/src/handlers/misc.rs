@@ -24,7 +24,8 @@ use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct AddressQuery {
-    #[serde(default)] pub q: Option<String>,
+    #[serde(default)]
+    pub q: Option<String>,
 }
 
 pub async fn address_suggestions(Query(q): Query<AddressQuery>) -> AppResult<Json<Value>> {
@@ -87,12 +88,17 @@ const PHASES_KEY: &str = "taxonomy.client_phases";
 
 #[derive(Deserialize)]
 pub struct TaxonomyBody {
-    #[serde(default)] pub value: Option<String>,
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
 async fn append_taxonomy(state: &AppState, key: &str, value: &str) -> AppResult<Vec<String>> {
-    #[derive(Deserialize)] struct Row { value_json: String }
-    let mut __resp = state.db
+    #[derive(Deserialize)]
+    struct Row {
+        value_json: String,
+    }
+    let mut __resp = state
+        .db
         .query("SELECT value_json FROM settings WHERE setting_key = $k LIMIT 1")
         .bind(("k", key.to_string()))
         .await?;
@@ -105,8 +111,11 @@ async fn append_taxonomy(state: &AppState, key: &str, value: &str) -> AppResult<
         list.push(v.to_string());
     }
     let payload = serde_json::to_string(&list).unwrap();
-    state.db
-        .query("UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()")
+    state
+        .db
+        .query(
+            "UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()",
+        )
         .bind(("k", key.to_string()))
         .bind(("v", payload))
         .await?;
@@ -118,7 +127,9 @@ pub async fn add_status(
     State(state): State<AppState>,
     Json(body): Json<TaxonomyBody>,
 ) -> AppResult<Json<Value>> {
-    let v = body.value.ok_or_else(|| AppError::BadRequest("value required".into()))?;
+    let v = body
+        .value
+        .ok_or_else(|| AppError::BadRequest("value required".into()))?;
     let list = append_taxonomy(&state, STATUSES_KEY, &v).await?;
     Ok(Json(json!({ "ok": true, "statuses": list })))
 }
@@ -128,7 +139,9 @@ pub async fn add_phase(
     State(state): State<AppState>,
     Json(body): Json<TaxonomyBody>,
 ) -> AppResult<Json<Value>> {
-    let v = body.value.ok_or_else(|| AppError::BadRequest("value required".into()))?;
+    let v = body
+        .value
+        .ok_or_else(|| AppError::BadRequest("value required".into()))?;
     let list = append_taxonomy(&state, PHASES_KEY, &v).await?;
     Ok(Json(json!({ "ok": true, "phases": list })))
 }
@@ -137,10 +150,14 @@ pub async fn add_phase(
 
 #[derive(Deserialize)]
 pub struct TextAttachmentBody {
-    #[serde(default, rename = "clientId")] pub client_id: Option<String>,
-    #[serde(default)] pub filename: Option<String>,
-    #[serde(default, rename = "contentType")] pub content_type: Option<String>,
-    #[serde(default)] pub text: Option<String>,
+    #[serde(default, rename = "clientId")]
+    pub client_id: Option<String>,
+    #[serde(default)]
+    pub filename: Option<String>,
+    #[serde(default, rename = "contentType")]
+    pub content_type: Option<String>,
+    #[serde(default)]
+    pub text: Option<String>,
 }
 
 pub async fn upload_text_attachment(
@@ -148,7 +165,9 @@ pub async fn upload_text_attachment(
     State(state): State<AppState>,
     Json(body): Json<TextAttachmentBody>,
 ) -> AppResult<Json<Value>> {
-    let client_id = body.client_id.ok_or_else(|| AppError::BadRequest("clientId required".into()))?;
+    let client_id = body
+        .client_id
+        .ok_or_else(|| AppError::BadRequest("clientId required".into()))?;
     let filename = body.filename.unwrap_or_else(|| "attachment.txt".into());
     let content_type = body.content_type.unwrap_or_else(|| "text/plain".into());
     let text = body.text.unwrap_or_default();
@@ -176,18 +195,30 @@ pub async fn upload_text_attachment(
 
 #[derive(Deserialize, Serialize, Default)]
 pub struct NewClient {
-    #[serde(default, rename = "firstName")] pub first_name: String,
-    #[serde(default, rename = "lastName")] pub last_name: String,
-    #[serde(default)] pub email: String,
-    #[serde(default)] pub phone: String,
-    #[serde(default)] pub status: Option<String>,
-    #[serde(default)] pub phase: Option<String>,
-    #[serde(default)] pub address: String,
-    #[serde(default)] pub dob: String,
-    #[serde(default)] pub ssn: String,
-    #[serde(default)] pub goal: String,
-    #[serde(default)] pub notes: String,
-    #[serde(flatten)] pub extra: serde_json::Map<String, Value>,
+    #[serde(default, rename = "firstName")]
+    pub first_name: String,
+    #[serde(default, rename = "lastName")]
+    pub last_name: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub phone: String,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub phase: Option<String>,
+    #[serde(default)]
+    pub address: String,
+    #[serde(default)]
+    pub dob: String,
+    #[serde(default)]
+    pub ssn: String,
+    #[serde(default)]
+    pub goal: String,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, Value>,
 }
 
 pub async fn create_client(
@@ -196,22 +227,27 @@ pub async fn create_client(
     Json(body): Json<NewClient>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     if body.first_name.trim().is_empty() || body.last_name.trim().is_empty() {
-        return Err(AppError::BadRequest("firstName and lastName are required".into()));
+        return Err(AppError::BadRequest(
+            "firstName and lastName are required".into(),
+        ));
     }
     let status = body.status.clone().unwrap_or_else(|| "Lead".into());
     let phase = body.phase.clone().unwrap_or_else(|| "None".into());
     let email_n = body.email.trim().to_lowercase();
     let phone_n: String = body.phone.chars().filter(|c| c.is_ascii_digit()).collect();
 
-    let mut __resp = state.db
-        .query("CREATE client SET \
+    let mut __resp = state
+        .db
+        .query(
+            "CREATE client SET \
             first_name = $fn, last_name = $ln, email = $email, phone = $phone, \
             email_n = $em, phone_n = $ph, \
             status = $status, phase = $phase, \
             address = $address, dob = $dob, ssn = $ssn, \
             goal = $goal, notes = $notes, extra = $extra, \
             created_at = time::now(), updated_at = time::now() \
-            RETURN AFTER")
+            RETURN AFTER",
+        )
         .bind(("fn", body.first_name))
         .bind(("ln", body.last_name))
         .bind(("email", body.email))
@@ -228,7 +264,10 @@ pub async fn create_client(
         .bind(("extra", Value::Object(body.extra)))
         .await?;
     let created: Option<Value> = crate::db::take_one(&mut __resp, 0)?;
-    Ok((StatusCode::CREATED, Json(json!({ "ok": true, "client": created }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "ok": true, "client": created })),
+    ))
 }
 
 // ─── clients/import-csv ───────────────────────────────────────────────────
@@ -265,12 +304,18 @@ pub async fn import_csv(
 
     for row in body.rows {
         let pick = |key: &str| -> String {
-            row.get(key).and_then(|v| v.as_str()).unwrap_or("").trim().to_string()
+            row.get(key)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string()
         };
         let pick_alt = |keys: &[&str]| -> String {
             for k in keys {
                 let v = pick(k);
-                if !v.is_empty() { return v; }
+                if !v.is_empty() {
+                    return v;
+                }
             }
             String::new()
         };
@@ -287,11 +332,19 @@ pub async fn import_csv(
         let ssn = normalize_ssn(&pick_alt(&["ssn", "SSN"]));
         let status = {
             let s = pick("status");
-            if s.is_empty() { "Client".into() } else { s }
+            if s.is_empty() {
+                "Client".into()
+            } else {
+                s
+            }
         };
         let phase = {
             let p = pick("phase");
-            if p.is_empty() { "None".into() } else { p }
+            if p.is_empty() {
+                "None".into()
+            } else {
+                p
+            }
         };
         let next_import_int = pick("nextImportInt");
         let next_import_label = pick("nextImportLabel");
@@ -332,26 +385,36 @@ pub async fn import_csv(
             "updated_at": now_iso,
             "_rid": synthetic, // consumed below
         });
-        if !statuses_seen.iter().any(|s| s.eq_ignore_ascii_case(doc["status"].as_str().unwrap_or(""))) {
+        if !statuses_seen
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case(doc["status"].as_str().unwrap_or("")))
+        {
             statuses_seen.push(doc["status"].as_str().unwrap_or("").to_string());
         }
-        if !phases_seen.iter().any(|p| p.eq_ignore_ascii_case(doc["phase"].as_str().unwrap_or(""))) {
+        if !phases_seen
+            .iter()
+            .any(|p| p.eq_ignore_ascii_case(doc["phase"].as_str().unwrap_or("")))
+        {
             phases_seen.push(doc["phase"].as_str().unwrap_or("").to_string());
         }
         prepared.push(doc);
     }
 
     if prepared.is_empty() {
-        return Err(AppError::BadRequest("No valid clients were found in the CSV.".into()));
+        return Err(AppError::BadRequest(
+            "No valid clients were found in the CSV.".into(),
+        ));
     }
 
     // Per-row create — each gets its synthetic composite record id via type::thing.
     for mut doc in prepared.iter().cloned() {
-        let rid = doc.as_object_mut()
+        let rid = doc
+            .as_object_mut()
             .and_then(|o| o.remove("_rid"))
             .and_then(|v| v.as_str().map(str::to_string))
             .unwrap_or_else(|| format!("csv_{}", uuid::Uuid::new_v4().simple()));
-        state.db
+        state
+            .db
             .query("CREATE type::thing('clients', $rid) CONTENT $doc RETURN NONE")
             .bind(("rid", rid))
             .bind(("doc", doc))
@@ -363,17 +426,24 @@ pub async fn import_csv(
     let _ = extend_taxonomy(&state, "taxonomy.client_phases", &phases_seen).await;
 
     let safe_clients: Vec<Value> = prepared.into_iter().map(safe_csv_client).collect();
-    Ok((StatusCode::CREATED, Json(json!({
-        "ok": true,
-        "importedCount": safe_clients.len(),
-        "clients": safe_clients,
-    }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "ok": true,
+            "importedCount": safe_clients.len(),
+            "clients": safe_clients,
+        })),
+    ))
 }
 
 fn normalize_dob(raw: &str) -> String {
     let t = raw.trim();
-    if t.is_empty() { return String::new(); }
-    if t.len() == 10 && t.as_bytes()[4] == b'-' && t.as_bytes()[7] == b'-' { return t.to_string(); }
+    if t.is_empty() {
+        return String::new();
+    }
+    if t.len() == 10 && t.as_bytes()[4] == b'-' && t.as_bytes()[7] == b'-' {
+        return t.to_string();
+    }
     if t.len() == 10 && (t.as_bytes()[2] == b'/' || t.as_bytes()[2] == b'-') {
         let (m, rest) = t.split_at(2);
         let (_s1, rest) = rest.split_at(1);
@@ -386,7 +456,9 @@ fn normalize_dob(raw: &str) -> String {
 
 fn normalize_ssn(raw: &str) -> String {
     let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
-    if digits.len() != 9 { return raw.trim().to_string(); }
+    if digits.len() != 9 {
+        return raw.trim().to_string();
+    }
     format!("{}-{}-{}", &digits[..3], &digits[3..5], &digits[5..])
 }
 
@@ -404,7 +476,10 @@ fn safe_csv_client(mut v: Value) -> Value {
         if let Some(ssn) = obj.get("ssn").and_then(|s| s.as_str()) {
             let digits: String = ssn.chars().filter(|c| c.is_ascii_digit()).collect();
             if digits.len() >= 4 {
-                obj.insert("ssn".into(), Value::String(format!("***-**-{}", &digits[digits.len()-4..])));
+                obj.insert(
+                    "ssn".into(),
+                    Value::String(format!("***-**-{}", &digits[digits.len() - 4..])),
+                );
             }
         }
     }
@@ -412,9 +487,15 @@ fn safe_csv_client(mut v: Value) -> Value {
 }
 
 async fn extend_taxonomy(state: &AppState, key: &str, values: &[String]) -> AppResult<()> {
-    if values.is_empty() { return Ok(()); }
-    #[derive(Deserialize)] struct Row { value_json: String }
-    let mut __resp = state.db
+    if values.is_empty() {
+        return Ok(());
+    }
+    #[derive(Deserialize)]
+    struct Row {
+        value_json: String,
+    }
+    let mut __resp = state
+        .db
         .query("SELECT value_json FROM settings WHERE setting_key = $k LIMIT 1")
         .bind(("k", key.to_string()))
         .await?;
@@ -424,12 +505,17 @@ async fn extend_taxonomy(state: &AppState, key: &str, values: &[String]) -> AppR
         .unwrap_or_default();
     for v in values {
         let t = v.trim();
-        if t.is_empty() || list.iter().any(|x| x.eq_ignore_ascii_case(t)) { continue; }
+        if t.is_empty() || list.iter().any(|x| x.eq_ignore_ascii_case(t)) {
+            continue;
+        }
         list.push(t.to_string());
     }
     let payload = serde_json::to_string(&list).unwrap_or("[]".into());
-    state.db
-        .query("UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()")
+    state
+        .db
+        .query(
+            "UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()",
+        )
         .bind(("k", key.to_string()))
         .bind(("v", payload))
         .await?;
@@ -442,19 +528,32 @@ async fn extend_taxonomy(state: &AppState, key: &str, values: &[String]) -> AppR
 
 #[derive(Deserialize)]
 pub struct ReportSyncBody {
-    #[serde(default, rename = "clientId")] pub client_id: Option<String>,
-    #[serde(default, rename = "firstName")] pub first_name: Option<String>,
-    #[serde(default, rename = "lastName")] pub last_name: Option<String>,
-    #[serde(default)] pub email: Option<String>,
-    #[serde(default, rename = "monitoringUsername")] pub monitoring_username: Option<String>,
-    #[serde(default, rename = "monitoringPassword")] pub monitoring_password: Option<String>,
-    #[serde(default, rename = "reportHtml")] pub report_html: Option<String>,
-    #[serde(default, rename = "reportJson")] pub report_json: Option<Value>,
-    #[serde(default, rename = "reportJsonRaw")] pub report_json_raw: Option<String>,
-    #[serde(default, rename = "creditReportFileName")] pub credit_report_file_name: Option<String>,
-    #[serde(default, rename = "creditReportSource")] pub credit_report_source: Option<String>,
-    #[serde(default, rename = "creditReportSource")] pub monitoring_agency: Option<String>,
-    #[serde(default, rename = "responseUrl")] pub response_url: Option<String>,
+    #[serde(default, rename = "clientId")]
+    pub client_id: Option<String>,
+    #[serde(default, rename = "firstName")]
+    pub first_name: Option<String>,
+    #[serde(default, rename = "lastName")]
+    pub last_name: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default, rename = "monitoringUsername")]
+    pub monitoring_username: Option<String>,
+    #[serde(default, rename = "monitoringPassword")]
+    pub monitoring_password: Option<String>,
+    #[serde(default, rename = "reportHtml")]
+    pub report_html: Option<String>,
+    #[serde(default, rename = "reportJson")]
+    pub report_json: Option<Value>,
+    #[serde(default, rename = "reportJsonRaw")]
+    pub report_json_raw: Option<String>,
+    #[serde(default, rename = "creditReportFileName")]
+    pub credit_report_file_name: Option<String>,
+    #[serde(default, rename = "creditReportSource")]
+    pub credit_report_source: Option<String>,
+    #[serde(default, rename = "creditReportSource")]
+    pub monitoring_agency: Option<String>,
+    #[serde(default, rename = "responseUrl")]
+    pub response_url: Option<String>,
 }
 
 fn advance_client_phase(phase: &str) -> String {
@@ -495,9 +594,20 @@ async fn find_client_for_sync(
         }
     }
 
-    let fn_val = first_name.as_ref().map(|s| s.trim()).unwrap_or("").to_lowercase();
-    let ln_val = last_name.as_ref().map(|s| s.trim()).unwrap_or("").to_lowercase();
-    let em_val = email.as_ref().map(|s| s.trim().to_lowercase()).unwrap_or_default();
+    let fn_val = first_name
+        .as_ref()
+        .map(|s| s.trim())
+        .unwrap_or("")
+        .to_lowercase();
+    let ln_val = last_name
+        .as_ref()
+        .map(|s| s.trim())
+        .unwrap_or("")
+        .to_lowercase();
+    let em_val = email
+        .as_ref()
+        .map(|s| s.trim().to_lowercase())
+        .unwrap_or_default();
 
     if !fn_val.is_empty() && !ln_val.is_empty() {
         let mut __resp = state
@@ -543,7 +653,10 @@ struct ReportHistoryItem {
     created_at: String,
 }
 
-async fn list_report_history(state: &AppState, client_id: &str) -> AppResult<Vec<ReportHistoryItem>> {
+async fn list_report_history(
+    state: &AppState,
+    client_id: &str,
+) -> AppResult<Vec<ReportHistoryItem>> {
     #[derive(Deserialize)]
     struct ReportRow {
         id: String,
@@ -577,9 +690,7 @@ async fn list_report_history(state: &AppState, client_id: &str) -> AppResult<Vec
 }
 
 fn get_today_iso_date() -> String {
-    time::OffsetDateTime::now_utc()
-        .date()
-        .to_string()
+    time::OffsetDateTime::now_utc().date().to_string()
 }
 
 pub async fn report_sync_iiq(
@@ -587,10 +698,26 @@ pub async fn report_sync_iiq(
     State(state): State<AppState>,
     Json(body): Json<ReportSyncBody>,
 ) -> AppResult<Json<Value>> {
-    let client_id = body.client_id.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
-    let first_name = body.first_name.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
-    let last_name = body.last_name.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
-    let email = body.email.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
+    let client_id = body
+        .client_id
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let first_name = body
+        .first_name
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let last_name = body
+        .last_name
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let email = body
+        .email
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
 
     if client_id.is_none() && (first_name.is_none() || last_name.is_none()) {
         return Err(AppError::BadRequest(
@@ -598,9 +725,17 @@ pub async fn report_sync_iiq(
         ));
     }
 
-    let client = find_client_for_sync(&state, &body.client_id, &body.first_name, &body.last_name, &body.email)
-        .await?
-        .ok_or_else(|| AppError::BadRequest("No matching client was found for this IdentityIQ report sync.".into()))?;
+    let client = find_client_for_sync(
+        &state,
+        &body.client_id,
+        &body.first_name,
+        &body.last_name,
+        &body.email,
+    )
+    .await?
+    .ok_or_else(|| {
+        AppError::BadRequest("No matching client was found for this IdentityIQ report sync.".into())
+    })?;
 
     let client_id_str = client
         .get("id")
@@ -633,7 +768,9 @@ pub async fn report_sync_iiq(
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_default();
     let report_date = get_today_iso_date();
-    let monitoring_agency = body.monitoring_agency.unwrap_or_else(|| "IdentityIQ".to_string());
+    let monitoring_agency = body
+        .monitoring_agency
+        .unwrap_or_else(|| "IdentityIQ".to_string());
 
     let report_file_name = body
         .credit_report_file_name
@@ -698,8 +835,7 @@ pub async fn report_sync_iiq(
         .query("SELECT * FROM clients WHERE id = $id LIMIT 1")
         .bind(("id", client_id_str))
         .await?;
-    let updated_client: Value = crate::db::take_one(&mut __resp, 0)?
-        .unwrap_or(json!({}));
+    let updated_client: Value = crate::db::take_one(&mut __resp, 0)?.unwrap_or(json!({}));
 
     Ok(Json(json!({
         "ok": true,
@@ -714,11 +850,31 @@ pub async fn report_sync_sc(
     State(state): State<AppState>,
     Json(body): Json<ReportSyncBody>,
 ) -> AppResult<Json<Value>> {
-    let client_id = body.client_id.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
-    let first_name = body.first_name.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
-    let last_name = body.last_name.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
-    let email = body.email.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
-    let monitoring_username = body.monitoring_username.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty());
+    let client_id = body
+        .client_id
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let first_name = body
+        .first_name
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let last_name = body
+        .last_name
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let email = body
+        .email
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let monitoring_username = body
+        .monitoring_username
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
 
     let report_json = if let Some(raw) = &body.report_json_raw {
         raw.clone()
@@ -734,9 +890,13 @@ pub async fn report_sync_sc(
         ));
     }
 
-    if client_id.is_none() && (first_name.is_none() || last_name.is_none()) && monitoring_username.is_none() {
+    if client_id.is_none()
+        && (first_name.is_none() || last_name.is_none())
+        && monitoring_username.is_none()
+    {
         return Err(AppError::BadRequest(
-            "A matching SmartCredit sync needs either first/last name or a monitoring username.".into(),
+            "A matching SmartCredit sync needs either first/last name or a monitoring username."
+                .into(),
         ));
     }
 
@@ -835,8 +995,7 @@ pub async fn report_sync_sc(
         .query("SELECT * FROM clients WHERE id = $id LIMIT 1")
         .bind(("id", client_id_str))
         .await?;
-    let updated_client: Value = crate::db::take_one(&mut __resp, 0)?
-        .unwrap_or(json!({}));
+    let updated_client: Value = crate::db::take_one(&mut __resp, 0)?.unwrap_or(json!({}));
 
     Ok(Json(json!({
         "ok": true,
@@ -872,7 +1031,10 @@ pub async fn forward_report_to_flow1_api(
     let token = match std::env::var("INTERNAL_SYNC_TOKEN") {
         Ok(t) if !t.trim().is_empty() => t,
         _ => {
-            tracing::warn!("Flow 1 bridge skipped for client {}: INTERNAL_SYNC_TOKEN unset", cid_numeric);
+            tracing::warn!(
+                "Flow 1 bridge skipped for client {}: INTERNAL_SYNC_TOKEN unset",
+                cid_numeric
+            );
             return;
         }
     };
@@ -882,7 +1044,11 @@ pub async fn forward_report_to_flow1_api(
     let report_json: serde_json::Value = match serde_json::from_str(&report_json_str) {
         Ok(v) => v,
         Err(e) => {
-            tracing::warn!("Flow 1 bridge for client {} skipped — unparseable report JSON: {}", cid_numeric, e);
+            tracing::warn!(
+                "Flow 1 bridge for client {} skipped — unparseable report JSON: {}",
+                cid_numeric,
+                e
+            );
             return;
         }
     };
@@ -900,7 +1066,11 @@ pub async fn forward_report_to_flow1_api(
     {
         Ok(c) => c,
         Err(e) => {
-            tracing::error!("Flow 1 bridge: reqwest builder failed for client {}: {}", cid_numeric, e);
+            tracing::error!(
+                "Flow 1 bridge: reqwest builder failed for client {}: {}",
+                cid_numeric,
+                e
+            );
             return;
         }
     };
@@ -919,11 +1089,20 @@ pub async fn forward_report_to_flow1_api(
             if status.is_success() {
                 tracing::info!("Flow 1 bridge ok for client {}: {}", cid_numeric, txt);
             } else {
-                tracing::warn!("Flow 1 bridge non-200 for client {}: HTTP {} {}", cid_numeric, status, txt);
+                tracing::warn!(
+                    "Flow 1 bridge non-200 for client {}: HTTP {} {}",
+                    cid_numeric,
+                    status,
+                    txt
+                );
             }
         }
         Err(e) => {
-            tracing::warn!("Flow 1 bridge send failed for client {}: {}", cid_numeric, e);
+            tracing::warn!(
+                "Flow 1 bridge send failed for client {}: {}",
+                cid_numeric,
+                e
+            );
         }
     }
 }

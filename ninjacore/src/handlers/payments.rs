@@ -39,10 +39,18 @@ pub struct PaymentConfig {
     pub timezone: String,
 }
 
-fn default_retry_count() -> i64 { 3 }
-fn default_retry_freq() -> i64 { 7 }
-fn default_run_time() -> String { "09:00".into() }
-fn default_timezone() -> String { "America/Chicago".into() }
+fn default_retry_count() -> i64 {
+    3
+}
+fn default_retry_freq() -> i64 {
+    7
+}
+fn default_run_time() -> String {
+    "09:00".into()
+}
+fn default_timezone() -> String {
+    "America/Chicago".into()
+}
 
 impl Default for PaymentConfig {
     fn default() -> Self {
@@ -59,8 +67,12 @@ impl Default for PaymentConfig {
 const CONFIG_KEY: &str = "payments.config";
 
 async fn load_payment_config(state: &AppState) -> AppResult<PaymentConfig> {
-    #[derive(Deserialize)] struct Row { value_json: String }
-    let mut __resp = state.db
+    #[derive(Deserialize)]
+    struct Row {
+        value_json: String,
+    }
+    let mut __resp = state
+        .db
         .query("SELECT value_json FROM settings WHERE setting_key = $k LIMIT 1")
         .bind(("k", CONFIG_KEY))
         .await?;
@@ -71,10 +83,12 @@ async fn load_payment_config(state: &AppState) -> AppResult<PaymentConfig> {
 }
 
 async fn save_payment_config(state: &AppState, cfg: &PaymentConfig) -> AppResult<()> {
-    let payload = serde_json::to_string(cfg)
-        .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
-    state.db
-        .query("UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()")
+    let payload = serde_json::to_string(cfg).map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
+    state
+        .db
+        .query(
+            "UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()",
+        )
         .bind(("k", CONFIG_KEY))
         .bind(("v", payload))
         .await?;
@@ -148,7 +162,9 @@ pub struct OwnerQuery {
 async fn next_id(state: &AppState, table: &str) -> AppResult<i64> {
     let mut resp = state
         .db
-        .query(format!("SELECT VALUE math::max(id) FROM {table} WHERE owner_key = $o GROUP ALL"))
+        .query(format!(
+            "SELECT VALUE math::max(id) FROM {table} WHERE owner_key = $o GROUP ALL"
+        ))
         .bind(("o", OWNER_KEY))
         .await?;
     let max: Option<i64> = crate::db::take_one(&mut resp, 0)?;
@@ -224,9 +240,18 @@ pub async fn overview(
         list_payment_clients(&state),
     )?;
 
-    let client_name: HashMap<&str, &str> = clients.iter().map(|c| (c.id.as_str(), c.name.as_str())).collect();
-    let merchant_name: HashMap<i64, &str> = merchants.iter().map(|m| (m.id, m.merchant_name.as_str())).collect();
-    let product_name: HashMap<i64, &str> = products.iter().map(|p| (p.id, p.product_name.as_str())).collect();
+    let client_name: HashMap<&str, &str> = clients
+        .iter()
+        .map(|c| (c.id.as_str(), c.name.as_str()))
+        .collect();
+    let merchant_name: HashMap<i64, &str> = merchants
+        .iter()
+        .map(|m| (m.id, m.merchant_name.as_str()))
+        .collect();
+    let product_name: HashMap<i64, &str> = products
+        .iter()
+        .map(|p| (p.id, p.product_name.as_str()))
+        .collect();
 
     let now_ms = time::OffsetDateTime::now_utc().unix_timestamp() * 1000;
     let seven_days_ms = 7 * 24 * 60 * 60 * 1000;
@@ -237,7 +262,10 @@ pub async fn overview(
         .filter(|r| {
             r.next_charge_at
                 .as_deref()
-                .and_then(|s| time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339).ok())
+                .and_then(|s| {
+                    time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339)
+                        .ok()
+                })
                 .map(|t| t.unix_timestamp() * 1000 <= now_ms + seven_days_ms)
                 .unwrap_or(false)
         })
@@ -246,9 +274,21 @@ pub async fn overview(
     let autopay: Vec<Value> = autopay_rows
         .into_iter()
         .map(|r| {
-            let cn = client_name.get(r.client_id.as_str()).copied().unwrap_or("Unknown Client").to_string();
-            let mn = r.merchant_id.and_then(|i| merchant_name.get(&i).copied()).unwrap_or("--").to_string();
-            let pn = r.product_id.and_then(|i| product_name.get(&i).copied()).unwrap_or("Custom Charge").to_string();
+            let cn = client_name
+                .get(r.client_id.as_str())
+                .copied()
+                .unwrap_or("Unknown Client")
+                .to_string();
+            let mn = r
+                .merchant_id
+                .and_then(|i| merchant_name.get(&i).copied())
+                .unwrap_or("--")
+                .to_string();
+            let pn = r
+                .product_id
+                .and_then(|i| product_name.get(&i).copied())
+                .unwrap_or("Custom Charge")
+                .to_string();
             let mut v = serde_json::to_value(&r).unwrap();
             v["clientName"] = Value::String(cn);
             v["merchantName"] = Value::String(mn);
@@ -287,7 +327,9 @@ pub async fn put_config(
     Json(cfg): Json<PaymentConfig>,
 ) -> AppResult<Json<Value>> {
     save_payment_config(&state, &cfg).await?;
-    Ok(Json(json!({ "ok": true, "ownerKey": OWNER_KEY, "config": cfg })))
+    Ok(Json(
+        json!({ "ok": true, "ownerKey": OWNER_KEY, "config": cfg }),
+    ))
 }
 
 // ─── Merchants CRUD ───────────────────────────────────────────────────────
@@ -310,7 +352,10 @@ pub async fn create_merchant(
         .bind(("tk", body.transaction_key.clone()))
         .bind(("nt", body.notes.clone()))
         .await?;
-    Ok((StatusCode::CREATED, Json(json!({ "ok": true, "merchant": body }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "ok": true, "merchant": body })),
+    ))
 }
 
 pub async fn update_merchant(
@@ -374,7 +419,10 @@ pub async fn create_product(
         .bind(("mid", body.merchant_id))
         .bind(("nt", body.notes.clone()))
         .await?;
-    Ok((StatusCode::CREATED, Json(json!({ "ok": true, "product": body }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "ok": true, "product": body })),
+    ))
 }
 
 pub async fn update_product(
@@ -439,7 +487,10 @@ pub async fn create_autopay(
         .bind(("amt", body.amount))
         .bind(("nt", body.notes.clone()))
         .await?;
-    Ok((StatusCode::CREATED, Json(json!({ "ok": true, "autopay": body }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "ok": true, "autopay": body })),
+    ))
 }
 
 pub async fn update_autopay(
@@ -509,7 +560,9 @@ pub async fn test_square(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| AppError::BadRequest("Square access token is missing on the selected merchant.".into()))?;
+        .ok_or_else(|| {
+            AppError::BadRequest("Square access token is missing on the selected merchant.".into())
+        })?;
 
     let lookback = body.days_back.unwrap_or(2).clamp(1, 30);
     let begin_ts = time::OffsetDateTime::now_utc() - time::Duration::days(lookback);
@@ -520,7 +573,11 @@ pub async fn test_square(
     let client = crate::http::shared();
     let resp = client
         .get("https://connect.squareup.com/v2/payments")
-        .query(&[("begin_time", begin_time.as_str()), ("sort_order", "DESC"), ("limit", "25")])
+        .query(&[
+            ("begin_time", begin_time.as_str()),
+            ("sort_order", "DESC"),
+            ("limit", "25"),
+        ])
         .bearer_auth(token)
         .header("Square-Version", "2025-10-16")
         .header("Accept", "application/json")
@@ -542,7 +599,11 @@ pub async fn test_square(
             .unwrap_or_default();
         return Err(AppError::BadRequest(format!(
             "Square API error ({status}){}",
-            if detail.is_empty() { String::new() } else { format!(": {detail}") }
+            if detail.is_empty() {
+                String::new()
+            } else {
+                format!(": {detail}")
+            }
         )));
     }
 

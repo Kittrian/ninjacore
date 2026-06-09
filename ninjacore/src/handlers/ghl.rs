@@ -52,11 +52,17 @@ pub async fn webhook(
     Json(body): Json<Value>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let required_key = load_ghl_webhook_key(&state).await?;
-    let provided = q.key
+    let provided = q
+        .key
         .clone()
-        .or_else(|| headers.get("x-ghl-key").and_then(|v| v.to_str().ok().map(|s| s.to_string())))
         .or_else(|| {
-            headers.get(axum::http::header::AUTHORIZATION)
+            headers
+                .get("x-ghl-key")
+                .and_then(|v| v.to_str().ok().map(|s| s.to_string()))
+        })
+        .or_else(|| {
+            headers
+                .get(axum::http::header::AUTHORIZATION)
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.strip_prefix("Bearer "))
                 .map(|s| s.to_string())
@@ -84,47 +90,61 @@ pub async fn webhook(
     let mut existing: Option<Value> = None;
 
     if !ghl_id_n.is_empty() {
-        existing = state.db
+        existing = state
+            .db
             .query("SELECT * FROM clients WHERE external_client_id_lc = $v LIMIT 1")
             .bind(("v", ghl_id_n.clone()))
             .await?
             .take(0)?;
-        if existing.is_some() { matched_by = "ghlContactId"; }
+        if existing.is_some() {
+            matched_by = "ghlContactId";
+        }
     }
     if existing.is_none() && !email_n.is_empty() {
-        existing = state.db
+        existing = state
+            .db
             .query("SELECT * FROM clients WHERE email_lc = $v LIMIT 1")
             .bind(("v", email_n.clone()))
             .await?
             .take(0)?;
-        if existing.is_some() { matched_by = "email"; }
+        if existing.is_some() {
+            matched_by = "email";
+        }
     }
     if existing.is_none() && !phone_n.is_empty() {
         // Strip non-digits from stored phone with string::replace_all.
-        existing = state.db
+        existing = state
+            .db
             .query("SELECT * FROM clients WHERE string::replace(phone, /[^0-9]/, '') = $v LIMIT 1")
             .bind(("v", phone_n.clone()))
             .await?
             .take(0)?;
-        if existing.is_some() { matched_by = "phone"; }
+        if existing.is_some() {
+            matched_by = "phone";
+        }
     }
     if existing.is_none() {
         let fn_n = normalize_lookup(&payload.first_name);
         let ln_n = normalize_lookup(&payload.last_name);
         if !fn_n.is_empty() && !ln_n.is_empty() {
-            existing = state.db
-                .query("SELECT * FROM clients WHERE \
+            existing = state
+                .db
+                .query(
+                    "SELECT * FROM clients WHERE \
                         first_name_lc = $fn AND \
                         last_name_lc = $ln AND \
                         (email_lc = $em OR string::replace(phone, /[^0-9]/, '') = $ph) \
-                        LIMIT 1")
+                        LIMIT 1",
+                )
                 .bind(("fn", fn_n))
                 .bind(("ln", ln_n))
                 .bind(("em", email_n.clone()))
                 .bind(("ph", phone_n.clone()))
                 .await?
                 .take(0)?;
-            if existing.is_some() { matched_by = "name+contact"; }
+            if existing.is_some() {
+                matched_by = "name+contact";
+            }
         }
     }
 
@@ -147,8 +167,10 @@ pub async fn webhook(
     // and a synthetic client_id so the composite record id stays unique.
     let saved: Option<Value> = if let Some(ref ex) = existing {
         let ex_id = ex.get("id").cloned().unwrap_or(Value::Null);
-        state.db
-            .query("UPDATE $rid SET \
+        state
+            .db
+            .query(
+                "UPDATE $rid SET \
                 first_name = $fn, last_name = $ln, email = $email, phone = $phone, \
                 external_client_id = $ghl_raw, \
                 status = $status, \
@@ -156,7 +178,8 @@ pub async fn webhook(
                 yearly_income = $yi, housing_payment = $hp, debt_monthly_payments = $dmp, \
                 goal = $goal, notes = $notes, \
                 updated_at = time::now() \
-                RETURN AFTER")
+                RETURN AFTER",
+            )
             .bind(("rid", ex_id))
             .bind(("fn", payload.first_name.clone()))
             .bind(("ln", payload.last_name.clone()))
@@ -178,8 +201,10 @@ pub async fn webhook(
         // Synthetic client_id (random) namespaced 'gohighlevel' so it never collides with
         // the api.ninjadispute.com mirror's `<num>_ninjatools` ids.
         let synthetic = format!("ghl_{}", uuid::Uuid::new_v4().simple());
-        state.db
-            .query("CREATE type::thing('clients', $rid) SET \
+        state
+            .db
+            .query(
+                "CREATE type::thing('clients', $rid) SET \
                 client_id = $cid, source_db = 'gohighlevel', owner_key = 'admin', \
                 first_name = $fn, last_name = $ln, email = $email, phone = $phone, \
                 external_client_id = $ghl_raw, \
@@ -188,7 +213,8 @@ pub async fn webhook(
                 yearly_income = $yi, housing_payment = $hp, debt_monthly_payments = $dmp, \
                 goal = $goal, notes = $notes, \
                 created_at = time::now(), updated_at = time::now() \
-                RETURN AFTER")
+                RETURN AFTER",
+            )
             .bind(("rid", synthetic.clone()))
             .bind(("cid", synthetic))
             .bind(("fn", payload.first_name.clone()))
@@ -212,19 +238,27 @@ pub async fn webhook(
 
     let client = saved.unwrap_or(json!({}));
 
-    Ok((status_code, Json(json!({
-        "ok": true,
-        "action": action,
-        "client": safe_client(&client),
-        "matchedBy": matched_by,
-    }))))
+    Ok((
+        status_code,
+        Json(json!({
+            "ok": true,
+            "action": action,
+            "client": safe_client(&client),
+            "matchedBy": matched_by,
+        })),
+    ))
 }
 
 async fn load_ghl_webhook_key(state: &AppState) -> AppResult<String> {
     #[derive(Deserialize)]
-    struct Row { value_json: String }
-    let mut __resp = state.db
-        .query("SELECT value_json FROM settings WHERE setting_key = 'integration.gohighlevel' LIMIT 1")
+    struct Row {
+        value_json: String,
+    }
+    let mut __resp = state
+        .db
+        .query(
+            "SELECT value_json FROM settings WHERE setting_key = 'integration.gohighlevel' LIMIT 1",
+        )
         .await?;
     let row: Option<Row> = crate::db::take_one(&mut __resp, 0)?;
     let val: Value = row
@@ -287,7 +321,11 @@ fn extract_payload(body: &Value) -> GhlPayload {
         for arr in arrays.into_iter().flatten() {
             if let Some(items) = arr.as_array() {
                 for item in items {
-                    let name = item.get("name").or_else(|| item.get("fieldKey")).and_then(|v| v.as_str()).unwrap_or("");
+                    let name = item
+                        .get("name")
+                        .or_else(|| item.get("fieldKey"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
                     if name.eq_ignore_ascii_case(label) {
                         if let Some(s) = item.get("value").and_then(|v| v.as_str()) {
                             return s.trim().to_string();
@@ -300,24 +338,42 @@ fn extract_payload(body: &Value) -> GhlPayload {
     };
 
     GhlPayload {
-        first_name: pick(&[&["firstName"], &["first_name"], &["contact", "firstName"], &["contact", "first_name"]]),
-        last_name:  pick(&[&["lastName"],  &["last_name"],  &["contact", "lastName"],  &["contact", "last_name"]]),
-        email:      pick(&[&["email"], &["contact", "email"]]),
-        phone:      pick(&[&["phone"], &["contact", "phone"]]),
+        first_name: pick(&[
+            &["firstName"],
+            &["first_name"],
+            &["contact", "firstName"],
+            &["contact", "first_name"],
+        ]),
+        last_name: pick(&[
+            &["lastName"],
+            &["last_name"],
+            &["contact", "lastName"],
+            &["contact", "last_name"],
+        ]),
+        email: pick(&[&["email"], &["contact", "email"]]),
+        phone: pick(&[&["phone"], &["contact", "phone"]]),
         status: {
             let s = pick(&[&["status"], &["contact", "status"]]);
-            if s.is_empty() { None } else { Some(s) }
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
         },
-        monitoring_agency:      custom("monitoringAgency"),
-        monitoring_username:    custom("monitoringUsername"),
-        monitoring_password:    custom("monitoringPassword"),
-        yearly_income:          custom("yearlyIncome"),
-        housing_payment:        custom("housingPayment"),
-        debt_monthly_payments:  custom("debtMonthlyPayments"),
+        monitoring_agency: custom("monitoringAgency"),
+        monitoring_username: custom("monitoringUsername"),
+        monitoring_password: custom("monitoringPassword"),
+        yearly_income: custom("yearlyIncome"),
+        housing_payment: custom("housingPayment"),
+        debt_monthly_payments: custom("debtMonthlyPayments"),
         ghl_contact_id: pick(&[&["contactId"], &["contact_id"], &["id"], &["contact", "id"]]),
-        ghl_location_id: pick(&[&["locationId"], &["location_id"], &["contact", "locationId"]]),
-        source:         pick(&[&["source"], &["contact", "source"]]),
-        goal:           custom("goal"),
-        notes:          pick(&[&["notes"], &["contact", "notes"]]),
+        ghl_location_id: pick(&[
+            &["locationId"],
+            &["location_id"],
+            &["contact", "locationId"],
+        ]),
+        source: pick(&[&["source"], &["contact", "source"]]),
+        goal: custom("goal"),
+        notes: pick(&[&["notes"], &["contact", "notes"]]),
     }
 }

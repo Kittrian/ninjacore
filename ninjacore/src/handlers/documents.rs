@@ -65,7 +65,11 @@ pub async fn proxy(
 
     let base = std::env::var("R2_PUBLIC_BASE")
         .map_err(|_| AppError::BadRequest("R2_PUBLIC_BASE not configured.".into()))?;
-    let url = format!("{}/{}", base.trim_end_matches('/'), key.trim_start_matches('/'));
+    let url = format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        key.trim_start_matches('/')
+    );
 
     // Reuse the process-wide pooled client — keeps the TLS+HTTP/2 session to
     // Cloudflare warm across requests instead of a fresh handshake every hit.

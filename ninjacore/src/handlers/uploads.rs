@@ -66,11 +66,14 @@ pub async fn presign(
 ) -> AppResult<Json<PresignResponse>> {
     if let Some(sz) = body.size {
         if sz == 0 {
-            return Err(AppError::BadRequest("File size is required and must be > 0".into()));
+            return Err(AppError::BadRequest(
+                "File size is required and must be > 0".into(),
+            ));
         }
         if sz > MAX_UPLOAD_BYTES {
             return Err(AppError::BadRequest(format!(
-                "File too large: {} bytes (max {})", sz, MAX_UPLOAD_BYTES
+                "File too large: {} bytes (max {})",
+                sz, MAX_UPLOAD_BYTES
             )));
         }
     }
@@ -90,8 +93,11 @@ pub async fn presign(
         )));
     }
 
-    let cfg = R2Config::from_env()
-        .ok_or_else(|| AppError::Other(anyhow::anyhow!("R2 not configured (missing R2_ENDPOINT / R2_BUCKET / R2_ACCESS_KEY / R2_SECRET_KEY)")))?;
+    let cfg = R2Config::from_env().ok_or_else(|| {
+        AppError::Other(anyhow::anyhow!(
+            "R2 not configured (missing R2_ENDPOINT / R2_BUCKET / R2_ACCESS_KEY / R2_SECRET_KEY)"
+        ))
+    })?;
 
     // Stable, collision-resistant key. Owner-scoped so cross-tenant access
     // requires explicit grants.
@@ -100,7 +106,11 @@ pub async fn presign(
     let uuid = Uuid::new_v4().simple();
     let key = format!(
         "owners/{owner}/clients/{cid}/{doc}/{stamp}-{uuid}-{file}",
-        owner = if owner.is_empty() { "admin".into() } else { owner },
+        owner = if owner.is_empty() {
+            "admin".into()
+        } else {
+            owner
+        },
         cid = sanitize_segment(client_id),
         doc = doc_type,
         stamp = stamp,
@@ -190,8 +200,14 @@ pub async fn attach(
             .bind(("key", key.to_string()))
             .bind(("url", public_url(&cfg, key)))
             .bind(("sz", doc.size.unwrap_or(0).to_string()))
-            .bind(("print", doc.include_in_print_letters.unwrap_or(false).to_string()))
-            .bind(("side", doc.print_side.clone().unwrap_or_else(|| "front".into())))
+            .bind((
+                "print",
+                doc.include_in_print_letters.unwrap_or(false).to_string(),
+            ))
+            .bind((
+                "side",
+                doc.print_side.clone().unwrap_or_else(|| "front".into()),
+            ))
             .bind(("ca", now.clone()))
             .await?;
         saved.push(json!({
@@ -208,7 +224,9 @@ pub async fn attach(
         }));
     }
 
-    Ok(Json(json!({ "ok": true, "clientId": id, "documents": saved })))
+    Ok(Json(
+        json!({ "ok": true, "clientId": id, "documents": saved }),
+    ))
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────
@@ -216,14 +234,12 @@ pub async fn attach(
 fn normalize_doc_type(t: &str) -> String {
     let clean = t.trim().to_lowercase();
     match clean.as_str() {
-        "id" | "id-document" | "iddocument" | "drivers-license" | "driverslicense"
-            => "id-document".into(),
-        "ssn" | "ssn-document" | "ssncard"
-            => "ssn-document".into(),
-        "proof-of-address" | "address" | "poa" | "proofofaddress"
-            => "proof-of-address".into(),
-        "cover-letter" | "coverletter"
-            => "cover-letter".into(),
+        "id" | "id-document" | "iddocument" | "drivers-license" | "driverslicense" => {
+            "id-document".into()
+        }
+        "ssn" | "ssn-document" | "ssncard" => "ssn-document".into(),
+        "proof-of-address" | "address" | "poa" | "proofofaddress" => "proof-of-address".into(),
+        "cover-letter" | "coverletter" => "cover-letter".into(),
         "" => "other".into(),
         other => sanitize_segment(other),
     }
@@ -233,15 +249,31 @@ fn sanitize_file_name(name: &str) -> String {
     let trimmed = name.trim();
     let cleaned: String = trimmed
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let cleaned = cleaned.trim_matches('_').to_string();
-    if cleaned.is_empty() { "file".into() } else { cleaned }
+    if cleaned.is_empty() {
+        "file".into()
+    } else {
+        cleaned
+    }
 }
 
 fn sanitize_segment(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect::<String>()
         .trim_matches('_')
         .to_string()

@@ -13,70 +13,35 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260527-06" />
-    <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
-    <link rel="stylesheet" href="/login.css?v=20260512-30" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-	<script src="/login.js?v=20260527-39" defer></script>
-  </head>
-  <body>
-    <form class="login-form" style="display: block;">
-      <div class="segment">
-        <h1>Sign up</h1>
-      </div>
-      <label>
-        <input type="text" placeholder="Email Address" id="username" autocomplete="username" />
-      </label>
-      <label>
-        <input type="password" placeholder="Password" id="password" autocomplete="current-password" />
-      </label>
-      <button class="red" type="submit"><i class="icon ion-md-lock"></i> Log in</button>
-
-      <!-- SSO Login Buttons -->
-      <div class="sso-login-buttons" style="margin-top: 20px; display: flex; gap: 10px; flex-direction: column;">
-        <a href="https://auth.ninjadispute.com/login?provider=google&redirect=https://ninjacore.ninjadispute.com" class="sso-button google-button" style="display: flex; align-items: center; justify-content: center; padding: 12px 16px; background: white; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; font-weight: 500; gap: 8px;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-          </svg>
-          Sign in with Google
-        </a>
-
-        <a href="https://auth.ninjadispute.com/login?provider=github&redirect=https://ninjacore.ninjadispute.com" class="sso-button github-button" style="display: flex; align-items: center; justify-content: center; padding: 12px 16px; background: #24292e; border: 1px solid #24292e; border-radius: 4px; text-decoration: none; color: white; font-weight: 500; gap: 8px;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-          </svg>
-          Sign in with GitHub
-        </a>
-
-        <a href="https://auth.ninjadispute.com/login?provider=apple&redirect=https://ninjacore.ninjadispute.com" class="sso-button apple-button" style="display: flex; align-items: center; justify-content: center; padding: 12px 16px; background: #000; border: 1px solid #000; border-radius: 4px; text-decoration: none; color: white; font-weight: 500; gap: 8px;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-          </svg>
-          Sign in with Apple
-        </a>
-      </div>
-
-      <div id="googleSignInWrap" class="google-signin-wrap" aria-label="Sign in with Google" hidden>
-        <div id="g_id_onload"
-             data-client_id="224557516405-idt8d5qlctjtk1p3u031dtsnld95nbm9.apps.googleusercontent.com"
-             data-callback="handleGoogleLogin"
-             data-auto_prompt="false">
-        </div>
-        <div class="g_id_signin"
-             data-type="standard"
-             data-size="large"
-             data-theme="outline"
-             data-text="sign_in_with"
-             data-shape="rectangular"
-             data-logo_alignment="left">
-        </div>
-      </div>
-      <p class="auth-message" id="authMessage" aria-live="polite"></p>
-    </form>
-    <div class="page-shell" style="display: none;">
+    <!-- 🚀 CODE SPLITTING: Load critical CSS immediately -->
+    
+    <!-- 📦 Lazy-load non-critical CSS after first paint -->
+    
+    <noscript></noscript>
+    <!-- External libraries (lazy-loaded) -->
+    <link rel="preload" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <!-- Lazy load page-specific styles -->
+    
+    <noscript></noscript>
+    <!-- Lazy loader script - enables deferred loading -->
+    
+    <!-- Page-specific JS - deferred loading -->
+    
+  
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/billing.css" />
+    <link rel="stylesheet" href="/payments.css" />
+    <link rel="stylesheet" href="/learning.css" />
+    <link rel="stylesheet" href="/tools-ninja-widget.css" />
+    <link rel="stylesheet" href="/nd-hash-shell.css" />
+    <link rel="stylesheet" href="/full-modern.css" />
+    <link rel="stylesheet" href="/full-disputes.css" />
+</head>
+  <body><!-- OLD LOGIN FORM PERMANENTLY REMOVED -->
+    
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <div class="page-shell">
       <div id="appBootLoader" class="app-boot-loader" hidden>
         <div class="app-boot-loader-inner" aria-live="polite" aria-busy="true">
           <div class="loader" aria-hidden="true">
@@ -92,7 +57,7 @@
           <div class="hero-ninja-wrap">
             <iframe
               class="hero-widget-frame"
-              src="/tools-ninja-widget.html?v=20260518-17"
+              src="/tools-ninja-widget.html?v=20260605-03"
               title="Get New Report Ninja Widget"
             ></iframe>
           </div>
@@ -105,16 +70,39 @@
             <details class="integration-card" id="smartCreditIntegrationCard">
               <summary>
                 <span class="integration-summary-brand integration-summary-brand-smartcredit">
-                  <img class="integration-brand-image integration-brand-image-smartcredit tn-lazy-image" src="/assets/smartcredit-logo.png" loading="lazy" decoding="async" onload="this.classList.add('is-loaded')" alt="SmartCredit" />
+                  <img class="integration-brand-image integration-brand-image-smartcredit" src="/assets/smartcredit-logo.png" alt="SmartCredit" />
                 </span>
                 <span class="integration-summary-label">SmartCredit API</span>
               </summary>
               <form id="smartCreditIntegrationForm" class="integration-form">
                 <label class="field">
                   <span>Token ID</span>
-                  <input name="tokenId" type="text" placeholder="Token ID" />
+                  <input name="tokenId" type="text" placeholder="Token ID" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>API Secret</span>
+                  <input name="apiSecret" type="text" placeholder="API Secret" />
                 </label>
                 <button type="submit">Save SmartCredit</button>
+              </form>
+            </details>
+            <details class="integration-card" id="myFreeScoreIntegrationCard">
+              <summary>
+                <span class="integration-summary-brand integration-summary-brand-mfsn">
+                  <img class="integration-brand-image integration-brand-image-mfsn" src="/assets/myfreescorenow-logo.png" alt="MyFreeScoreNow" />
+                </span>
+                <span class="integration-summary-label">API Login</span>
+              </summary>
+              <form id="myFreeScoreIntegrationForm" class="integration-form">
+                <label class="field">
+                  <span>API Email</span>
+                  <input name="tokenId" type="text" placeholder="apiuser@test.com" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>API Password</span>
+                  <input name="apiSecret" type="text" placeholder="API Password" />
+                </label>
+                <button type="submit">Save MyFreeScoreNow</button>
               </form>
             </details>
             <p id="integrationMessage" class="form-message muted"></p>
@@ -127,7 +115,7 @@
                 <p class="hero-glow-text">Billing</p>
               </div>
               <span class="hero-action-icon-wrap" aria-hidden="true">
-                <img class="tn-lazy-image" src="/assets/icons/billing-icon.png" loading="lazy" decoding="async" onload="this.classList.add('is-loaded')" alt="" />
+                <img src="/assets/icons/billing-icon.png" alt="" />
               </span>
             </button>
             <button class="hero-canvas-action" type="button" id="disputeQuickAction">
@@ -136,7 +124,7 @@
                 <p class="hero-glow-text">Dispute Center</p>
               </div>
               <span class="hero-action-icon-wrap" aria-hidden="true">
-                <img class="tn-lazy-image" src="/assets/icons/dispute-sword-icon.png" loading="lazy" decoding="async" onload="this.classList.add('is-loaded')" alt="" />
+                <img src="/assets/icons/dispute-sword-icon.png" alt="" />
               </span>
             </button>
             <button class="sap-ai-action" type="button" id="setupAiPromptsAction" aria-label="Setup AI Prompts">
@@ -156,98 +144,10 @@
               </span>
             </button>
           </div>
-          <section class="tn-depth-list" aria-label="List Items">
-            <p class="tn-depth-list__title">List Items</p>
-            <div class="tn-depth-list__well">
-              <article class="tn-depth-list__row">
-                <span class="tn-depth-list__icon tn-depth-list__icon--inbox" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="7" width="18" height="12" rx="3"></rect>
-                    <path d="M8 12h8"></path>
-                  </svg>
-                </span>
-                <div class="tn-depth-list__copy">
-                  <strong>Inbox Messages</strong>
-                  <span>You have 12 new messages</span>
-                </div>
-                <span class="tn-depth-list__chip">12</span>
-              </article>
-              <article class="tn-depth-list__row">
-                <span class="tn-depth-list__icon tn-depth-list__icon--task" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="8"></circle>
-                    <path d="M9 12.5 11 14.5 15.5 9.8"></path>
-                  </svg>
-                </span>
-                <div class="tn-depth-list__copy">
-                  <strong>Tasks Completed</strong>
-                  <span>Great job! All tasks done</span>
-                </div>
-                <span class="tn-depth-list__arrow" aria-hidden="true">›</span>
-              </article>
-              <article class="tn-depth-list__row">
-                <span class="tn-depth-list__icon tn-depth-list__icon--notif" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M15 17H9l1-1.8V11a4 4 0 0 1 8 0v4.2L15 17Z"></path>
-                    <path d="M11.2 18.4a1.8 1.8 0 0 0 3.6 0"></path>
-                  </svg>
-                </span>
-                <div class="tn-depth-list__copy">
-                  <strong>Notifications</strong>
-                  <span>3 pending notifications</span>
-                </div>
-                <span class="tn-depth-list__chip tn-depth-list__chip--warn">3</span>
-              </article>
-              <article class="tn-depth-list__row">
-                <span class="tn-depth-list__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="9"></circle>
-                    <path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"></path>
-                  </svg>
-                </span>
-                <div class="tn-depth-list__copy">
-                  <strong><a href="https://api.ninjadispute.com" target="_blank" rel="noopener noreferrer">Api.NinjaDispute.com</a></strong>
-                </div>
-                <span class="tn-depth-list__arrow" aria-hidden="true">›</span>
-              </article>
-              <article class="tn-depth-list__row">
-                <span class="tn-depth-list__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="9"></circle>
-                    <path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"></path>
-                  </svg>
-                </span>
-                <div class="tn-depth-list__copy">
-                  <strong><a href="https://auth.ninjadispute.com/login?redirect=https://ninjadispute.com" target="_blank" rel="noopener noreferrer">Ninja Dispute</a></strong>
-                </div>
-                <span class="tn-depth-list__arrow" aria-hidden="true">›</span>
-              </article>
-            </div>
-          </section>
         </div>
       </header>
-
-      <nav class="nt-page-nav" id="ntPageNav" hidden>
-        <a class="nt-page-nav-link" href="#/clients" data-route="clients" aria-current="false">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Clients
-        </a>
-        <a class="nt-page-nav-link" href="#/letters" data-route="letters" aria-current="false">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          Letters
-        </a>
-        <a class="nt-page-nav-link" href="#/disputes" data-route="disputes" aria-current="false">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          Disputes
-        </a>
-        <a class="nt-page-nav-link" href="#/alternate" data-route="alternate" aria-current="false">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-          Alternate
-        </a>
-      </nav>
-
       <main class="crm-layout" id="crmLayout">
-        <section class="panel client-hub-pane client-hub-pane-home" id="clientHubHomePane" hidden>
+        <section class="panel client-hub-pane client-hub-pane-home" id="clientHubHomePane">
           <form id="homeSettingsForm" class="home-settings-shell">
             <div class="home-settings-intro">
               <p class="home-settings-kicker">Person Settings</p>
@@ -262,7 +162,6 @@
                   <h3>Best Texas Credit Pros Setup</h3>
                 </div>
               </div>
-
               <div class="home-brand-row">
                 <div class="home-logo-editor">
                   <div class="home-logo-preview-shell">
@@ -274,7 +173,6 @@
                     <input id="homeLogoInput" name="logo" type="file" accept="image/*" />
                   </label>
                 </div>
-
                 <div class="home-color-editor">
                   <span class="home-color-label">Company Color</span>
                   <div class="home-color-swatches" id="homeColorSwatches" role="group" aria-label="Company accent color">
@@ -287,7 +185,6 @@
                   </div>
                 </div>
               </div>
-
               <div class="home-settings-grid">
                 <label class="field">
                   <span>Company Name</span>
@@ -332,7 +229,6 @@
                   <input id="homeServiceFee" name="serviceFee" type="text" />
                 </label>
               </div>
-
               <div class="home-links-grid">
                 <label class="field">
                   <span>Client Portal URL</span>
@@ -344,7 +240,6 @@
                 </label>
               </div>
             </section>
-
             <div class="home-settings-subgrid">
               <section class="home-settings-card">
                 <div class="home-settings-head home-settings-head-compact">
@@ -364,7 +259,6 @@
                 </label>
                 <button type="submit" class="home-settings-save">Save Business Settings</button>
               </section>
-
               <section class="home-settings-card">
                 <div class="home-settings-head home-settings-head-compact">
                   <div>
@@ -390,14 +284,12 @@
             </div>
           </form>
         </section>
-
         <section class="panel client-hub-pane client-hub-pane-add" id="clientHubAddPane" hidden>
           <div class="add-client-panel-body">
             <div class="section-heading compact-heading">
               <h2 id="clientFormTitle">Add Client</h2>
               <p id="clientFormSubtitle">Client identity, monitoring credentials, and portal access for Ninja Tools.</p>
             </div>
-
             <form id="clientForm" class="form-grid compact-form-grid add-client-rich-form neu-forms-skin">
               <section class="add-client-form-section field-full client-form-segment-section">
                 <div class="client-form-segment-nav" role="tablist" aria-label="Client Form Sections">
@@ -408,6 +300,7 @@
                 <div class="client-form-segment-panels">
                   <div class="client-form-segment-panel is-active" role="tabpanel" data-form-segment-panel="client">
                     <div class="add-client-grid client-form-segment-grid">
+                      <p class="muted">Client fields are managed in the sections below.</p>
                     </div>
                   </div>
                   <div class="client-form-segment-panel" role="tabpanel" data-form-segment-panel="ninja" hidden>
@@ -444,105 +337,76 @@
                   </div>
                 </div>
               </section>
-
               <section class="add-client-form-section field-full client-only-section">
                 <div class="add-client-form-heading">
-                  <div class="nt-qs-identity-heading">
-                    <div class="nt-qs-identity-copy">
-                      <h3>Client Identity</h3>
-                      <p>Name, contact info, CRM matching, and household pairing.</p>
-                    </div>
-                    <div class="nt-qs-wrap" data-nt-quick-save>
-                      <button class="nt-qs-button" type="button" aria-label="Quick Save Client Identity">
-                        <span class="nt-qs-text">Quick Save</span>
-                      </button>
-                      <div class="nt-qs-progress-bar" aria-hidden="true"></div>
-                      <svg class="nt-qs-checkmark" viewBox="0 0 25 30" aria-hidden="true" focusable="false">
-                        <path class="nt-qs-check-path" d="M2,19.2C5.9,23.6,9.4,28,9.4,28L23,2"></path>
-                      </svg>
-                    </div>
-                  </div>
+                  <h3>Client Identity</h3>
+                  <p>Name, contact info, CRM matching, and household pairing.</p>
                 </div>
                 <div class="add-client-grid">
                   <label class="field field-name">
                     <span>First Name</span>
                     <input name="firstName" placeholder="Jane" required />
                   </label>
-
                   <label class="field field-name">
                     <span>Last Name</span>
                     <input name="lastName" placeholder="Doe" required />
                   </label>
-
                   <label class="field field-email">
                     <span>Email</span>
                     <input name="email" type="email" placeholder="jane@example.com" />
                   </label>
-
                   <div class="add-client-inline-fields add-client-inline-fields-identity">
                     <label class="field field-compact field-dob">
                       <span>DOB</span>
                       <input name="dob" type="text" inputmode="numeric" placeholder="MM/DD/YYYY" maxlength="10" autocomplete="bday" />
                     </label>
-
                     <label class="field field-compact field-ssn">
                       <span>SSN</span>
-                      <div class="password-field-wrap">
-                        <input name="ssn" type="password" inputmode="numeric" placeholder="123-45-2352" maxlength="11" autocomplete="off" data-mask-default="1" />
-                        <button class="password-toggle-button" type="button" data-toggle-target="ssn" aria-label="Reveal SSN" aria-pressed="false" tabindex="0">◐</button>
-                      </div>
+                      <input name="ssn" type="text" inputmode="numeric" placeholder="123-45-2352" maxlength="11" />
                     </label>
-
                     <label class="field field-compact field-phone">
                       <span>Phone</span>
                       <input name="phone" type="tel" placeholder="(713) 212-9977" />
                     </label>
                   </div>
-
                   <label class="field field-full">
                     <span>Street Address</span>
                     <input id="clientAddressInput" name="address" type="text" list="clientAddressMatches" placeholder="Start typing an address..." autocomplete="off" />
                     <small class="field-note" id="clientAddressHint">Address suggestions will appear as you type.</small>
                     <datalist id="clientAddressMatches"></datalist>
                   </label>
-
                   <div class="add-client-inline-fields add-client-inline-fields-address">
                     <label class="field field-compact field-city">
                       <span>City</span>
                       <input name="addressCity" type="text" placeholder="Fort Worth" />
                     </label>
-
                     <label class="field field-compact field-state">
                       <span>State</span>
                       <input name="addressState" type="text" placeholder="TX" maxlength="2" />
                     </label>
-
                     <label class="field field-compact field-zip">
                       <span>Zip</span>
                       <input name="addressZip" type="text" inputmode="numeric" placeholder="76102" maxlength="10" />
                     </label>
                   </div>
-
                   <label class="field field-full">
                     <span>Join Client (Spouse)</span>
                     <input id="spouseClientSearch" name="spouseClientSearch" type="text" list="spouseClientMatches" placeholder="Search existing CRM clients..." autocomplete="off" />
                     <input id="spouseClientId" name="spouseClientId" type="hidden" />
                     <datalist id="spouseClientMatches"></datalist>
                   </label>
-
                   <div class="add-client-inline-fields add-client-inline-fields-status">
                     <label class="field field-compact">
                       <span>Status</span>
-                      <select id="clientAddStatus" name="status" class="add-client-select" data-client-dropdown="1"></select>
+                      <select id="clientAddStatus" name="status" class="add-client-select"></select>
                     </label>
                     <label class="field field-compact">
                       <span>Phase</span>
-                      <select id="clientAddPhase" name="phase" class="add-client-select" data-client-dropdown="1"></select>
+                      <select id="clientAddPhase" name="phase" class="add-client-select"></select>
                     </label>
                   </div>
                 </div>
               </section>
-
               <section class="add-client-form-section field-full client-only-section">
                 <div class="add-client-form-heading">
                   <h3>Credit Monitoring Credentials</h3>
@@ -551,7 +415,7 @@
                 <div class="add-client-grid">
                   <label class="field">
                     <span>Credit Monitoring</span>
-                    <select name="monitoringAgency" class="add-client-select" data-client-dropdown="1">
+                    <select name="monitoringAgency" class="add-client-select">
                       <option value="">Select monitoring</option>
                       <option value="IdentityIQ">IdentityIQ</option>
                       <option value="SmartCredit">SmartCredit</option>
@@ -559,12 +423,10 @@
                       <option value="MyScoreIQ">MyScoreIQ</option>
                     </select>
                   </label>
-
                   <label class="field">
                     <span>Username</span>
                     <input name="monitoringUsername" type="text" placeholder="Monitoring username or email" />
                   </label>
-
                   <label class="field add-client-credential-field">
                     <span>Password</span>
                     <div class="password-field-wrap">
@@ -572,22 +434,19 @@
                       <button class="password-toggle-button" type="button" data-password-toggle="monitoringPassword" aria-label="Show password" aria-pressed="false">◐</button>
                     </div>
                   </label>
-
-                  <label class="field add-client-credential-field add-client-secret-key-field">
+                  <label class="field add-client-credential-field" data-secret-key-field>
                     <span>Secret Key</span>
                     <div class="password-field-wrap security-code-field-wrap">
                       <input id="clientSecretKeyInput" name="secretKey" class="security-code-input" type="password" placeholder="Defaults to last 4 of SSN" />
                       <button class="security-code-toggle-button" type="button" data-password-toggle="secretKey" aria-label="Show secret key" aria-pressed="false">◐</button>
                     </div>
                   </label>
-
-                  <label class="field add-client-credential-field add-client-token-field">
+                  <label class="field add-client-credential-field" data-monitoring-token-field>
                     <span>TOKEN</span>
-                    <input name="tokenId" type="text" placeholder="Customer token if provided" />
+                    <input name="monitoringToken" type="text" placeholder="Customer token if provided" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" />
                   </label>
                 </div>
               </section>
-
               <section class="add-client-form-section field-full client-only-section">
                 <div class="add-client-form-heading">
                   <h3>Portal Access</h3>
@@ -602,7 +461,6 @@
                         <button class="password-toggle-button" type="button" data-password-toggle="portalPassword" aria-label="Show portal password" aria-pressed="false">◐</button>
                       </div>
                     </label>
-
                     <fieldset class="field portal-toggle-field client-portal-toggle-fieldset">
                       <span>Ninja Portal</span>
                       <div class="portal-toggle-group portal-toggle-group-neu">
@@ -614,31 +472,28 @@
                         <input id="clientPortalEnabledValue" type="hidden" name="portalEnabled" value="on" />
                       </div>
                     </fieldset>
-
                     <label class="field field-portal-language">
                       <span>Language</span>
-                      <select name="language" class="add-client-select add-client-select-compact" data-client-dropdown="1">
+                      <select name="language" class="add-client-select add-client-select-compact">
                         <option value="English">English</option>
                         <option value="Spanish">Spanish</option>
                       </select>
                     </label>
                   </div>
-
                   <div class="add-client-portal-right">
                     <label class="field">
                       <span>Ninja Assigned</span>
-                      <select id="clientNinjaAssigned" name="ninjaAssigned" class="add-client-select" data-client-dropdown="1"></select>
+                      <select id="clientNinjaAssigned" name="ninjaAssigned" class="add-client-select"></select>
                     </label>
                     <label class="field">
                       <span>Affiliate Assigned</span>
-                      <select id="clientAffiliateAssigned" name="affiliateAssigned" class="add-client-select" data-client-dropdown="1">
+                      <select id="clientAffiliateAssigned" name="affiliateAssigned" class="add-client-select">
                         <option value="None">None</option>
                       </select>
                     </label>
                   </div>
                 </div>
               </section>
-
               <section class="add-client-form-section field-full client-only-section">
                 <div class="add-client-form-heading">
                   <h3>Documents</h3>
@@ -649,7 +504,6 @@
                   <button id="addCustomDocumentButton" class="client-doc-add" type="button">+ Add new document</button>
                 </div>
               </section>
-
               <div class="field-full">
                 <button id="clientFormSubmitButton" type="submit">Save Client</button>
                 <div id="clientSaveProgressBox" class="client-save-progress" hidden>
@@ -663,11 +517,9 @@
                 </div>
               </div>
             </form>
-
             <p id="formMessage" class="form-message muted"></p>
           </div>
         </section>
-
         <div class="client-hub-pane client-section-grid" id="clientHubClientsPane">
           <section class="panel client-hub-clients-panel nt-clients-glass-scope">
             <div class="section-heading clients-heading-row">
@@ -680,159 +532,27 @@
                 <p id="csvImportMessage" class="form-message muted"></p>
               </div>
             </div>
-
             <div class="clients-toolbar nt-clients-toolbar-legacy" hidden>
               <input id="searchInput" class="search-input" type="search" placeholder="Search by name, phone, email, SSN, or monitoring username" />
-              <select id="statusFilter" class="status-filter-select" data-client-dropdown="1">
+              <select id="statusFilter" class="status-filter-select">
                 <option value="__all__">All Clients</option>
               </select>
             </div>
             <div id="clientsList" class="clients-table-wrap"></div>
           </section>
-
           <section class="panel detail-panel">
             <div id="clientDetail" class="detail-shell">
               <p class="muted">Choose a client to load the credit scores.</p>
             </div>
           </section>
         </div>
-
         <section class="panel dashboard-panel">
           <div class="dashboard-shell" id="dashboardShell">
             <p class="muted">Loading Ninja Tools dashboard...</p>
           </div>
         </section>
-        <!-- ── Letters pane: Templates + Paragraphs ── -->
-        <section class="nt-page-pane panel" id="ntLettersPane" hidden>
-          <div class="nt-pane-header">
-            <div class="nt-pane-tabs" role="tablist">
-              <button class="nt-pane-tab is-active" role="tab" data-tab="templates" aria-selected="true">Templates</button>
-              <button class="nt-pane-tab" role="tab" data-tab="paragraphs" aria-selected="false">Paragraphs</button>
-            </div>
-            <button class="nt-pane-add-btn" id="ntLettersAddBtn" type="button">+ New</button>
-          </div>
-
-          <div id="ntTemplatesPanel">
-            <div id="ntTemplatesList" class="nt-records-table-wrap"></div>
-          </div>
-          <div id="ntParagraphsPanel" hidden>
-            <div id="ntParagraphsList" class="nt-records-table-wrap"></div>
-          </div>
-
-          <dialog class="nt-record-dialog" id="ntTemplateDialog">
-            <form class="nt-record-form" id="ntTemplateForm" method="dialog">
-              <h3 id="ntTemplateDialogTitle">New Template</h3>
-              <input type="hidden" id="ntTemplateId" value="" />
-              <label class="nt-field"><span>Title</span><input type="text" id="ntTemplateTitle" required placeholder="e.g. Equifax Round 1" /></label>
-              <label class="nt-field">
-                <span>Bureau</span>
-                <select id="ntTemplateType">
-                  <option value="all">All Bureaus</option>
-                  <option value="equifax">Equifax</option>
-                  <option value="experian">Experian</option>
-                  <option value="transunion">TransUnion</option>
-                </select>
-              </label>
-              <label class="nt-field"><span>Content</span><textarea id="ntTemplateContent" rows="8" placeholder="Letter body…"></textarea></label>
-              <p class="nt-record-form-msg" id="ntTemplateMsg"></p>
-              <div class="nt-record-form-actions">
-                <button type="button" class="nt-btn-ghost" id="ntTemplateCancel">Cancel</button>
-                <button type="submit" class="nt-btn-primary" id="ntTemplateSave">Save Template</button>
-              </div>
-            </form>
-          </dialog>
-
-          <dialog class="nt-record-dialog" id="ntParagraphDialog">
-            <form class="nt-record-form" id="ntParagraphForm" method="dialog">
-              <h3 id="ntParagraphDialogTitle">New Paragraph</h3>
-              <input type="hidden" id="ntParagraphId" value="" />
-              <label class="nt-field"><span>Title</span><input type="text" id="ntParagraphTitle" required placeholder="e.g. Opening – FCRA Rights" /></label>
-              <label class="nt-field">
-                <span>Category</span>
-                <select id="ntParagraphCategory">
-                  <option value="">— none —</option>
-                  <option value="opening">Opening</option>
-                  <option value="dispute">Dispute</option>
-                  <option value="closing">Closing</option>
-                  <option value="legal">Legal</option>
-                </select>
-              </label>
-              <label class="nt-field"><span>Body</span><textarea id="ntParagraphBody" rows="6" placeholder="Paragraph text…"></textarea></label>
-              <p class="nt-record-form-msg" id="ntParagraphMsg"></p>
-              <div class="nt-record-form-actions">
-                <button type="button" class="nt-btn-ghost" id="ntParagraphCancel">Cancel</button>
-                <button type="submit" class="nt-btn-primary" id="ntParagraphSave">Save Paragraph</button>
-              </div>
-            </form>
-          </dialog>
-        </section>
-
-        <!-- ── Disputes pane ── -->
-        <section class="nt-page-pane panel" id="ntDisputesPane" hidden>
-          <div class="nt-pane-header">
-            <h2 class="nt-pane-title">Active Disputes</h2>
-          </div>
-          <div id="ntDisputesList" class="nt-records-table-wrap"></div>
-        </section>
-
-        <!-- ── Alternate pane: Alternate Letters + Creditor Contacts ── -->
-        <section class="nt-page-pane panel" id="ntAlternatePane" hidden>
-          <div class="nt-pane-header">
-            <div class="nt-pane-tabs" role="tablist">
-              <button class="nt-pane-tab is-active" role="tab" data-tab="alternate" aria-selected="true">Alternate Letters</button>
-              <button class="nt-pane-tab" role="tab" data-tab="creditors" aria-selected="false">Creditor Contacts</button>
-            </div>
-            <button class="nt-pane-add-btn" id="ntAlternateAddBtn" type="button">+ New</button>
-          </div>
-
-          <div id="ntAlternateLettersPanel">
-            <div id="ntAlternateList" class="nt-records-table-wrap"></div>
-          </div>
-          <div id="ntCreditorsPanel" hidden>
-            <div id="ntCreditorsList" class="nt-records-table-wrap"></div>
-          </div>
-
-          <dialog class="nt-record-dialog" id="ntAlternateDialog">
-            <form class="nt-record-form" id="ntAlternateForm" method="dialog">
-              <h3 id="ntAlternateDialogTitle">New Alternate Letter</h3>
-              <input type="hidden" id="ntAlternateId" value="" />
-              <label class="nt-field"><span>Title</span><input type="text" id="ntAlternateTitle" required placeholder="e.g. Aggressive Round 2" /></label>
-              <label class="nt-field">
-                <span>Bureau</span>
-                <select id="ntAlternateBureau">
-                  <option value="all">All Bureaus</option>
-                  <option value="equifax">Equifax</option>
-                  <option value="experian">Experian</option>
-                  <option value="transunion">TransUnion</option>
-                </select>
-              </label>
-              <label class="nt-field"><span>Content</span><textarea id="ntAlternateContent" rows="8" placeholder="Alternate letter body…"></textarea></label>
-              <p class="nt-record-form-msg" id="ntAlternateMsg"></p>
-              <div class="nt-record-form-actions">
-                <button type="button" class="nt-btn-ghost" id="ntAlternateCancel">Cancel</button>
-                <button type="submit" class="nt-btn-primary" id="ntAlternateSave">Save Letter</button>
-              </div>
-            </form>
-          </dialog>
-
-          <dialog class="nt-record-dialog" id="ntCreditorDialog">
-            <form class="nt-record-form" id="ntCreditorForm" method="dialog">
-              <h3 id="ntCreditorDialogTitle">New Creditor Contact</h3>
-              <input type="hidden" id="ntCreditorId" value="" />
-              <label class="nt-field"><span>Name</span><input type="text" id="ntCreditorName" required placeholder="e.g. Capital One" /></label>
-              <label class="nt-field"><span>Address</span><input type="text" id="ntCreditorAddress" placeholder="Dispute mailing address" /></label>
-              <label class="nt-field"><span>Phone</span><input type="text" id="ntCreditorPhone" placeholder="800-555-1234" /></label>
-              <p class="nt-record-form-msg" id="ntCreditorMsg"></p>
-              <div class="nt-record-form-actions">
-                <button type="button" class="nt-btn-ghost" id="ntCreditorCancel">Cancel</button>
-                <button type="submit" class="nt-btn-primary" id="ntCreditorSave">Save Contact</button>
-              </div>
-            </form>
-          </dialog>
-        </section>
       </main>
     </div>
-
     <template id="clientDetailTemplate">
       <div>
         <div class="detail-header">
@@ -930,7 +650,7 @@
           </div>
         </div>
         <div class="detail-section-divider" aria-hidden="true">
-          <img class="tn-lazy-image" src="/assets/ninjatools-divider.jpg" loading="lazy" decoding="async" onload="this.classList.add('is-loaded')" alt="" />
+          <img src="/assets/ninjatools-divider.jpg" alt="" />
         </div>
         <div class="score-grid">
           <article class="score-card transunion">
@@ -1176,7 +896,6 @@
         <p class="muted detail-note"></p>
       </div>
     </template>
-
     <dialog id="clientEditDialog" class="client-edit-dialog">
       <form id="clientEditForm" class="client-edit-form" method="dialog">
         <div class="client-edit-header">
@@ -1197,7 +916,7 @@
           </label>
           <label class="field">
             <span>Status</span>
-            <select name="status" id="clientEditStatus" data-client-dropdown="1"></select>
+            <select name="status" id="clientEditStatus"></select>
           </label>
           <label class="field">
             <span>Phone</span>
@@ -1213,7 +932,7 @@
           </label>
           <label class="field">
             <span>Credit Monitoring</span>
-            <select name="monitoringAgency" data-client-dropdown="1">
+            <select name="monitoringAgency">
               <option value="">Not Set</option>
               <option value="IdentityIQ">IdentityIQ</option>
               <option value="SmartCredit">SmartCredit</option>
@@ -1228,54 +947,11 @@
         </div>
       </form>
     </dialog>
-
-    <dialog id="daysLeftDialog" class="client-edit-dialog">
-      <form id="daysLeftForm" class="client-edit-form" method="dialog">
-        <div class="client-edit-header">
-          <div>
-            <p class="eyebrow">Update Days Left</p>
-            <h3>Set Next Import Days</h3>
-          </div>
-          <button class="client-edit-close" type="button" id="daysLeftClose" aria-label="Close days left dialog">X</button>
-        </div>
-        <div class="client-edit-grid">
-          <label class="field field-full">
-            <span>Days Until Next Import</span>
-            <input type="number" id="daysLeftInput" step="1" required />
-          </label>
-        </div>
-        <div class="client-edit-actions">
-          <button class="client-edit-cancel" type="button" id="daysLeftCancel">Cancel</button>
-          <button type="submit">Update Days</button>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="deleteClientDialog" class="client-edit-dialog">
-      <form id="deleteClientForm" class="client-edit-form" method="dialog">
-        <div class="client-edit-header">
-          <div>
-            <p class="eyebrow">Confirm Deletion</p>
-            <h3 id="deleteClientName">Delete Client?</h3>
-          </div>
-          <button class="client-edit-close" type="button" id="deleteClientClose" aria-label="Close delete dialog">X</button>
-        </div>
-        <div class="client-edit-grid">
-          <p id="deleteClientMessage" style="margin: 0;"></p>
-        </div>
-        <div class="client-edit-actions">
-          <button class="client-edit-cancel" type="button" id="deleteClientCancel">Cancel</button>
-          <button type="submit" class="client-edit-delete-confirm" style="background-color: #a33333; color: white;">Delete</button>
-        </div>
-      </form>
-    </dialog>
-
-
     <dialog id="imageCropDialog" class="image-crop-dialog">
       <div id="imageCropVueApp" class="image-crop-shell">
         <div class="image-crop-head">
           <h3>Crop Image</h3>
-          <p>{{ imageSrc ? 'Full edge control is enabled. Move only Top, Right, Bottom, or Left by exact pixels. Save Crop resizes to 900 x 500.' : 'Upload an image to begin cropping.' }}</p>
+          <p>{{ imageSrc ? 'Rotate, move, and crop. Save Crop resizes to 900 x 500.' : 'Upload an image to begin cropping.' }}</p>
         </div>
         <div class="image-crop-canvas-wrap" :class="{ 'is-empty': !imageSrc }">
           <img v-if="imageSrc" ref="cropImage" :src="imageSrc" alt="Crop target preview" />
@@ -1288,22 +964,10 @@
             <button type="button" class="image-crop-rotate" @click="resetCrop">Reset</button>
           </div>
           <div class="image-crop-nudge-controls">
-            <div class="image-crop-control-title">Image Position</div>
-            <button type="button" class="image-crop-nudge" @click="moveImageBy(0, -20)">Image Up</button>
-            <button type="button" class="image-crop-nudge" @click="moveImageBy(-20, 0)">Image Left</button>
-            <button type="button" class="image-crop-nudge" @click="moveImageBy(20, 0)">Image Right</button>
-            <button type="button" class="image-crop-nudge" @click="moveImageBy(0, 20)">Image Down</button>
-          </div>
-          <div class="image-crop-edge-controls">
-            <div class="image-crop-control-title">Crop Edges (20px)</div>
-            <button type="button" class="image-crop-nudge" @click="nudgeEdge('top', -20)">Top Up</button>
-            <button type="button" class="image-crop-nudge" @click="nudgeEdge('top', 20)">Top Down</button>
-            <button type="button" class="image-crop-nudge" @click="nudgeEdge('right', -20)">Right Left</button>
-            <button type="button" class="image-crop-nudge" @click="nudgeEdge('right', 20)">Right Right</button>
-            <button type="button" class="image-crop-nudge" @click="nudgeEdge('bottom', -20)">Bottom Up</button>
-            <button type="button" class="image-crop-nudge" @click="nudgeEdge('bottom', 20)">Bottom Down</button>
-            <button type="button" class="image-crop-nudge" @click="nudgeEdge('left', -20)">Left Left</button>
-            <button type="button" class="image-crop-nudge" @click="nudgeEdge('left', 20)">Left Right</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(0, -25)">Up</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(-25, 0)">Left</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(25, 0)">Right</button>
+            <button type="button" class="image-crop-nudge" @click="moveBy(0, 25)">Down</button>
           </div>
           <div class="image-crop-primary-controls">
             <button type="button" class="client-edit-cancel" @click="emitCancel">Cancel</button>
@@ -1312,7 +976,6 @@
         </div>
       </div>
     </dialog>
-
     <dialog id="affiliateLinksDialog" class="client-edit-dialog affiliate-links-dialog">
       <div class="client-edit-form affiliate-links-panel">
         <div class="client-edit-header affiliate-links-header">
@@ -1322,27 +985,248 @@
           </div>
           <button class="client-edit-close" type="button" id="affiliateLinksClose" aria-label="Close affiliate links dialog">X</button>
         </div>
-
         <div class="affiliate-tabs">
           <button class="affiliate-tab-button is-active" type="button" data-affiliate-tab-target="creditBuilder">Credit Builder</button>
           <button class="affiliate-tab-button" type="button" data-affiliate-tab-target="creditMonitoring">Credit Monitoring</button>
         </div>
-
         <section id="affiliateBuilderPanel" class="affiliate-panel-section">
           <div id="affiliateBuilderRows" class="affiliate-rows"></div>
           <div class="affiliate-footer-actions">
             <button class="affiliate-add-button" type="button" id="affiliateAddBuilderRow">Add Affiliate Link</button>
           </div>
         </section>
-
         <section id="affiliateMonitoringPanel" class="affiliate-panel-section" hidden>
           <div id="affiliateMonitoringRows" class="affiliate-rows"></div>
         </section>
       </div>
     </dialog>
-
     <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
-    <script type="module" src="/nd-app-loader.js?v=20260527-10"></script>
+  <script>
+// Add this BEFORE app.js in the HTML to fix 401 errors
+// Intercept fetch to always include credentials
+
+// Also add to XMLHttpRequest
+const originalOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+  this.withCredentials = true;
+  return originalOpen.apply(this, [method, url, ...rest]);
+};
+
+      (() => {
+        const escapeHtml = (value = '') => String(value ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+
+        const pick = (client, ...keys) => {
+          for (const key of keys) {
+            const value = client?.[key];
+            if (value !== undefined && value !== null && String(value).trim()) {
+              return String(value).trim();
+            }
+          }
+          return '';
+        };
+
+        const clientName = (client) => (
+          pick(client, 'name')
+          || `${pick(client, 'firstName', 'first_name')} ${pick(client, 'lastName', 'last_name')}`.trim()
+          || pick(client, 'id')
+          || 'Client'
+        );
+
+        const renderRows = (clients) => clients.map((client) => {
+          const id = pick(client, 'id');
+          const nextImport = pick(client, 'daysLeft', 'days_left', 'nextImportInt', 'next_import_int') || '--';
+          const contact = [pick(client, 'email'), pick(client, 'phone')].filter(Boolean).join(' • ') || 'N/A';
+          return `
+            <tr class="nt-liquid-row" data-dashboard-client-id="${escapeHtml(id)}">
+              <td><strong>${escapeHtml(clientName(client))}</strong></td>
+              <td>${escapeHtml(pick(client, 'status') || 'Client')}</td>
+              <td>${escapeHtml(pick(client, 'phase') || 'None')}</td>
+              <td>${escapeHtml(nextImport)}</td>
+              <td>${escapeHtml(contact)}</td>
+              <td><span class="client-table-action">Open</span></td>
+            </tr>
+          `;
+        }).join('');
+
+        const renderGlassClientsFallback = (clients) => {
+          const clientsList = document.getElementById('clientsList');
+          if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
+            return;
+          }
+
+          const rows = renderRows(clients);
+          clientsList.style.setProperty('--nt-clients-custom-bg', "url('/assets/clients-glass-bg.png')");
+          clientsList.innerHTML = `
+            <div class="nt-liquid-table-shell">
+              <div class="nt-liquid-table-toolbar">
+                <div class="nt-liquid-table-search">
+                  <span class="nt-liquid-table-search-icon">🔍</span>
+                  <input id="clientsTableSearchInput" class="nt-liquid-table-search-input" type="search" placeholder="Search clients..." aria-label="Search clients">
+                </div>
+                <span class="nt-liquid-table-count">${clients.length} Clients</span>
+              </div>
+              <div class="nt-liquid-table-scroll">
+                <table class="nt-liquid-table">
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Status</th>
+                      <th>Phase</th>
+                      <th>Next Import</th>
+                      <th>Contact</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rows || '<tr class="nt-liquid-empty-row"><td colspan="6">No clients saved yet.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+
+          const searchInput = clientsList.querySelector('#clientsTableSearchInput');
+          searchInput?.addEventListener('input', () => {
+            const query = searchInput.value.trim().toLowerCase();
+            const filtered = clients.filter((client) => [
+              clientName(client),
+              pick(client, 'status'),
+              pick(client, 'phase'),
+              pick(client, 'email'),
+              pick(client, 'phone'),
+            ].some((value) => value.toLowerCase().includes(query)));
+            clientsList.querySelector('.nt-liquid-table tbody').innerHTML = renderRows(filtered)
+              || '<tr class="nt-liquid-empty-row"><td colspan="6">No clients match your search.</td></tr>';
+          });
+        };
+
+        window.setTimeout(() => {
+          const clientsList = document.getElementById('clientsList');
+          if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
+            return;
+          }
+
+          fetch('/api/clients', { credentials: 'include' })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((data) => {
+              if (!data) {
+                return;
+              }
+              const clients = Array.isArray(data.clients)
+                ? data.clients
+                : Array.isArray(data.results)
+                  ? data.results
+                  : [];
+              renderGlassClientsFallback(clients);
+            })
+            .catch((error) => console.error('Clients glass fallback failed:', error));
+        }, 900);
+      })();
+    </script>
+    <script>
+      (() => {
+        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260605-03';
+        const dashboardHubModeStorageKey = 'tools-ninja-dashboard-hub-mode';
+        const heroWidgetFrame = () => document.querySelector('.hero-widget-frame');
+        const panes = {
+          home: document.getElementById('clientHubHomePane'),
+          add: document.getElementById('clientHubAddPane'),
+          clients: document.getElementById('clientHubClientsPane'),
+        };
+
+        const readHubMode = () => {
+          const stored = String(window.sessionStorage.getItem(dashboardHubModeStorageKey) || '').trim();
+          if (stored === 'home' || stored === 'add' || stored === 'clients') {
+            return stored;
+          }
+          return 'clients';
+        };
+
+        const syncWidgetState = () => {
+          const frame = heroWidgetFrame();
+          if (!frame?.contentWindow) {
+            return;
+          }
+
+          const mode = readHubMode();
+          frame.contentWindow.postMessage({
+            type: 'tools-ninja:script-version',
+            value: DASHBOARD_SCRIPT_VERSION,
+          }, window.location.origin);
+          frame.contentWindow.postMessage({
+            type: 'tools-ninja:navigation-state',
+            route: 'clients',
+            hubMode: mode,
+            alternateTab: '',
+          }, window.location.origin);
+        };
+
+        const setHubMode = (mode = 'clients') => {
+          const nextMode = mode === 'home' || mode === 'add' || mode === 'clients' ? mode : 'clients';
+          window.sessionStorage.setItem(dashboardHubModeStorageKey, nextMode);
+          document.body.dataset.dashboardHubMode = nextMode;
+
+          Object.entries(panes).forEach(([key, pane]) => {
+            if (!pane) {
+              return;
+            }
+            pane.hidden = key !== nextMode;
+          });
+
+          if (nextMode === 'add') {
+            window.requestAnimationFrame(() => {
+              document.querySelector('#clientForm input[name="firstName"]')?.focus();
+            });
+          }
+
+          syncWidgetState();
+        };
+
+        heroWidgetFrame()?.addEventListener('load', () => {
+          syncWidgetState();
+        });
+
+        window.addEventListener('message', (event) => {
+          if (event.origin !== window.location.origin) {
+            return;
+          }
+
+          if (event.data?.type === 'tools-ninja:request-script-version') {
+            syncWidgetState();
+            return;
+          }
+
+          if (event.data?.type === 'tools-ninja:request-navigation-state') {
+            syncWidgetState();
+            return;
+          }
+
+          if (event.data?.type === 'tools-ninja:hub-mode') {
+            const requestedMode = String(event.data.mode || '').trim();
+            if (requestedMode === 'home') {
+              setHubMode('home');
+              return;
+            }
+            if (requestedMode === 'add') {
+              setHubMode('add');
+              return;
+            }
+            if (requestedMode === 'contacts' || requestedMode === 'clients') {
+              setHubMode('clients');
+              return;
+            }
+            setHubMode('clients');
+          }
+        });
+
+        setHubMode(readHubMode());
+      })();
+    </script>
   </body>
 </html>

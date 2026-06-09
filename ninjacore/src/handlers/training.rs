@@ -60,17 +60,28 @@ pub async fn list_clients(
     #[derive(Deserialize)]
     struct Row {
         id: String,
-        #[serde(default)] first_name: String,
-        #[serde(default)] last_name: String,
-        #[serde(default)] email: String,
-        #[serde(default)] dob: String,
-        #[serde(default)] ssn: String,
-        #[serde(default)] address: String,
-        #[serde(default)] documents: Vec<Value>,
-        #[serde(default)] monitoring_agency: String,
-        #[serde(default)] report_date: String,
-        #[serde(default)] credit_report_json: String,
-        #[serde(default)] credit_report_html: String,
+        #[serde(default)]
+        first_name: Option<String>,
+        #[serde(default)]
+        last_name: Option<String>,
+        #[serde(default)]
+        email: Option<String>,
+        #[serde(default)]
+        dob: Option<String>,
+        #[serde(default)]
+        ssn: Option<String>,
+        #[serde(default)]
+        address: Option<String>,
+        #[serde(default)]
+        documents: Option<Vec<Value>>,
+        #[serde(default)]
+        monitoring_agency: Option<String>,
+        #[serde(default)]
+        report_date: Option<String>,
+        #[serde(default)]
+        credit_report_json: Option<String>,
+        #[serde(default)]
+        credit_report_html: Option<String>,
     }
     let mut __resp = state
         .db
@@ -81,19 +92,29 @@ pub async fn list_clients(
     let clients: Vec<TrainingClient> = rows
         .into_iter()
         .map(|r| {
-            let has_json = !r.credit_report_json.trim().is_empty()
-                || !r.credit_report_html.trim().is_empty();
+            let has_json = !r
+                .credit_report_json
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+                || !r
+                    .credit_report_html
+                    .as_deref()
+                    .unwrap_or_default()
+                    .trim()
+                    .is_empty();
             TrainingClient {
                 id: r.id,
-                first_name: r.first_name.trim().into(),
-                last_name: r.last_name.trim().into(),
-                email: r.email.trim().into(),
-                dob: r.dob.trim().into(),
-                ssn: r.ssn.trim().into(),
-                address: r.address.trim().into(),
-                documents: r.documents,
-                monitoring_agency: r.monitoring_agency.trim().into(),
-                report_date: r.report_date.trim().into(),
+                first_name: r.first_name.unwrap_or_default().trim().into(),
+                last_name: r.last_name.unwrap_or_default().trim().into(),
+                email: r.email.unwrap_or_default().trim().into(),
+                dob: r.dob.unwrap_or_default().trim().into(),
+                ssn: r.ssn.unwrap_or_default().trim().into(),
+                address: r.address.unwrap_or_default().trim().into(),
+                documents: r.documents.unwrap_or_default(),
+                monitoring_agency: r.monitoring_agency.unwrap_or_default().trim().into(),
+                report_date: r.report_date.unwrap_or_default().trim().into(),
                 has_json_report: has_json,
             }
         })
@@ -127,8 +148,11 @@ pub async fn post_session(
     headers: HeaderMap,
     Json(body): Json<SessionBody>,
 ) -> AppResult<Json<Value>> {
-    let ctx = body.context.ok_or_else(|| AppError::BadRequest("context payload is required.".into()))?;
-    let serialized = serde_json::to_string(&ctx).map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
+    let ctx = body
+        .context
+        .ok_or_else(|| AppError::BadRequest("context payload is required.".into()))?;
+    let serialized =
+        serde_json::to_string(&ctx).map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
     if serialized.len() > 2_500_000 {
         return Err(AppError::BadRequest("Context payload is too large.".into()));
     }
@@ -217,33 +241,43 @@ pub async fn get_public_context(
 
 #[derive(Deserialize)]
 pub struct RewriteBody {
-    #[serde(default)] pub provider: Option<String>,
-    #[serde(default)] pub level: Option<String>,
-    #[serde(default, rename = "selectedText")] pub selected_text: Option<String>,
-    #[serde(default, rename = "customPrompt")] pub custom_prompt: Option<String>,
-    #[serde(default)] pub context: Option<Value>,
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub level: Option<String>,
+    #[serde(default, rename = "selectedText")]
+    pub selected_text: Option<String>,
+    #[serde(default, rename = "customPrompt")]
+    pub custom_prompt: Option<String>,
+    #[serde(default)]
+    pub context: Option<Value>,
 }
 
-pub async fn ai_rewrite(
-    _user: AuthUser,
-    Json(body): Json<RewriteBody>,
-) -> AppResult<Json<Value>> {
-    let provider = body.provider.unwrap_or_else(|| "groq".into()).trim().to_lowercase();
+pub async fn ai_rewrite(_user: AuthUser, Json(body): Json<RewriteBody>) -> AppResult<Json<Value>> {
+    let provider = body
+        .provider
+        .unwrap_or_else(|| "groq".into())
+        .trim()
+        .to_lowercase();
     let level = body.level.unwrap_or_else(|| "Initial Letter".into());
     let selected_text = body.selected_text.unwrap_or_default().trim().to_string();
     let custom = body.custom_prompt.unwrap_or_default();
 
     if selected_text.len() < 10 {
-        return Err(AppError::BadRequest("Please select at least 10 characters to rewrite.".into()));
+        return Err(AppError::BadRequest(
+            "Please select at least 10 characters to rewrite.".into(),
+        ));
     }
 
     let prompt = build_rewrite_prompt(&level, &selected_text, body.context.as_ref(), &custom);
     let rewritten = match provider.as_str() {
         "groq" => call_groq(&prompt).await?,
         "claude" | "anthropic" => call_anthropic(&prompt).await?,
-        other => return Err(AppError::BadRequest(format!(
-            "Unsupported provider \"{other}\". Use groq or claude."
-        ))),
+        other => {
+            return Err(AppError::BadRequest(format!(
+                "Unsupported provider \"{other}\". Use groq or claude."
+            )))
+        }
     };
     Ok(Json(json!({
         "ok": true,
@@ -268,7 +302,9 @@ fn build_rewrite_prompt(level: &str, selected: &str, ctx: Option<&Value>, custom
         p.push_str(custom.trim());
         p.push_str("\n\n");
     }
-    p.push_str("Rewrite the following selection in the same voice and length, sharper and clearer:\n");
+    p.push_str(
+        "Rewrite the following selection in the same voice and length, sharper and clearer:\n",
+    );
     p.push_str(selected);
     p
 }
@@ -289,8 +325,15 @@ async fn call_groq(prompt: &str) -> AppResult<String> {
         .send()
         .await
         .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
-    let v: Value = resp.json().await.map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
-    Ok(v["choices"][0]["message"]["content"].as_str().unwrap_or("").trim().to_string())
+    let v: Value = resp
+        .json()
+        .await
+        .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
+    Ok(v["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_string())
 }
 
 async fn call_anthropic(prompt: &str) -> AppResult<String> {
@@ -310,7 +353,10 @@ async fn call_anthropic(prompt: &str) -> AppResult<String> {
         .send()
         .await
         .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
-    let v: Value = resp.json().await.map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
+    let v: Value = resp
+        .json()
+        .await
+        .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
     let text = v["content"]
         .as_array()
         .and_then(|arr| arr.iter().find(|b| b["type"] == "text"))
@@ -327,7 +373,9 @@ fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{:02X}", b)),
         }
     }

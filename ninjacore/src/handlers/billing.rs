@@ -32,8 +32,10 @@ const OWNER: &str = "admin";
 
 #[derive(Deserialize)]
 pub struct FailedQuery {
-    #[serde(default)] pub q: Option<String>,
-    #[serde(default)] pub limit: Option<i64>,
+    #[serde(default)]
+    pub q: Option<String>,
+    #[serde(default)]
+    pub limit: Option<i64>,
 }
 
 pub async fn failed_payments(
@@ -44,16 +46,21 @@ pub async fn failed_payments(
     let limit = q.limit.unwrap_or(500).clamp(1, 2000);
     let needle = q.q.unwrap_or_default().trim().to_lowercase();
     let events = list_failed_events(&state, limit, &needle).await?;
-    Ok(Json(json!({ "ok": true, "events": events, "count": events.len() })))
+    Ok(Json(
+        json!({ "ok": true, "events": events, "count": events.len() }),
+    ))
 }
 
 // ─── POST /api/billing/safe-query-all-failed-trans ───────────────────────
 
 #[derive(Deserialize, Default)]
 pub struct SafeQueryBody {
-    #[serde(default, rename = "dryRun")] pub dry_run: bool,
-    #[serde(default)] pub limit: Option<i64>,
-    #[serde(default, rename = "daysBack")] pub days_back: Option<i64>,
+    #[serde(default, rename = "dryRun")]
+    pub dry_run: bool,
+    #[serde(default)]
+    pub limit: Option<i64>,
+    #[serde(default, rename = "daysBack")]
+    pub days_back: Option<i64>,
 }
 
 pub async fn safe_query(
@@ -71,7 +78,9 @@ pub async fn safe_query(
     if !body.dry_run {
         let webhook_url = billing.failed_payments_webhook_url.trim();
         if webhook_url.is_empty() {
-            return Err(AppError::BadRequest("Billing webhook URL is not configured.".into()));
+            return Err(AppError::BadRequest(
+                "Billing webhook URL is not configured.".into(),
+            ));
         }
 
         let owner_events = list_failed_events(&state, max_rows, "").await?;
@@ -168,35 +177,53 @@ pub struct BillingIntegration {
 #[derive(Debug, Clone, Serialize)]
 pub struct FailedEventOut {
     pub id: String,
-    #[serde(rename = "transactionId")] pub transaction_id: String,
-    #[serde(rename = "eventAt")] pub event_at: String,
-    #[serde(rename = "clientName")] pub client_name: String,
+    #[serde(rename = "transactionId")]
+    pub transaction_id: String,
+    #[serde(rename = "eventAt")]
+    pub event_at: String,
+    #[serde(rename = "clientName")]
+    pub client_name: String,
     pub email: String,
     pub phone: String,
-    #[serde(rename = "amountCents")] pub amount_cents: i64,
+    #[serde(rename = "amountCents")]
+    pub amount_cents: i64,
     pub amount: String,
-    #[serde(rename = "cardLast4")] pub card_last4: String,
-    #[serde(rename = "paymentMethod")] pub payment_method: String,
-    #[serde(rename = "failureReason")] pub failure_reason: String,
-    #[serde(rename = "retryLabel")] pub retry_label: String,
+    #[serde(rename = "cardLast4")]
+    pub card_last4: String,
+    #[serde(rename = "paymentMethod")]
+    pub payment_method: String,
+    #[serde(rename = "failureReason")]
+    pub failure_reason: String,
+    #[serde(rename = "retryLabel")]
+    pub retry_label: String,
     pub notes: String,
     pub status: String,
-    #[serde(rename = "nextAction")] pub next_action: String,
+    #[serde(rename = "nextAction")]
+    pub next_action: String,
     pub completed: String,
     pub processor: String,
-    #[serde(rename = "customerId")] pub customer_id: String,
-    #[serde(rename = "retryEligible")] pub retry_eligible: bool,
-    #[serde(rename = "occurrenceCount")] pub occurrence_count: i64,
-    #[serde(rename = "webhookSyncedAt")] pub webhook_synced_at: String,
-    #[serde(rename = "webhookLastStatus")] pub webhook_last_status: Option<i64>,
-    #[serde(rename = "createdAt")] pub created_at: String,
-    #[serde(rename = "updatedAt")] pub updated_at: String,
-    #[serde(rename = "lastSeenAt")] pub last_seen_at: String,
+    #[serde(rename = "customerId")]
+    pub customer_id: String,
+    #[serde(rename = "retryEligible")]
+    pub retry_eligible: bool,
+    #[serde(rename = "occurrenceCount")]
+    pub occurrence_count: i64,
+    #[serde(rename = "webhookSyncedAt")]
+    pub webhook_synced_at: String,
+    #[serde(rename = "webhookLastStatus")]
+    pub webhook_last_status: Option<i64>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+    #[serde(rename = "lastSeenAt")]
+    pub last_seen_at: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WebhookOutcome {
-    #[serde(rename = "transactionId")] transaction_id: String,
+    #[serde(rename = "transactionId")]
+    transaction_id: String,
     name: String,
     pub ok: bool,
     pub status: u16,
@@ -229,30 +256,46 @@ struct NormalizedEvent {
 
 #[derive(Default, Debug, Serialize)]
 pub struct PullResult {
-    #[serde(rename = "merchantsScanned")] pub merchants_scanned: i64,
-    #[serde(rename = "merchantResults")] pub merchant_results: Vec<Value>,
-    #[serde(rename = "pulledCount")] pub pulled_count: i64,
-    #[serde(rename = "dedupedCount")] pub deduped_count: i64,
-    #[serde(rename = "upsertedCount")] pub upserted_count: i64,
+    #[serde(rename = "merchantsScanned")]
+    pub merchants_scanned: i64,
+    #[serde(rename = "merchantResults")]
+    pub merchant_results: Vec<Value>,
+    #[serde(rename = "pulledCount")]
+    pub pulled_count: i64,
+    #[serde(rename = "dedupedCount")]
+    pub deduped_count: i64,
+    #[serde(rename = "upsertedCount")]
+    pub upserted_count: i64,
     pub events: Vec<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct MerchantRow {
-    #[serde(default)] id: i64,
-    #[serde(default, rename = "merchantName")] merchant_name: String,
-    #[serde(default)] gateway: String,
-    #[serde(default)] status: String,
-    #[serde(default, rename = "transactionKey")] transaction_key: Option<String>,
-    #[serde(default, rename = "allowedRetries")] allowed_retries: Option<i64>,
-    #[serde(default, rename = "retryFrequencyDays")] retry_frequency_days: Option<i64>,
+    #[serde(default)]
+    id: i64,
+    #[serde(default, rename = "merchantName")]
+    merchant_name: String,
+    #[serde(default)]
+    gateway: String,
+    #[serde(default)]
+    status: String,
+    #[serde(default, rename = "transactionKey")]
+    transaction_key: Option<String>,
+    #[serde(default, rename = "allowedRetries")]
+    allowed_retries: Option<i64>,
+    #[serde(default, rename = "retryFrequencyDays")]
+    retry_frequency_days: Option<i64>,
 }
 
 // ─── DB queries ───────────────────────────────────────────────────────────
 
 async fn load_billing_integration(state: &AppState) -> AppResult<BillingIntegration> {
-    #[derive(Deserialize)] struct Row { value_json: String }
-    let mut __resp = state.db
+    #[derive(Deserialize)]
+    struct Row {
+        value_json: String,
+    }
+    let mut __resp = state
+        .db
         .query("SELECT value_json FROM settings WHERE setting_key = 'integration.billing' LIMIT 1")
         .await?;
     let row: Option<Row> = crate::db::take_one(&mut __resp, 0)?;
@@ -262,7 +305,8 @@ async fn load_billing_integration(state: &AppState) -> AppResult<BillingIntegrat
 }
 
 async fn list_active_failed_merchants(state: &AppState) -> AppResult<Vec<MerchantRow>> {
-    let mut __resp = state.db
+    let mut __resp = state
+        .db
         .query("SELECT * FROM payment_merchant WHERE owner_key = $o")
         .bind(("o", OWNER))
         .await?;
@@ -271,14 +315,24 @@ async fn list_active_failed_merchants(state: &AppState) -> AppResult<Vec<Merchan
         .into_iter()
         .filter(|m| m.status == "Active")
         .filter(|m| {
-            matches!(normalize_failed_gateway(&m.gateway).as_str(), "square" | "nmi" | "bankcard")
+            matches!(
+                normalize_failed_gateway(&m.gateway).as_str(),
+                "square" | "nmi" | "bankcard"
+            )
         })
         .collect())
 }
 
-async fn list_failed_events(state: &AppState, limit: i64, needle: &str) -> AppResult<Vec<FailedEventOut>> {
-    let mut __resp = state.db.query(
-        "SELECT * FROM payment_events WHERE owner_key = $o ORDER BY event_at DESC LIMIT $lim")
+async fn list_failed_events(
+    state: &AppState,
+    limit: i64,
+    needle: &str,
+) -> AppResult<Vec<FailedEventOut>> {
+    let mut __resp = state
+        .db
+        .query(
+            "SELECT * FROM payment_events WHERE owner_key = $o ORDER BY event_at DESC LIMIT $lim",
+        )
         .bind(("o", OWNER))
         .bind(("lim", limit))
         .await?;
@@ -300,7 +354,13 @@ async fn list_failed_events(state: &AppState, limit: i64, needle: &str) -> AppRe
 }
 
 fn format_row(r: Value) -> FailedEventOut {
-    let s = |k: &str| r.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let s = |k: &str| {
+        r.get(k)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string()
+    };
     let n = |k: &str| r.get(k).and_then(|v| v.as_i64()).unwrap_or(0);
     let amount_cents = n("amount_cents");
     FailedEventOut {
@@ -385,7 +445,9 @@ async fn run_failed_payment_pull(
     // Dedupe by transactionId, preserving last seen.
     let mut dedup: HashMap<String, NormalizedEvent> = HashMap::new();
     for ev in pulled {
-        if ev.transaction_id.is_empty() { continue; }
+        if ev.transaction_id.is_empty() {
+            continue;
+        }
         dedup.insert(ev.transaction_id.clone(), ev);
     }
     let mut unique: Vec<NormalizedEvent> = dedup.into_values().collect();
@@ -395,16 +457,21 @@ async fn run_failed_payment_pull(
     let deduped_count = unique.len() as i64;
 
     if dry_run {
-        let events_preview: Vec<Value> = unique.iter().map(|e| json!({
-            "transactionId": e.transaction_id,
-            "eventAt": e.event_at,
-            "clientName": e.client_name,
-            "email": e.email,
-            "amountCents": e.amount_cents,
-            "failureReason": e.failure_reason,
-            "status": e.status,
-            "processor": e.processor,
-        })).collect();
+        let events_preview: Vec<Value> = unique
+            .iter()
+            .map(|e| {
+                json!({
+                    "transactionId": e.transaction_id,
+                    "eventAt": e.event_at,
+                    "clientName": e.client_name,
+                    "email": e.email,
+                    "amountCents": e.amount_cents,
+                    "failureReason": e.failure_reason,
+                    "status": e.status,
+                    "processor": e.processor,
+                })
+            })
+            .collect();
         return Ok(PullResult {
             merchants_scanned: merchants.len() as i64,
             merchant_results,
@@ -417,10 +484,8 @@ async fn run_failed_payment_pull(
 
     // Run upserts concurrently — SurrealDB queries are independent per
     // transactionId and the connection multiplexes async writes.
-    let upsert_results = futures_util::future::join_all(
-        unique.iter().map(|ev| upsert_event(state, ev)),
-    )
-    .await;
+    let upsert_results =
+        futures_util::future::join_all(unique.iter().map(|ev| upsert_event(state, ev))).await;
     let upserted = upsert_results.iter().filter(|r| r.is_ok()).count() as i64;
     Ok(PullResult {
         merchants_scanned: merchants.len() as i64,
@@ -436,7 +501,10 @@ async fn upsert_event(state: &AppState, e: &NormalizedEvent) -> AppResult<()> {
     let rec_id = payment_event_record_id(OWNER, &e.transaction_id);
     let now = now_rfc3339();
     // First upsert with occurrence_count=1, then recalc.
-    state.db.query("UPSERT type::thing('payment_events', $rid) SET \
+    state
+        .db
+        .query(
+            "UPSERT type::thing('payment_events', $rid) SET \
             owner_key = $o, transaction_id = $tx, event_at = $ea, \
             client_name = $cn, email = $em, phone = $ph, \
             amount_cents = $amt, card_last4 = $l4, payment_method = $pm, \
@@ -447,7 +515,8 @@ async fn upsert_event(state: &AppState, e: &NormalizedEvent) -> AppResult<()> {
             occurrence_count = IF occurrence_count THEN occurrence_count ELSE 1 END, \
             webhook_synced_at = webhook_synced_at, \
             created_at = IF created_at THEN created_at ELSE $now END, \
-            updated_at = $now, last_seen_at = $now")
+            updated_at = $now, last_seen_at = $now",
+        )
         .bind(("rid", rec_id.clone()))
         .bind(("o", OWNER))
         .bind(("tx", e.transaction_id.clone()))
@@ -472,7 +541,11 @@ async fn upsert_event(state: &AppState, e: &NormalizedEvent) -> AppResult<()> {
 
     // Recompute occurrence count for this client identity.
     let occ = calculate_occurrence_count(state, e).await.unwrap_or(1);
-    let status_label = if occ <= 1 { "Failed".to_string() } else { format!("Failed x{occ}") };
+    let status_label = if occ <= 1 {
+        "Failed".to_string()
+    } else {
+        format!("Failed x{occ}")
+    };
     state.db.query(
         "UPDATE type::thing('payment_events', $rid) SET occurrence_count = $oc, status = $st, updated_at = time::now()")
         .bind(("rid", rec_id))
@@ -486,18 +559,32 @@ async fn calculate_occurrence_count(state: &AppState, e: &NormalizedEvent) -> Ap
     let email = e.email.trim().to_lowercase();
     let cid = e.customer_id.trim().to_string();
     let name = normalize_name(&e.client_name).to_lowercase();
-    #[derive(Deserialize)] struct R { email: Option<String>, customer_id: Option<String>, client_name: Option<String> }
-    let mut __resp = state.db
+    #[derive(Deserialize)]
+    struct R {
+        email: Option<String>,
+        customer_id: Option<String>,
+        client_name: Option<String>,
+    }
+    let mut __resp = state
+        .db
         .query("SELECT email, customer_id, client_name FROM payment_events WHERE owner_key = $o")
         .bind(("o", OWNER))
         .await?;
     let rows: Vec<R> = crate::db::take_many(&mut __resp, 0)?;
     let count = if !email.is_empty() {
-        rows.iter().filter(|r| r.email.as_deref().unwrap_or("").trim().to_lowercase() == email).count()
+        rows.iter()
+            .filter(|r| r.email.as_deref().unwrap_or("").trim().to_lowercase() == email)
+            .count()
     } else if !cid.is_empty() {
-        rows.iter().filter(|r| r.customer_id.as_deref().unwrap_or("").trim() == cid).count()
+        rows.iter()
+            .filter(|r| r.customer_id.as_deref().unwrap_or("").trim() == cid)
+            .count()
     } else if !name.is_empty() {
-        rows.iter().filter(|r| normalize_name(r.client_name.as_deref().unwrap_or("")).to_lowercase() == name).count()
+        rows.iter()
+            .filter(|r| {
+                normalize_name(r.client_name.as_deref().unwrap_or("")).to_lowercase() == name
+            })
+            .count()
     } else {
         1
     };
@@ -519,14 +606,20 @@ async fn pull_square(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normalize
     let mut cursor: Option<String> = None;
     let mut events: Vec<NormalizedEvent> = Vec::new();
     let retry_label = retry_label_for(m);
-    let merchant_label = if m.merchant_name.is_empty() { "Square".into() } else { m.merchant_name.clone() };
+    let merchant_label = if m.merchant_name.is_empty() {
+        "Square".into()
+    } else {
+        m.merchant_name.clone()
+    };
     loop {
         let mut params: Vec<(&str, String)> = vec![
             ("begin_time", begin.clone()),
             ("sort_order", "DESC".into()),
             ("limit", "100".into()),
         ];
-        if let Some(c) = &cursor { params.push(("cursor", c.clone())); }
+        if let Some(c) = &cursor {
+            params.push(("cursor", c.clone()));
+        }
         let resp = client
             .get("https://connect.squareup.com/v2/payments")
             .query(&params)
@@ -539,14 +632,22 @@ async fn pull_square(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normalize
         let status = resp.status();
         let payload: Value = resp.json().await.unwrap_or(json!({}));
         if !status.is_success() {
-            let detail = payload["errors"].as_array()
-                .map(|errs| errs.iter()
-                    .filter_map(|e| e["detail"].as_str().or(e["code"].as_str()))
-                    .collect::<Vec<_>>().join("; "))
+            let detail = payload["errors"]
+                .as_array()
+                .map(|errs| {
+                    errs.iter()
+                        .filter_map(|e| e["detail"].as_str().or(e["code"].as_str()))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                })
                 .unwrap_or_default();
             return Err(AppError::Other(anyhow::anyhow!(
                 "{merchant_label} API error ({status}){}",
-                if detail.is_empty() { String::new() } else { format!(": {detail}") }
+                if detail.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {detail}")
+                }
             )));
         }
         let empty: Vec<Value> = Vec::new();
@@ -556,15 +657,19 @@ async fn pull_square(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normalize
                 continue;
             }
             let errs_empty: Vec<Value> = Vec::new();
-            let errs = p["card_details"]["errors"].as_array().unwrap_or(&errs_empty);
-            let reason = errs.get(0)
+            let errs = p["card_details"]["errors"]
+                .as_array()
+                .unwrap_or(&errs_empty);
+            let reason = errs
+                .get(0)
                 .and_then(|e| e["detail"].as_str().or(e["code"].as_str()))
                 .or(p["delay_action"].as_str())
                 .or(p["status"].as_str())
                 .unwrap_or("FAILED")
                 .trim()
                 .to_string();
-            let name = p["billing_details"]["name"].as_str()
+            let name = p["billing_details"]["name"]
+                .as_str()
                 .or(p["billing_details"]["company_name"].as_str())
                 .unwrap_or("Unknown")
                 .trim()
@@ -573,22 +678,44 @@ async fn pull_square(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normalize
                 transaction_id: p["id"].as_str().unwrap_or("").trim().to_string(),
                 event_at: p["created_at"].as_str().unwrap_or("").trim().to_string(),
                 client_name: name,
-                email: p["billing_details"]["email_address"].as_str().unwrap_or("").trim().to_string(),
-                phone: p["billing_details"]["phone_number"].as_str().unwrap_or("").trim().to_string(),
+                email: p["billing_details"]["email_address"]
+                    .as_str()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
+                phone: p["billing_details"]["phone_number"]
+                    .as_str()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
                 amount_cents: p["amount_money"]["amount"].as_i64().unwrap_or(0),
-                card_last4: p["card_details"]["card"]["last_4"].as_str().unwrap_or("").to_string(),
-                payment_method: p["card_details"]["card"]["card_brand"].as_str().unwrap_or("Credit Card").trim().to_string(),
+                card_last4: p["card_details"]["card"]["last_4"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+                payment_method: p["card_details"]["card"]["card_brand"]
+                    .as_str()
+                    .unwrap_or("Credit Card")
+                    .trim()
+                    .to_string(),
                 failure_reason: reason,
                 retry_label: retry_label.clone(),
-                notes: errs.get(1).and_then(|e| e["code"].as_str()).unwrap_or("").to_string(),
+                notes: errs
+                    .get(1)
+                    .and_then(|e| e["code"].as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 processor: merchant_label.clone(),
                 customer_id: p["customer_id"].as_str().unwrap_or("").trim().to_string(),
             }));
         }
-        cursor = payload["cursor"].as_str()
+        cursor = payload["cursor"]
+            .as_str()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
-        if cursor.is_none() { break; }
+        if cursor.is_none() {
+            break;
+        }
     }
     Ok(events)
 }
@@ -597,7 +724,9 @@ async fn pull_square(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normalize
 
 async fn pull_nmi_like(m: &MerchantRow, days_back: i64) -> AppResult<Vec<NormalizedEvent>> {
     let key = m.transaction_key.as_deref().unwrap_or("").trim();
-    if key.is_empty() { return Ok(Vec::new()); }
+    if key.is_empty() {
+        return Ok(Vec::new());
+    }
     let lookback = days_back.clamp(1, 30);
     let now = time::OffsetDateTime::now_utc();
     let start = now - time::Duration::days(lookback);
@@ -618,14 +747,28 @@ async fn pull_nmi_like(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normali
     if !status.is_success() {
         let gateway = normalize_failed_gateway(&m.gateway);
         let label = if m.merchant_name.is_empty() {
-            if gateway.is_empty() { "NMI".into() } else { gateway }
-        } else { m.merchant_name.clone() };
-        return Err(AppError::Other(anyhow::anyhow!("{label} query failed [http {status}]")));
+            if gateway.is_empty() {
+                "NMI".into()
+            } else {
+                gateway
+            }
+        } else {
+            m.merchant_name.clone()
+        };
+        return Err(AppError::Other(anyhow::anyhow!(
+            "{label} query failed [http {status}]"
+        )));
     }
     let retry_label = retry_label_for(m);
     let processor = if m.merchant_name.is_empty() {
-        if normalize_failed_gateway(&m.gateway) == "bankcard" { "Bankcard".into() } else { "NMI".into() }
-    } else { m.merchant_name.clone() };
+        if normalize_failed_gateway(&m.gateway) == "bankcard" {
+            "Bankcard".into()
+        } else {
+            "NMI".into()
+        }
+    } else {
+        m.merchant_name.clone()
+    };
 
     let mut events: Vec<NormalizedEvent> = Vec::new();
     for tx_block in extract_xml_blocks(&xml, "transaction") {
@@ -635,7 +778,9 @@ async fn pull_nmi_like(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normali
         let amount = extract_xml_tag(&latest, "amount");
         let amount = if amount.is_empty() {
             extract_xml_tag(&latest, "requested_amount")
-        } else { amount };
+        } else {
+            amount
+        };
         let reason = first_non_empty(&[
             extract_xml_tag(&latest, "response_text"),
             extract_xml_tag(&latest, "processor_response_text"),
@@ -645,17 +790,30 @@ async fn pull_nmi_like(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normali
         let first = extract_xml_tag(&tx_block, "first_name");
         let last = extract_xml_tag(&tx_block, "last_name");
         let mut name = format!("{first} {last}").trim().to_string();
-        if name.is_empty() { name = extract_xml_tag(&tx_block, "company"); }
-        if name.is_empty() { name = "Unknown".into(); }
+        if name.is_empty() {
+            name = extract_xml_tag(&tx_block, "company");
+        }
+        if name.is_empty() {
+            name = "Unknown".into();
+        }
         let customer_id = first_non_empty(&[
             extract_xml_tag(&tx_block, "customerid"),
             extract_xml_tag(&tx_block, "customer_vault_id"),
         ]);
         let tx_id = extract_xml_tag(&tx_block, "transaction_id");
         let cc_number = extract_xml_tag(&tx_block, "cc_number");
-        let last4 = if cc_number.len() >= 4 { cc_number[cc_number.len()-4..].to_string() } else { String::new() };
-        let pay_method = first_non_empty(&[extract_xml_tag(&tx_block, "cc_type"), "Credit Card".into()]);
-        let event_at = if action_date.is_empty() { now_rfc3339() } else { action_date };
+        let last4 = if cc_number.len() >= 4 {
+            cc_number[cc_number.len() - 4..].to_string()
+        } else {
+            String::new()
+        };
+        let pay_method =
+            first_non_empty(&[extract_xml_tag(&tx_block, "cc_type"), "Credit Card".into()]);
+        let event_at = if action_date.is_empty() {
+            now_rfc3339()
+        } else {
+            action_date
+        };
 
         events.push(normalize_event(EventInputs {
             transaction_id: tx_id,
@@ -673,7 +831,10 @@ async fn pull_nmi_like(m: &MerchantRow, days_back: i64) -> AppResult<Vec<Normali
             customer_id,
         }));
     }
-    Ok(events.into_iter().filter(|e| !e.transaction_id.is_empty()).collect())
+    Ok(events
+        .into_iter()
+        .filter(|e| !e.transaction_id.is_empty())
+        .collect())
 }
 
 // ─── Webhook send ─────────────────────────────────────────────────────────
@@ -712,12 +873,22 @@ async fn send_failed_payment_webhook(
         .header("accept", "application/json")
         .header("content-type", "application/json");
     if !billing.webhook_header_name.is_empty() && !billing.webhook_header_value.is_empty() {
-        req = req.header(billing.webhook_header_name.as_str(), billing.webhook_header_value.as_str());
+        req = req.header(
+            billing.webhook_header_name.as_str(),
+            billing.webhook_header_value.as_str(),
+        );
     }
     if !billing.script_trigger_secret.is_empty() {
-        req = req.header("x-script-trigger-secret", billing.script_trigger_secret.as_str());
+        req = req.header(
+            "x-script-trigger-secret",
+            billing.script_trigger_secret.as_str(),
+        );
     }
-    let resp = req.json(&payload).send().await.map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
+    let resp = req
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| AppError::Other(anyhow::anyhow!(e)))?;
     let status = resp.status().as_u16();
     let body = resp.text().await.unwrap_or_default();
     Ok(WebhookOutcome {
@@ -749,12 +920,24 @@ struct EventInputs {
 }
 
 fn normalize_event(i: EventInputs) -> NormalizedEvent {
-    let reason = if i.failure_reason.trim().is_empty() { "Unknown Failure".into() } else { i.failure_reason.trim().to_string() };
+    let reason = if i.failure_reason.trim().is_empty() {
+        "Unknown Failure".into()
+    } else {
+        i.failure_reason.trim().to_string()
+    };
     let retry_elig = is_retry_eligible(&reason);
-    let next_action = if retry_elig { "Retry".into() } else { "Review".into() };
+    let next_action = if retry_elig {
+        "Retry".into()
+    } else {
+        "Review".into()
+    };
     NormalizedEvent {
         transaction_id: i.transaction_id.trim().to_string(),
-        event_at: if i.event_at.trim().is_empty() { now_rfc3339() } else { i.event_at.trim().to_string() },
+        event_at: if i.event_at.trim().is_empty() {
+            now_rfc3339()
+        } else {
+            i.event_at.trim().to_string()
+        },
         client_name: normalize_name(&i.client_name),
         email: i.email.trim().to_string(),
         phone: i.phone.trim().to_string(),
@@ -776,7 +959,13 @@ fn normalize_event(i: EventInputs) -> NormalizedEvent {
 fn payment_event_record_id(owner: &str, tx: &str) -> String {
     let raw = format!("{owner}_{tx}");
     raw.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -788,22 +977,47 @@ fn retry_label_for(m: &MerchantRow) -> String {
 
 fn normalize_failed_gateway(value: &str) -> String {
     let g = value.trim().to_lowercase();
-    if g.is_empty() { return String::new(); }
-    if g.contains("square") { return "square".into(); }
-    if g.contains("nmi") { return "nmi".into(); }
-    if g.contains("bankcard") { return "bankcard".into(); }
+    if g.is_empty() {
+        return String::new();
+    }
+    if g.contains("square") {
+        return "square".into();
+    }
+    if g.contains("nmi") {
+        return "nmi".into();
+    }
+    if g.contains("bankcard") {
+        return "bankcard".into();
+    }
     g
 }
 
 fn is_retry_eligible(value: &str) -> bool {
     let r = value.trim().to_lowercase();
-    if r.is_empty() { return false; }
-    ["insufficient","not sufficient","do not honor","expired","declined","limit","exceeded","transaction_limit","funds"]
-        .iter().any(|kw| r.contains(kw))
+    if r.is_empty() {
+        return false;
+    }
+    [
+        "insufficient",
+        "not sufficient",
+        "do not honor",
+        "expired",
+        "declined",
+        "limit",
+        "exceeded",
+        "transaction_limit",
+        "funds",
+    ]
+    .iter()
+    .any(|kw| r.contains(kw))
 }
 
 fn normalize_name(s: &str) -> String {
-    s.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_string()
+    s.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string()
 }
 
 fn extract_xml_blocks(xml: &str, tag: &str) -> Vec<String> {
@@ -818,7 +1032,10 @@ fn extract_xml_tag(xml: &str, tag: &str) -> String {
     let pat = format!(r"<{tag}>([\s\S]*?)</{tag}>");
     Regex::new(&pat)
         .ok()
-        .and_then(|re| re.captures(xml).map(|c| decode_xml_entities(&c[1]).trim().to_string()))
+        .and_then(|re| {
+            re.captures(xml)
+                .map(|c| decode_xml_entities(&c[1]).trim().to_string())
+        })
         .unwrap_or_default()
 }
 
@@ -833,14 +1050,23 @@ fn decode_xml_entities(s: &str) -> String {
 fn first_non_empty(items: &[String]) -> String {
     for s in items {
         let t = s.trim();
-        if !t.is_empty() { return t.to_string(); }
+        if !t.is_empty() {
+            return t.to_string();
+        }
     }
     String::new()
 }
 
 fn fmt_nmi(d: &time::OffsetDateTime) -> String {
-    format!("{:04}{:02}{:02}{:02}{:02}{:02}",
-        d.year(), u8::from(d.month()), d.day(), d.hour(), d.minute(), d.second())
+    format!(
+        "{:04}{:02}{:02}{:02}{:02}{:02}",
+        d.year(),
+        u8::from(d.month()),
+        d.day(),
+        d.hour(),
+        d.minute(),
+        d.second()
+    )
 }
 
 fn parse_nmi_ts(s: &str) -> String {
@@ -850,13 +1076,27 @@ fn parse_nmi_ts(s: &str) -> String {
     }
     let parse = |a: usize, b: usize| raw[a..b].parse::<i32>().ok();
     let (Some(y), Some(mo), Some(d), Some(h), Some(mi), Some(se)) = (
-        parse(0,4), parse(4,6), parse(6,8), parse(8,10), parse(10,12), parse(12,14),
-    ) else { return String::new() };
-    let date = time::Date::from_calendar_date(y, time::Month::try_from(mo as u8).ok().unwrap_or(time::Month::January), d as u8);
+        parse(0, 4),
+        parse(4, 6),
+        parse(6, 8),
+        parse(8, 10),
+        parse(10, 12),
+        parse(12, 14),
+    ) else {
+        return String::new();
+    };
+    let date = time::Date::from_calendar_date(
+        y,
+        time::Month::try_from(mo as u8)
+            .ok()
+            .unwrap_or(time::Month::January),
+        d as u8,
+    );
     let time = time::Time::from_hms(h as u8, mi as u8, se as u8);
     if let (Ok(date), Ok(time)) = (date, time) {
         let dt = time::OffsetDateTime::new_utc(date, time);
-        dt.format(&time::format_description::well_known::Rfc3339).unwrap_or_default()
+        dt.format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default()
     } else {
         String::new()
     }
@@ -874,7 +1114,9 @@ fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{:02X}", b)),
         }
     }

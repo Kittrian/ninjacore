@@ -42,12 +42,21 @@ pub struct R2Config {
 impl R2Config {
     pub fn from_env() -> Option<Self> {
         let endpoint = env_first(&["R2_ENDPOINT", "CONTABO_S3_ENDPOINT"])?;
-        let bucket = env_first(&["R2_BUCKET", "CONTABO_S3_BUCKET"]).unwrap_or_else(|| "clients-docs".into());
+        let bucket =
+            env_first(&["R2_BUCKET", "CONTABO_S3_BUCKET"]).unwrap_or_else(|| "clients-docs".into());
         let access_key = env_first(&["R2_ACCESS_KEY", "CONTABO_S3_ACCESS_KEY"])?;
         let secret_key = env_first(&["R2_SECRET_KEY", "CONTABO_S3_SECRET_KEY"])?;
-        let region = env_first(&["R2_REGION", "CONTABO_S3_REGION"]).unwrap_or_else(|| "auto".into());
+        let region =
+            env_first(&["R2_REGION", "CONTABO_S3_REGION"]).unwrap_or_else(|| "auto".into());
         let public_base = env_first(&["R2_PUBLIC_BASE"]);
-        Some(Self { endpoint, bucket, access_key, secret_key, region, public_base })
+        Some(Self {
+            endpoint,
+            bucket,
+            access_key,
+            secret_key,
+            region,
+            public_base,
+        })
     }
 }
 
@@ -87,8 +96,12 @@ pub fn presign_put(
     // YYYYMMDDTHHMMSSZ
     let amz_date = format!(
         "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
-        now.year(), now.month() as u8, now.day(),
-        now.hour(), now.minute(), now.second(),
+        now.year(),
+        now.month() as u8,
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second(),
     );
     let date_stamp = format!("{:04}{:02}{:02}", now.year(), now.month() as u8, now.day());
 
@@ -97,7 +110,11 @@ pub fn presign_put(
     // in a URL parser. Path on the endpoint is discarded — bucket is prefixed
     // separately into the canonical URI.
     let after_scheme = endpoint.split_once("://").map(|t| t.1).unwrap_or(endpoint);
-    let host_header = after_scheme.split('/').next().unwrap_or(after_scheme).to_string();
+    let host_header = after_scheme
+        .split('/')
+        .next()
+        .unwrap_or(after_scheme)
+        .to_string();
     if host_header.is_empty() {
         return Err("R2 endpoint missing host".into());
     }
@@ -115,7 +132,8 @@ pub fn presign_put(
     qs.insert("X-Amz-Expires".into(), expires.to_string());
     qs.insert("X-Amz-SignedHeaders".into(), "content-type;host".into());
 
-    let canonical_query = qs.iter()
+    let canonical_query = qs
+        .iter()
         .map(|(k, v)| format!("{}={}", urlencode_strict(k), urlencode_strict(v)))
         .collect::<Vec<_>>()
         .join("&");
@@ -132,16 +150,15 @@ pub fn presign_put(
     hasher.update(canonical_request.as_bytes());
     let canon_hash = hex::encode(hasher.finalize());
 
-    let string_to_sign = format!(
-        "AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{canon_hash}"
-    );
+    let string_to_sign = format!("AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{canon_hash}");
 
     let signing_key = derive_signing_key(&cfg.secret_key, &date_stamp, &cfg.region, "s3")?;
     let mut mac = HmacSha256::new_from_slice(&signing_key).map_err(|e| e.to_string())?;
     mac.update(string_to_sign.as_bytes());
     let signature = hex::encode(mac.finalize().into_bytes());
 
-    let signed_qs = qs.iter()
+    let signed_qs = qs
+        .iter()
         .map(|(k, v)| format!("{}={}", urlencode_strict(k), urlencode_strict(v)))
         .chain(std::iter::once(format!("X-Amz-Signature={signature}")))
         .collect::<Vec<_>>()
@@ -160,7 +177,12 @@ pub fn presign_put(
     })
 }
 
-fn derive_signing_key(secret: &str, date_stamp: &str, region: &str, service: &str) -> Result<Vec<u8>, String> {
+fn derive_signing_key(
+    secret: &str,
+    date_stamp: &str,
+    region: &str,
+    service: &str,
+) -> Result<Vec<u8>, String> {
     fn hmac(key: &[u8], msg: &[u8]) -> Result<Vec<u8>, String> {
         let mut mac = HmacSha256::new_from_slice(key).map_err(|e| e.to_string())?;
         mac.update(msg);
@@ -210,7 +232,11 @@ fn is_unreserved(b: u8) -> bool {
 /// path so the API server's auth gate stays in the loop.
 pub fn public_url(cfg: &R2Config, key: &str) -> String {
     if let Some(base) = &cfg.public_base {
-        format!("{}/{}", base.trim_end_matches('/'), key.trim_start_matches('/'))
+        format!(
+            "{}/{}",
+            base.trim_end_matches('/'),
+            key.trim_start_matches('/')
+        )
     } else {
         format!("/api/documents/proxy?key={}", urlencode_strict(key))
     }

@@ -35,11 +35,9 @@ impl Config {
             paseto_key_hex: env::var("PASETO_KEY").context("PASETO_KEY not set (64 hex chars)")?,
             report_script_path: env::var("REPORT_SCRIPT_PATH")
                 .unwrap_or_else(|_| "../scripts/XxXGetReport-NinjaTools.mjs".into()),
-            report_script_cwd: env::var("REPORT_SCRIPT_CWD")
-                .unwrap_or_else(|_| "..".into()),
+            report_script_cwd: env::var("REPORT_SCRIPT_CWD").unwrap_or_else(|_| "..".into()),
             node_bin: env::var("NODE_BIN").unwrap_or_else(|_| "node".into()),
-            tools_ninja_api_base: env::var("TOOLS_NINJA_API_BASE")
-                .unwrap_or(api_base_default),
+            tools_ninja_api_base: env::var("TOOLS_NINJA_API_BASE").unwrap_or(api_base_default),
         })
     }
 }

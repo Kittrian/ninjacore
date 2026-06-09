@@ -33,11 +33,20 @@ pub struct ClientListItem {
     pub id: String,
     pub first_name: String,
     pub last_name: String,
-    #[serde(default)] pub status: String,
-    #[serde(default)] pub phase: Option<String>,
-    #[serde(default)] pub email: Option<String>,
-    #[serde(default)] pub phone: Option<String>,
-    #[serde(default)] pub updated_at: Option<String>,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub phase: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub phone: String,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub monitoring_agency: String,
+    #[serde(default)]
+    pub report_date: String,
     /// Days until next credit-report import. Negative = overdue.
     /// Computed server-side from next_import_mode + related anchor fields.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -48,27 +57,96 @@ pub struct ClientListItem {
 #[derive(Debug, Deserialize)]
 struct ClientListRow {
     id: String,
-    #[serde(default)] first_name: Option<String>,
-    #[serde(default)] last_name: Option<String>,
-    #[serde(default)] status: Option<String>,
-    #[serde(default)] phase: Option<String>,
-    #[serde(default)] email: Option<String>,
-    #[serde(default)] phone: Option<String>,
-    #[serde(default)] updated_at: Option<String>,
-    #[serde(default)] next_import_mode: Option<String>,
-    #[serde(default)] next_import_int: Option<Value>,
-    #[serde(default)] manual_next_import_start_days: Option<Value>,
-    #[serde(default)] manual_next_import_set_date: Option<String>,
-    #[serde(default)] refresh_next_import_start_date: Option<String>,
-    #[serde(default)] report_date: Option<String>,
+    #[serde(default)]
+    first_name: Option<String>,
+    #[serde(default)]
+    last_name: Option<String>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    phase: Option<String>,
+    #[serde(default)]
+    monitoring_agency: Option<String>,
+    #[serde(default)]
+    email: Option<String>,
+    #[serde(default)]
+    phone: Option<String>,
+    #[serde(default)]
+    updated_at: Option<String>,
+    #[serde(default)]
+    next_import_mode: Option<String>,
+    #[serde(default)]
+    next_import_int: Option<Value>,
+    #[serde(default)]
+    manual_next_import_start_days: Option<Value>,
+    #[serde(default)]
+    manual_next_import_set_date: Option<String>,
+    #[serde(default)]
+    refresh_next_import_start_date: Option<String>,
+    #[serde(default)]
+    report_date: Option<String>,
 }
 
 fn parse_iso_date(s: &str) -> Option<time::Date> {
     let trimmed = s.trim();
-    if trimmed.is_empty() { return None; }
+    if trimmed.is_empty() {
+        return None;
+    }
     // Accept YYYY-MM-DD or full ISO timestamps; take first 10 chars.
     let head: String = trimmed.chars().take(10).collect();
-    time::Date::parse(&head, &time::macros::format_description!("[year]-[month]-[day]")).ok()
+    time::Date::parse(
+        &head,
+        &time::macros::format_description!("[year]-[month]-[day]"),
+    )
+    .ok()
+}
+
+fn percent_hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(10 + (b - b'a')),
+        b'A'..=b'F' => Some(10 + (b - b'A')),
+        _ => None,
+    }
+}
+
+fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = String::with_capacity(bytes.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h1), Some(h2)) = (percent_hex_val(bytes[i + 1]), percent_hex_val(bytes[i + 2])) {
+                out.push((h1 << 4 | h2) as char);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+fn normalize_client_id(raw_id: &str) -> String {
+    let decoded = percent_decode(raw_id);
+    let decoded = decoded.trim();
+    if decoded.is_empty() {
+        return String::new();
+    }
+
+    let no_prefix = decoded
+        .split_once(':')
+        .map(|(_table, tail)| tail)
+        .unwrap_or(decoded)
+        .trim();
+    let no_ticks = no_prefix.trim_matches('`').trim();
+    let no_ticks = no_ticks.trim_matches('\'').trim();
+
+    match no_ticks.rsplit_once(':') {
+        Some((_table, local_id)) => local_id.trim().trim_matches('`').to_string(),
+        None => no_ticks.to_string(),
+    }
 }
 
 fn parse_i64(v: &Value) -> Option<i64> {
@@ -84,7 +162,11 @@ fn today_utc() -> time::Date {
 }
 
 fn compute_days_left(row: &ClientListRow) -> Option<i64> {
-    let mode = row.next_import_mode.as_deref().unwrap_or("manual").to_ascii_lowercase();
+    let mode = row
+        .next_import_mode
+        .as_deref()
+        .unwrap_or("manual")
+        .to_ascii_lowercase();
     let today = today_utc();
     if mode == "refresh-success" {
         let anchor = row
@@ -123,6 +205,7 @@ pub async fn list_clients(
                 "SELECT id, first_name, last_name, status, phase, email, phone, updated_at, \
                         next_import_mode, next_import_int, \
                         manual_next_import_start_days, manual_next_import_set_date, \
+                        monitoring_agency, \
                         refresh_next_import_start_date, report_date \
                  FROM clients WHERE status = 'Client' ORDER BY last_name, first_name",
             )
@@ -133,14 +216,16 @@ pub async fn list_clients(
             .map(|row| {
                 let days_left = compute_days_left(&row);
                 ClientListItem {
-                    id: row.id,
+                    id: normalize_client_id(&row.id),
                     first_name: row.first_name.unwrap_or_default(),
                     last_name: row.last_name.unwrap_or_default(),
                     status: row.status.unwrap_or_default(),
-                    phase: row.phase,
-                    email: row.email,
-                    phone: row.phone,
+                    phase: row.phase.unwrap_or_default(),
+                    email: row.email.unwrap_or_default(),
+                    phone: row.phone.unwrap_or_default(),
                     updated_at: row.updated_at,
+                    monitoring_agency: row.monitoring_agency.unwrap_or_default(),
+                    report_date: row.report_date.unwrap_or_default(),
                     days_left,
                 }
             })
@@ -153,7 +238,6 @@ pub async fn list_clients(
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => std::cmp::Ordering::Equal,
         });
-        items.truncate(100);
         Ok::<Vec<ClientListItem>, AppError>(items)
     };
     let statuses_fut = load_taxonomy(&state, "taxonomy.client_statuses");
@@ -174,6 +258,7 @@ pub async fn get_client(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
+    let id = normalize_client_id(&id);
     let row = load_client_raw(&state, &id).await?;
     Ok(Json(json!({ "client": to_safe_client(row) })))
 }
@@ -183,9 +268,10 @@ pub async fn delete_client(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
+    let id = normalize_client_id(&id);
     let mut __resp = state
         .db
-        .query("DELETE type::thing('clients', $id) RETURN BEFORE")
+        .query("DELETE type::record('clients', $id) RETURN BEFORE")
         .bind(("id", id.clone()))
         .await?;
     let deleted: Option<Value> = crate::db::take_one(&mut __resp, 0)?;
@@ -200,7 +286,9 @@ pub async fn delete_client(
 // ─── PATCH variants ───────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
-pub struct StatusPatch { pub status: String }
+pub struct StatusPatch {
+    pub status: String,
+}
 
 pub async fn patch_status(
     _user: AuthUser,
@@ -212,20 +300,25 @@ pub async fn patch_status(
     if next.is_empty() {
         return Err(AppError::BadRequest("Status is required.".into()));
     }
+    let id = normalize_client_id(&id);
     let mut __resp = state
         .db
-        .query("UPDATE type::thing('clients', $id) SET status = $s, updated_at = time::now() RETURN AFTER")
+        .query("UPDATE type::record('clients', $id) SET status = $s, updated_at = time::now() RETURN AFTER")
         .bind(("id", id))
         .bind(("s", next.clone()))
         .await?;
     let updated: Option<Value> = crate::db::take_one(&mut __resp, 0)?;
     let client = updated.ok_or(AppError::NotFound)?;
     let statuses = append_taxonomy(&state, "taxonomy.client_statuses", &next).await?;
-    Ok(Json(json!({ "ok": true, "client": to_safe_client(client), "statuses": statuses })))
+    Ok(Json(
+        json!({ "ok": true, "client": to_safe_client(client), "statuses": statuses }),
+    ))
 }
 
 #[derive(Deserialize)]
-pub struct PhasePatch { pub phase: String }
+pub struct PhasePatch {
+    pub phase: String,
+}
 
 pub async fn patch_phase(
     _user: AuthUser,
@@ -237,20 +330,25 @@ pub async fn patch_phase(
     if next.is_empty() {
         return Err(AppError::BadRequest("Phase is required.".into()));
     }
+    let id = normalize_client_id(&id);
     let mut __resp = state
         .db
-        .query("UPDATE type::thing('clients', $id) SET phase = $p, updated_at = time::now() RETURN AFTER")
+        .query("UPDATE type::record('clients', $id) SET phase = $p, updated_at = time::now() RETURN AFTER")
         .bind(("id", id))
         .bind(("p", next.clone()))
         .await?;
     let updated: Option<Value> = crate::db::take_one(&mut __resp, 0)?;
     let client = updated.ok_or(AppError::NotFound)?;
     let phases = append_taxonomy(&state, "taxonomy.client_phases", &next).await?;
-    Ok(Json(json!({ "ok": true, "client": to_safe_client(client), "phases": phases })))
+    Ok(Json(
+        json!({ "ok": true, "client": to_safe_client(client), "phases": phases }),
+    ))
 }
 
 #[derive(Deserialize)]
-pub struct NextImportPatch { pub days: serde_json::Value }
+pub struct NextImportPatch {
+    pub days: serde_json::Value,
+}
 
 pub async fn patch_next_import(
     _user: AuthUser,
@@ -258,23 +356,33 @@ pub async fn patch_next_import(
     Path(id): Path<String>,
     Json(body): Json<NextImportPatch>,
 ) -> AppResult<Json<Value>> {
-    let days = body.days.as_i64()
-        .or_else(|| body.days.as_str().and_then(|s| s.trim().parse::<i64>().ok()))
+    let days = body
+        .days
+        .as_i64()
+        .or_else(|| {
+            body.days
+                .as_str()
+                .and_then(|s| s.trim().parse::<i64>().ok())
+        })
         .ok_or_else(|| AppError::BadRequest("Next Import days must be a number.".into()))?;
     let (next_int, next_label) = format_next_import(days);
     let today = time::OffsetDateTime::now_utc()
         .date()
         .format(&time::format_description::well_known::Iso8601::DATE)
         .unwrap_or_default();
+    let id = normalize_client_id(&id);
 
-    let mut __resp = state.db.query(
-        "UPDATE type::thing('clients', $id) SET \
+    let mut __resp = state
+        .db
+        .query(
+            "UPDATE type::record('clients', $id) SET \
             next_import_int = $ni, next_import_label = $nl, \
             next_import_mode = 'manual', \
             manual_next_import_start_days = $days, \
             manual_next_import_set_date = $today, \
             updated_at = time::now() \
-            RETURN AFTER")
+            RETURN AFTER",
+        )
         .bind(("id", id))
         .bind(("ni", next_int))
         .bind(("nl", next_label))
@@ -283,12 +391,15 @@ pub async fn patch_next_import(
         .await?;
     let updated: Option<Value> = crate::db::take_one(&mut __resp, 0)?;
     let client = updated.ok_or(AppError::NotFound)?;
-    Ok(Json(json!({ "ok": true, "client": to_safe_client(client) })))
+    Ok(Json(
+        json!({ "ok": true, "client": to_safe_client(client) }),
+    ))
 }
 
 #[derive(Deserialize)]
 pub struct FinancialPatch {
-    #[serde(default, rename = "yearlyIncome")] pub yearly_income: Option<String>,
+    #[serde(default, rename = "yearlyIncome")]
+    pub yearly_income: Option<String>,
 }
 
 pub async fn patch_financial(
@@ -298,14 +409,17 @@ pub async fn patch_financial(
     Json(body): Json<FinancialPatch>,
 ) -> AppResult<Json<Value>> {
     let yearly_income = body.yearly_income.unwrap_or_default().trim().to_string();
+    let id = normalize_client_id(&id);
     let mut __resp = state.db.query(
-        "UPDATE type::thing('clients', $id) SET yearly_income = $yi, updated_at = time::now() RETURN AFTER")
+        "UPDATE type::record('clients', $id) SET yearly_income = $yi, updated_at = time::now() RETURN AFTER")
         .bind(("id", id))
         .bind(("yi", yearly_income))
         .await?;
     let updated: Option<Value> = crate::db::take_one(&mut __resp, 0)?;
     let client = updated.ok_or(AppError::NotFound)?;
-    Ok(Json(json!({ "ok": true, "client": to_safe_client(client) })))
+    Ok(Json(
+        json!({ "ok": true, "client": to_safe_client(client) }),
+    ))
 }
 
 /// Full profile PATCH — mirrors the long server.mjs handler.
@@ -323,18 +437,26 @@ pub async fn patch_profile(
     Path(id): Path<String>,
     Json(body): Json<ProfilePatch>,
 ) -> AppResult<Json<Value>> {
+    let id = normalize_client_id(&id);
     // No pre-fetch. Fields the Edit form always sends are bound directly;
     // fields the form omits (goal/notes/financials/reportDate/nextImportInt)
     // use SurrealQL's `IF $foo_set THEN $foo ELSE foo END` so the DB itself
     // preserves the existing value. One round trip instead of two.
 
     let pick_str = |key: &str| -> Option<String> {
-        body.fields.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+        body.fields
+            .get(key)
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
     };
     let req = |key: &str| -> String { pick_str(key).unwrap_or_default() };
     let req_or = |key: &str, default: &str| -> String {
         let v = req(key);
-        if v.is_empty() { default.into() } else { v }
+        if v.is_empty() {
+            default.into()
+        } else {
+            v
+        }
     };
 
     // Always-sent fields from the Edit Client form.
@@ -361,11 +483,15 @@ pub async fn patch_profile(
     let requested_secret = req("secretKey");
     let secret_key = if requested_secret.is_empty() {
         last_four(&ssn).to_string()
-    } else { requested_secret };
+    } else {
+        requested_secret
+    };
     let requested_portal = req("portalPassword");
     let portal_password = if requested_portal.is_empty() {
         default_portal_password(&last_name, &ssn)
-    } else { requested_portal };
+    } else {
+        requested_portal
+    };
     let portal_enabled = req("portalEnabled").to_lowercase() != "off";
 
     // Conditional fields — only update if body actually sent them.
@@ -406,7 +532,7 @@ pub async fn patch_profile(
     let ni_set = ni_opt.is_some();
 
     let mut __resp = state.db.query(
-        "UPDATE type::thing('clients', $id) SET \
+        "UPDATE type::record('clients', $id) SET \
             first_name = $fn, last_name = $ln, email = $email, phone = $phone, \
             email_n = $em, phone_n = $ph, \
             dob = $dob, ssn = $ssn, address = $address, \
@@ -492,12 +618,18 @@ pub async fn patch_profile(
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RefreshReportBody {
-    #[serde(default)] pub force_paid: bool,
-    #[serde(default)] pub monitoring_agency: Option<String>,
-    #[serde(default)] pub monitoring_username: Option<String>,
-    #[serde(default)] pub monitoring_password: Option<String>,
-    #[serde(default, rename = "tokenId")] pub monitoring_token: Option<String>,
-    #[serde(default)] pub secret_key: Option<String>,
+    #[serde(default)]
+    pub force_paid: bool,
+    #[serde(default)]
+    pub monitoring_agency: Option<String>,
+    #[serde(default)]
+    pub monitoring_username: Option<String>,
+    #[serde(default)]
+    pub monitoring_password: Option<String>,
+    #[serde(default, rename = "tokenId")]
+    pub monitoring_token: Option<String>,
+    #[serde(default)]
+    pub secret_key: Option<String>,
 }
 
 pub async fn refresh_report(
@@ -507,6 +639,7 @@ pub async fn refresh_report(
     body: Option<Json<RefreshReportBody>>,
 ) -> AppResult<impl IntoResponse> {
     let body = body.map(|Json(b)| b).unwrap_or_default();
+    let id = normalize_client_id(&id);
 
     // Persist any credential overrides the form supplied before launching, so
     // the script can re-fetch the client by id and see fresh values.
@@ -599,22 +732,42 @@ async fn persist_refresh_overrides(
     }
 
     let mut sets: Vec<&str> = Vec::new();
-    if body.monitoring_agency.is_some() { sets.push("monitoring_agency = $ma"); }
-    if body.monitoring_username.is_some() { sets.push("monitoring_username = $mu"); }
-    if body.monitoring_password.is_some() { sets.push("monitoring_password = $mp"); }
-    if body.monitoring_token.is_some() { sets.push("monitoring_token = $mt"); }
-    if body.secret_key.is_some() { sets.push("secret_key = $sk"); }
+    if body.monitoring_agency.is_some() {
+        sets.push("monitoring_agency = $ma");
+    }
+    if body.monitoring_username.is_some() {
+        sets.push("monitoring_username = $mu");
+    }
+    if body.monitoring_password.is_some() {
+        sets.push("monitoring_password = $mp");
+    }
+    if body.monitoring_token.is_some() {
+        sets.push("monitoring_token = $mt");
+    }
+    if body.secret_key.is_some() {
+        sets.push("secret_key = $sk");
+    }
 
     let update = format!(
-        "UPDATE type::thing('clients', $id) SET {} RETURN NONE",
+        "UPDATE type::record('clients', $id) SET {} RETURN NONE",
         sets.join(", ")
     );
     let mut q = state.db.query(update).bind(("id", id.to_string()));
-    if let Some(v) = &body.monitoring_agency { q = q.bind(("ma", v.clone())); }
-    if let Some(v) = &body.monitoring_username { q = q.bind(("mu", v.clone())); }
-    if let Some(v) = &body.monitoring_password { q = q.bind(("mp", v.clone())); }
-    if let Some(v) = &body.monitoring_token { q = q.bind(("mt", v.clone())); }
-    if let Some(v) = &body.secret_key { q = q.bind(("sk", v.clone())); }
+    if let Some(v) = &body.monitoring_agency {
+        q = q.bind(("ma", v.clone()));
+    }
+    if let Some(v) = &body.monitoring_username {
+        q = q.bind(("mu", v.clone()));
+    }
+    if let Some(v) = &body.monitoring_password {
+        q = q.bind(("mp", v.clone()));
+    }
+    if let Some(v) = &body.monitoring_token {
+        q = q.bind(("mt", v.clone()));
+    }
+    if let Some(v) = &body.secret_key {
+        q = q.bind(("sk", v.clone()));
+    }
     q.await?;
     Ok(())
 }
@@ -645,9 +798,13 @@ fn client_to_camel(row: &Value) -> Value {
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 async fn load_client_raw(state: &AppState, id: &str) -> AppResult<Value> {
+    let id = normalize_client_id(id);
+    if id.is_empty() {
+        return Err(AppError::BadRequest("Invalid client id.".into()));
+    }
     let mut __resp = state
         .db
-        .query("SELECT * FROM ONLY type::thing('clients', $id) LIMIT 1")
+        .query("SELECT * FROM ONLY type::record('clients', $id) LIMIT 1")
         .bind(("id", id.to_string()))
         .await?;
     let row: Option<Value> = crate::db::take_one(&mut __resp, 0)?;
@@ -696,7 +853,11 @@ fn last_four(ssn: &str) -> &str {
 }
 
 fn default_portal_password(last_name: &str, ssn: &str) -> String {
-    let last = last_name.split_whitespace().next().unwrap_or("").to_lowercase();
+    let last = last_name
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
     let four = last_four(ssn);
     if last.is_empty() && four.is_empty() {
         return String::new();
@@ -756,11 +917,16 @@ fn snake(camel: &str) -> String {
 }
 
 async fn load_taxonomy(state: &AppState, key: &str) -> Option<Vec<String>> {
-    #[derive(Deserialize)] struct Row { value_json: String }
-    let mut resp = state.db
+    #[derive(Deserialize)]
+    struct Row {
+        value_json: String,
+    }
+    let mut resp = state
+        .db
         .query("SELECT value_json FROM settings WHERE setting_key = $k LIMIT 1")
         .bind(("k", key.to_string()))
-        .await.ok()?;
+        .await
+        .ok()?;
     let row: Option<Row> = crate::db::take_one(&mut resp, 0).ok()?;
     serde_json::from_str(&row?.value_json).ok()
 }
@@ -772,8 +938,11 @@ async fn append_taxonomy(state: &AppState, key: &str, value: &str) -> AppResult<
         list.push(v.to_string());
     }
     let payload = serde_json::to_string(&list).unwrap();
-    state.db
-        .query("UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()")
+    state
+        .db
+        .query(
+            "UPSERT settings:[$k] SET setting_key = $k, value_json = $v, updated_at = time::now()",
+        )
         .bind(("k", key.to_string()))
         .bind(("v", payload))
         .await?;
@@ -782,10 +951,21 @@ async fn append_taxonomy(state: &AppState, key: &str, value: &str) -> AppResult<
 
 fn default_statuses() -> Vec<String> {
     ["Lead", "Prospect", "Client", "Graduated", "Cancelled"]
-        .iter().map(|s| s.to_string()).collect()
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
 }
 
 fn default_phases() -> Vec<String> {
-    ["None", "Onboarding", "Round 1", "Round 2", "Round 3", "Monitoring"]
-        .iter().map(|s| s.to_string()).collect()
+    [
+        "None",
+        "Onboarding",
+        "Round 1",
+        "Round 2",
+        "Round 3",
+        "Monitoring",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
 }
