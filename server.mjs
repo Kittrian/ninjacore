@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { spawn } from 'node:child_process';
 import { Buffer } from 'node:buffer';
 import { createHash, createHmac, createPrivateKey, createSign, randomUUID } from 'node:crypto';
@@ -389,12 +389,63 @@ const smartCreditPartnerBaseUrl = String(process.env.SMARTCREDIT_PARTNER_BASE_UR
   || 'https://papi.consumerdirect.io';
 const smartCreditApiBaseUrl = String(process.env.SMARTCREDIT_API_BASE_URL || 'https://api.smartcredit.com').trim()
   || 'https://api.smartcredit.com';
+const smartCreditIntegrationSocketPath = String(process.env.SMARTCREDIT_INTEGRATION_SOCKET || '').trim();
 const smartCreditIntegrationBaseUrl = String(process.env.SMARTCREDIT_INTEGRATION_BASE_URL || 'http://127.0.0.1:5215').trim()
   || 'http://127.0.0.1:5215';
+const smartCreditIntegrationFallbackBaseUrl = String(process.env.SMARTCREDIT_INTEGRATION_FALLBACK_URL || '').trim();
 const smartCreditTargetEntityId = String(process.env.SMARTCREDIT_TARGET_ENTITY_ID || 'e6c9113e-48b8-41ef-a87e-87a3c51a5e83').trim()
   || 'e6c9113e-48b8-41ef-a87e-87a3c51a5e83';
 const smartCreditAgentId = String(process.env.SMARTCREDIT_AGENT_ID || 'Best Texas Credit Pros').trim()
   || 'Best Texas Credit Pros';
+
+const requestJsonViaUnixSocket = async ({
+  socketPath,
+  requestPath,
+  method = 'GET',
+  headers = {},
+  body = '',
+}) => {
+  const normalizedPath = String(requestPath || '').startsWith('/')
+    ? String(requestPath || '')
+    : `/${String(requestPath || '')}`;
+  const requestBody = typeof body === 'string'
+    ? body
+    : (body ? JSON.stringify(body) : '');
+
+  return await new Promise((resolve, reject) => {
+    const req = httpRequest(
+      {
+        socketPath,
+        path: normalizedPath,
+        method,
+        headers: {
+          accept: 'application/json',
+          ...headers,
+          ...(requestBody ? { 'content-length': Buffer.byteLength(requestBody) } : {}),
+        },
+      },
+      (res) => {
+        let raw = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          raw += chunk;
+        });
+        res.on('end', () => {
+          resolve({
+            ok: Number(res.statusCode || 0) >= 200 && Number(res.statusCode || 0) < 300,
+            status: Number(res.statusCode || 0),
+            body: raw,
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    if (requestBody) {
+      req.write(requestBody);
+    }
+    req.end();
+  });
+};
 
 const seedData = {
   statuses: defaultStatuses,
@@ -8817,12 +8868,37 @@ const requestSmartCreditJwtViaIntegration = async (customerToken) => {
     throw new Error('SmartCredit customer token is required.');
   }
 
-  const endpointCandidates = [
-    `${smartCreditIntegrationBaseUrl}/api/smartcredit/token/${encodeURIComponent(customer)}`,
-    `${smartCreditIntegrationBaseUrl}/smartcredit/token/${encodeURIComponent(customer)}`,
+  const endpointPathCandidates = [
+    `/api/smartcredit/token/${encodeURIComponent(customer)}`,
+    `/smartcredit/token/${encodeURIComponent(customer)}`,
   ];
 
   let lastError = null;
+  if (smartCreditIntegrationSocketPath) {
+    for (const endpointPath of endpointPathCandidates) {
+      const response = await requestJsonViaUnixSocket({
+        socketPath: smartCreditIntegrationSocketPath,
+        requestPath: endpointPath,
+        method: 'GET',
+        headers: {
+          'user-agent': 'BestTexasCreditPros-Server/1.0',
+        },
+      }).catch((error) => ({
+        ok: false,
+        status: 0,
+        body: String(error?.message || error || 'fetch failed'),
+      }));
+
+      const parsed = parseJsonValue(response.body) || {};
+      const jwt = String(parsed.smartCreditToken || parsed.token || parsed.jwt || parsed.access_token || '').trim();
+      if (response.ok && jwt) {
+        return jwt;
+      }
+      lastError = parsed.error || parsed.detail || parsed.message || `SmartCreditIntegration socket flow failed (${response.status}) at ${endpointPath}`;
+    }
+  }
+
+  const endpointCandidates = endpointPathCandidates.map((endpointPath) => `${smartCreditIntegrationBaseUrl}${endpointPath}`);
   for (const endpoint of endpointCandidates) {
     const response = await fetch(endpoint, {
       method: 'GET',
@@ -8843,6 +8919,31 @@ const requestSmartCreditJwtViaIntegration = async (customerToken) => {
       return jwt;
     }
     lastError = parsed.error || parsed.detail || parsed.message || `SmartCreditIntegration token flow failed (${response.status}) at ${endpoint}`;
+  }
+
+  if (smartCreditIntegrationFallbackBaseUrl) {
+    const fallbackEndpointCandidates = endpointPathCandidates.map((endpointPath) => `${smartCreditIntegrationFallbackBaseUrl}${endpointPath}`);
+    for (const endpoint of fallbackEndpointCandidates) {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'BestTexasCreditPros-Server/1.0',
+        },
+      }).catch((error) => ({
+        ok: false,
+        status: 0,
+        text: async () => String(error?.message || error || 'fetch failed'),
+      }));
+
+      const text = await response.text();
+      const parsed = parseJsonValue(text) || {};
+      const jwt = String(parsed.smartCreditToken || parsed.token || parsed.jwt || parsed.access_token || '').trim();
+      if (response.ok && jwt) {
+        return jwt;
+      }
+      lastError = parsed.error || parsed.detail || parsed.message || `SmartCreditIntegration fallback token flow failed (${response.status}) at ${endpoint}`;
+    }
   }
 
   throw new Error(String(lastError || 'SmartCreditIntegration token flow failed.'));
@@ -8924,7 +9025,7 @@ const extractSmartCreditCustomerTokenFromLookup = (payload = {}) => {
 };
 
 const runSmartCreditTokenFlow = async (integration, customerToken, forcePaid = false, customerEmail = '') => {
-  let accessToken = await requestSmartCreditAccessToken(integration);
+  let accessToken = '';
   let code = '';
   let jwt = '';
   let tokenSource = 'integration';
@@ -8933,6 +9034,7 @@ const runSmartCreditTokenFlow = async (integration, customerToken, forcePaid = f
 
   // Only use email lookup when there is no client token.
   if (!effectiveCustomerToken && String(customerEmail || '').trim()) {
+    accessToken = accessToken || await requestSmartCreditAccessToken(integration);
     console.log(
       [
         'SmartCredit customer lookup request command:',
@@ -8956,6 +9058,7 @@ const runSmartCreditTokenFlow = async (integration, customerToken, forcePaid = f
     jwt = await requestSmartCreditJwtViaIntegration(effectiveCustomerToken);
   } catch (integrationError) {
     tokenSource = 'native-fallback';
+    accessToken = accessToken || await requestSmartCreditAccessToken(integration);
     code = await requestSmartCreditLoginCode(accessToken, effectiveCustomerToken);
     jwt = await requestSmartCreditJwt(code);
     console.log(`-> SmartCreditIntegration unavailable, used native fallback: ${integrationError.message}`);
@@ -11667,7 +11770,8 @@ const server = createServer((req, res) => {
         && String(client.monitoringUsername || '').trim()
         && String(client.monitoringPassword || '').trim();
 
-      if (!integration || !integration.tokenId || !integration.apiSecret) {
+      const smartCreditBridgeSupported = resolvedIntegrationKey === 'smartcredit35540' || resolvedIntegrationKey === 'smartcredit68951';
+      if ((!integration || !integration.tokenId || !integration.apiSecret) && !smartCreditBridgeSupported) {
         // Token-based integration credentials missing. If we have a username +
         // password on the client, fall through to Script B (browser flow)
         // instead of failing with "integration not configured."
@@ -11803,12 +11907,34 @@ const server = createServer((req, res) => {
 
       try {
         if (resolvedIntegrationKey === 'smartcredit35540' || resolvedIntegrationKey === 'smartcredit68951') {
-          const flow = await runSmartCreditTokenFlow(
-            integration,
-            token,
-            forcePaid,
-            client.monitoringUsername || client.email || '',
-          );
+          let flow;
+          try {
+            flow = await runSmartCreditTokenFlow(
+              integration || {},
+              token,
+              forcePaid,
+              client.monitoringUsername || client.email || '',
+            );
+          } catch (error) {
+            if ((!integration || !integration.tokenId || !integration.apiSecret) && canFallbackToBrowser) {
+              const run = await startBrowserReportRun(client, {
+                initialLogs: [
+                  `SmartCredit bridge flow failed without integration credentials; falling back to browser/password (Script B): ${error.message}`,
+                ],
+              });
+              send(res, 202, {
+                ok: true,
+                started: true,
+                runId: run.id,
+                runnerType: 'smartcredit',
+                refreshMode: 'browser-fallback',
+                status: run.status,
+                logs: run.logs,
+              });
+              return;
+            }
+            throw error;
+          }
           const jwtCustomerToken = extractCustomerTokenFromJwt(flow.jwt);
           if (jwtCustomerToken && jwtCustomerToken !== flow.effectiveCustomerToken) {
             throw new Error(
