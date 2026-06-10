@@ -135,9 +135,9 @@ const setBootLoadingOverlay = (isActive, message = '') => {
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
 const ND_API = 'https://api.ninjadispute.com';
 const ndFetch = (path, opts = {}) => fetch(`${ND_API}${path}`, { credentials: 'include', ...opts });
-const APP_PUBLIC_VERSION = 'v3.28';
+const APP_PUBLIC_VERSION = 'v3.29';
 const REPORT_RUNNER_SCRIPT_VERSION = 'v.6';
-const APP_SCRIPT_VERSION = 'v20260610-monitoring-sync-01 loaded';
+const APP_SCRIPT_VERSION = 'v20260610-whatif-zero-score-01 loaded';
 const WIDGET_VERSION_DISPLAY = `${APP_PUBLIC_VERSION} • IDIQ/SC ${REPORT_RUNNER_SCRIPT_VERSION}`;
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
@@ -5610,6 +5610,10 @@ const renderClientDetail = (client) => {
           acc[bureau] = '---';
           return acc;
         }
+        if (current <= 0) {
+          acc[bureau] = Math.round(current);
+          return acc;
+        }
         acc[bureau] = clampScore(current + effectiveVantageDelta);
         return acc;
       }, {});
@@ -5617,6 +5621,10 @@ const renderClientDetail = (client) => {
         const current = Number(currentFicoByBureau[bureau]);
         if (!Number.isFinite(current) || !Number.isFinite(effectiveFicoDelta)) {
           acc[bureau] = '---';
+          return acc;
+        }
+        if (current <= 0) {
+          acc[bureau] = Math.round(current);
           return acc;
         }
         acc[bureau] = clampScore(current + effectiveFicoDelta);

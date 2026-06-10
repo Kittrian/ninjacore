@@ -1,5 +1,5 @@
 {
-  "frontendVersion": "v3.28",
-  "buildVersion": "20260610-13",
-  "appScriptVersion": "v3.28 monitoring sync + refresh agency fix"
+  "frontendVersion": "v3.29",
+  "buildVersion": "20260610-14",
+  "appScriptVersion": "v3.29 what-if zero-score freeze + delta arrow assets"
 }
