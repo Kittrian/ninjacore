@@ -595,6 +595,9 @@ h1 {
 }
 
 .hero-panel {
+  --hero-theme-hue1: 255;
+  --hero-theme-hue2: 222;
+  position: relative;
   width: 100%;
   padding: 1.2rem;
   padding-bottom: 1.1rem;
@@ -605,6 +608,46 @@ h1 {
   justify-self: stretch;
   align-content: start;
   min-height: calc(var(--hero-frame-height) - 0.35rem);
+  overflow: visible;
+  isolation: isolate;
+}
+
+.hero-theme-banner {
+  position: absolute;
+  top: 2.1rem;
+  right: 0.8rem;
+  width: clamp(48rem, 92vw, 132rem);
+  height: clamp(11rem, 28vw, 20rem);
+  transform: translateX(9%);
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    url("/assets/abstract-light.jpg"),
+    linear-gradient(to right in oklab, hsl(var(--hero-theme-hue2) 52% 76%), hsl(var(--hero-theme-hue1) 58% 74%));
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-blend-mode: hard-light;
+  opacity: 0.96;
+  filter: saturate(1.28) brightness(0.92) blur(0.2px);
+  mask-image: linear-gradient(90deg, transparent 0, rgba(0, 0, 0, 0.95) 9%, rgba(0, 0, 0, 0.95) 88%, transparent 100%);
+}
+
+.hero-theme-banner::after {
+  content: "";
+  position: absolute;
+  inset: -12% -3%;
+  background:
+    linear-gradient(90deg, transparent 0, hsl(var(--hero-theme-hue2) 88% 55% / 0.12) 14%, hsl(var(--hero-theme-hue1) 92% 74% / 0.78) 53%, hsl(var(--hero-theme-hue2) 88% 55% / 0.15) 86%, transparent 100%);
+  filter: blur(24px);
+  opacity: 0.92;
+  mix-blend-mode: screen;
+}
+
+.top-actions,
+.integration-stack {
+  position: relative;
+  z-index: 1;
 }
 
 .top-actions {
@@ -626,8 +669,8 @@ h1 {
 }
 
 .hero-panel-theme-widget {
-  --hue1: 255;
-  --hue2: 222;
+  --hue1: var(--hero-theme-hue1, 255);
+  --hue2: var(--hero-theme-hue2, 222);
   --border: 1px;
   --radius: 22px;
   --border-color: hsl(var(--hue2) 12% 20%);
@@ -644,10 +687,15 @@ h1 {
     linear-gradient(45deg, hsl(var(--hue2) 50% 10% / 0.8), hsl(var(--hue2) 50% 10% / 0) 33%),
     linear-gradient(hsl(220deg 25% 4.8% / 0.82));
   backdrop-filter: blur(12px);
-  box-shadow: hsl(var(--hue2) 50% 2%) 0 10px 16px -8px, hsl(var(--hue2) 50% 4%) 0 20px 36px -14px;
+  box-shadow:
+    hsl(var(--hue2) 50% 2%) 0 10px 16px -8px,
+    hsl(var(--hue2) 50% 4%) 0 20px 36px -14px,
+    0 0 0 1px hsl(var(--hue1) 70% 64% / 0.08),
+    0 0 28px hsl(var(--hue1) 80% 56% / 0.22),
+    0 0 54px hsl(var(--hue2) 78% 52% / 0.16);
   font-family: "Asap", var(--ninja-font-body), sans-serif;
   color: #737985;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
 }
 
@@ -713,6 +761,9 @@ h1 {
   border-top-right-radius: calc(var(--radius) * 2.5);
   border-bottom-left-radius: calc(var(--radius) * 2.5);
   border: calc(var(--radius) * 1.25) solid transparent;
+  mask: url("/assets/noise-base.png");
+  mask-mode: luminance;
+  mask-size: 29%;
   filter: blur(12px) saturate(1.25) brightness(0.5);
   mix-blend-mode: plus-lighter;
   opacity: 0.95;
@@ -777,6 +828,19 @@ h1 {
   position: relative;
   z-index: 1;
   font-size: 0.875rem;
+}
+
+.hero-panel-theme-widget::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 1px solid hsl(var(--hue1) 90% 76% / 0.14);
+  box-shadow:
+    0 0 22px hsl(var(--hue1) 88% 62% / 0.18),
+    0 0 52px hsl(var(--hue2) 88% 50% / 0.12);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .hero-panel-theme-widget hr {
@@ -940,6 +1004,13 @@ h1 {
 
 .hero-theme-controls #h2 {
   accent-color: hsl(var(--hue2) 66% 50%);
+}
+
+@media (max-width: 1200px) {
+  .hero-theme-banner {
+    width: clamp(34rem, 86vw, 70rem);
+    transform: translateX(4%);
+  }
 }
 
 .hero-panel p,

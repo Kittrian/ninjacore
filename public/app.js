@@ -135,12 +135,14 @@ const setBootLoadingOverlay = (isActive, message = '') => {
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
 const ND_API = 'https://api.ninjadispute.com';
 const ndFetch = (path, opts = {}) => fetch(`${ND_API}${path}`, { credentials: 'include', ...opts });
-const APP_SCRIPT_VERSION = 'v20260610-theme-widget-01 loaded';
+const APP_SCRIPT_VERSION = 'v20260610-theme-widget-02 loaded';
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
 const widgetBusinessNameStorageKey = 'tools-ninja-widget-business-name';
 const widgetBrandColorStorageKey = 'tools-ninja-widget-brand-color';
 const homeSettingsStorageKey = 'tools-ninja-home-settings';
+const heroThemeHue1StorageKey = 'neon-glass-hue1';
+const heroThemeHue2StorageKey = 'neon-glass-hue2';
 const learningSelectedClientStorageKey = 'ninja-selected-client-id';
 const homeBrandColors = ['#58a55c', '#4da95f', '#1d9ca1', '#ffad28', '#ee3b6c', '#0000ff'];
 let addClientPortalPasswordManual = false;
@@ -866,8 +868,36 @@ const getDefaultHomeSettings = () => ({
   emailDomain: '@securecreditclient.com',
   disputeDueDate: '35-Days',
   companyColor: '#0000ff',
+  themeHue1: Number.parseInt(window.localStorage.getItem(heroThemeHue1StorageKey) || '255', 10) || 255,
+  themeHue2: Number.parseInt(window.localStorage.getItem(heroThemeHue2StorageKey) || '222', 10) || 222,
   logoDataUrl: window.localStorage.getItem(widgetLogoStorageKey) || '',
 });
+
+const normalizeThemeHue = (value, fallback) => {
+  const parsed = Number.parseInt(String(value ?? '').trim(), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(0, Math.min(360, parsed));
+};
+
+const applyHeroTheme = ({ hue1, hue2 } = {}, { persistLocal = true } = {}) => {
+  const nextHue1 = normalizeThemeHue(hue1, 255);
+  const nextHue2 = normalizeThemeHue(hue2, 222);
+  document.documentElement.style.setProperty('--hero-theme-hue1', String(nextHue1));
+  document.documentElement.style.setProperty('--hero-theme-hue2', String(nextHue2));
+  const heroPanel = document.querySelector('.hero-panel');
+  heroPanel?.style.setProperty('--hero-theme-hue1', String(nextHue1));
+  heroPanel?.style.setProperty('--hero-theme-hue2', String(nextHue2));
+  const menu = byId('menu');
+  menu?.style.setProperty('--hue1', String(nextHue1));
+  menu?.style.setProperty('--hue2', String(nextHue2));
+  if (persistLocal) {
+    window.localStorage.setItem(heroThemeHue1StorageKey, String(nextHue1));
+    window.localStorage.setItem(heroThemeHue2StorageKey, String(nextHue2));
+  }
+  return { hue1: nextHue1, hue2: nextHue2 };
+};
 
 const normalizeBrandColor = (value) => {
   const color = String(value || '').trim();
@@ -1027,6 +1057,18 @@ const applyHomeSettingsToDom = (settings) => {
     button.classList.toggle('is-active', isActive);
   });
   applyBrandColor(settings.companyColor || '#0000ff');
+  const appliedTheme = applyHeroTheme({
+    hue1: settings.themeHue1,
+    hue2: settings.themeHue2,
+  });
+  const themeHue1Input = byId('h1');
+  const themeHue2Input = byId('h2');
+  if (themeHue1Input) {
+    themeHue1Input.value = String(appliedTheme.hue1);
+  }
+  if (themeHue2Input) {
+    themeHue2Input.value = String(appliedTheme.hue2);
+  }
   updateHomeFromPreview();
 };
 
@@ -1046,6 +1088,8 @@ const collectHomeSettingsFromDom = () => ({
   emailDomain: byId('homeEmailDomain')?.value?.trim() || '',
   disputeDueDate: byId('homeDisputeDueDate')?.value?.trim() || '35-Days',
   companyColor: document.querySelector('[data-home-color].is-active')?.dataset.homeColor || '#0000ff',
+  themeHue1: normalizeThemeHue(byId('h1')?.value, 255),
+  themeHue2: normalizeThemeHue(byId('h2')?.value, 222),
   logoDataUrl: byId('homeLogoPreview')?.hidden ? '' : (byId('homeLogoPreview')?.getAttribute('src') || ''),
 });
 
@@ -3360,6 +3404,7 @@ const getReportAgeSummary = (reportDate) => {
 };
 
 const normalizeMonitoringAgency = (value) => String(value || '').trim().toLowerCase();
+const getClientMonitoringToken = (client = {}) => String(client.tokenId || client.monitoringToken || '').trim();
 
 const getMonitoringLinkStatus = (client, agency) => {
   const normalizedAgency = normalizeMonitoringAgency(agency);
@@ -3379,7 +3424,7 @@ const getMonitoringLinkStatus = (client, agency) => {
   }
 
   if (normalizedAgency.includes('myscore')) {
-    const tokenValue = String(client.tokenId || '').trim();
+    const tokenValue = getClientMonitoringToken(client);
     const linked = Boolean(tokenValue && reportSyncHealthy);
     return {
       visible: true,
@@ -3398,7 +3443,7 @@ const getMonitoringLinkStatus = (client, agency) => {
   }
 
   const integration = state.integrations[integrationKey] || {};
-  const tokenValue = String(client.tokenId || '').trim();
+  const tokenValue = getClientMonitoringToken(client);
   const credsReady = Boolean(String(integration.tokenId || '').trim() && String(integration.apiSecret || '').trim());
   const linked = Boolean(tokenValue && credsReady && reportSyncHealthy);
 
@@ -5023,7 +5068,7 @@ const renderClientDetail = (client) => {
   const monitoringLinkText = node.querySelector('.monitoring-link-text');
   const securityValues = {
     identityiq: client.secretKey || '',
-    token: client.tokenId || '',
+    token: getClientMonitoringToken(client),
   };
   let lastLinkedCredentialSignature = '';
   const getActiveAgencyValue = () => (
@@ -6265,7 +6310,7 @@ const renderDashboard = () => {
   const monitoringLinked = countWith((client) => (
     String(client.monitoringUsername || '').trim()
     || String(client.monitoringPassword || '').trim()
-    || String(client.tokenId || '').trim()
+    || getClientMonitoringToken(client)
   ));
   const activeNinjaMembers = countWith((client) => (
     String(client.status || '').trim().toLowerCase() === 'client'
@@ -6732,7 +6777,7 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
     const securityInputValue = String(detailShell?.querySelector('.security-code-input')?.value || '').trim();
     const currentMonitoringToken = usesTokenField
       ? securityInputValue
-      : String(selectedClient?.tokenId || '').trim();
+      : getClientMonitoringToken(selectedClient);
     const hasMonitoringUsername = Boolean(currentMonitoringUsername);
     const hasMonitoringPassword = Boolean(currentMonitoringPassword);
     const hasMonitoringToken = Boolean(currentMonitoringToken);
@@ -6853,7 +6898,7 @@ const applyIntegrationValues = (formId, values = {}) => {
   // monitoring_token, JSON key tokenId). Skip it here and let
   // syncSmartCreditClientTokenInput() drive that input.
   if (form.tokenId && formId !== 'smartCreditIntegrationForm') {
-    form.tokenId.value = values.tokenId || '';
+    form.tokenId.value = values.tokenId || values.monitoringToken || '';
   }
   if (form.apiSecret) {
     form.apiSecret.value = values.apiSecret || '';
@@ -6869,7 +6914,7 @@ const syncSmartCreditClientTokenInput = () => {
     ? state.clients.find((c) => c.id === state.selectedClientId)
     : null;
   if (selected) {
-    form.tokenId.value = selected.tokenId || '';
+    form.tokenId.value = getClientMonitoringToken(selected);
     form.tokenId.disabled = false;
     form.tokenId.placeholder = 'Selected client token';
   } else {
@@ -7643,7 +7688,10 @@ const bindEvents = () => {
         body: JSON.stringify({ tokenId: tokenValue }),
       });
       const c = state.clients.find((x) => x.id === clientId);
-      if (c) c.tokenId = tokenValue;
+      if (c) {
+        c.tokenId = tokenValue;
+        c.monitoringToken = tokenValue;
+      }
       setIntegrationMessage('Client token saved.');
       syncSmartCreditClientTokenInput();
     } catch (error) {
@@ -7976,33 +8024,51 @@ const initHeroThemeWidget = () => {
   const hue1 = menu.querySelector('#h1');
   const hue2 = menu.querySelector('#h2');
   const randomButton = menu.querySelector('#menuThemeRandomize');
+  let saveTimer = null;
 
   if (!(hue1 instanceof HTMLInputElement) || !(hue2 instanceof HTMLInputElement) || !(randomButton instanceof HTMLButtonElement)) {
     return;
   }
 
-  const setWidgetHue = (prop, value) => {
-    menu.style.setProperty(prop, String(value));
+  const scheduleThemeSave = () => {
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(async () => {
+      const nextSettings = {
+        ...readHomeSettings(),
+        themeHue1: normalizeThemeHue(hue1.value, 255),
+        themeHue2: normalizeThemeHue(hue2.value, 222),
+      };
+      writeHomeSettings(nextSettings);
+      try {
+        await saveBusinessSettingsToServer(nextSettings);
+      } catch (error) {
+        console.warn('Failed to persist hero theme settings.', error);
+      }
+    }, 240);
   };
 
   const setHues = (random = false) => {
     const rand1 = 120 + Math.floor(Math.random() * 240);
     const rand2 = rand1 - 80 + (Math.floor(Math.random() * 60) - 30);
-    const v1 = random ? rand1 : window.localStorage.getItem('neon-glass-hue1') ?? rand1;
-    const v2 = random ? rand2 : window.localStorage.getItem('neon-glass-hue2') ?? rand2;
-    hue1.value = String(v1);
-    hue2.value = String(v2);
-    setWidgetHue('--hue1', v1);
-    setWidgetHue('--hue2', v2);
+    const storedSettings = readHomeSettings();
+    const v1 = random ? rand1 : storedSettings.themeHue1 ?? window.localStorage.getItem(heroThemeHue1StorageKey) ?? rand1;
+    const v2 = random ? rand2 : storedSettings.themeHue2 ?? window.localStorage.getItem(heroThemeHue2StorageKey) ?? rand2;
+    const applied = applyHeroTheme({ hue1: v1, hue2: v2 });
+    hue1.value = String(applied.hue1);
+    hue2.value = String(applied.hue2);
   };
 
   const bindHueInput = (input, cssVar, storageKey) => {
     input.addEventListener('input', (event) => {
       const value = event.target?.value ?? input.value;
       requestAnimationFrame(() => {
-        setWidgetHue(cssVar, value);
+        applyHeroTheme({
+          hue1: cssVar === '--hue1' ? value : hue1.value,
+          hue2: cssVar === '--hue2' ? value : hue2.value,
+        });
         window.localStorage.setItem(storageKey, String(value));
         menu.classList.add('open');
+        scheduleThemeSave();
       });
     });
   };
@@ -8019,6 +8085,7 @@ const initHeroThemeWidget = () => {
   randomButton.addEventListener('click', () => {
     setHues(true);
     menu.classList.add('open');
+    scheduleThemeSave();
   });
 
   setHues(false);

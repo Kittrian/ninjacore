@@ -43,12 +43,14 @@ const browserReportScriptFile = path.join(__dirname, 'scripts', 'XxXGetReport-Ni
 const vantageSimulatorScriptFile = path.join(__dirname, 'scripts', 'models', 'vantagescore_3_pro.py');
 const pythonBinary = String(process.env.PYTHON_BIN || 'python3').trim() || 'python3';
 const groqApiKey = String(process.env.GROQ_API_KEY || '').trim();
+const xaiApiKey = String(process.env.XAI_API_KEY || process.env.GROK_API_KEY || '').trim();
 const anthropicApiKey = String(process.env.ANTHROPIC_API_KEY || '').trim();
 const googleClientId = String(process.env.GOOGLE_CLIENT_ID || '').trim();
 const googleClientSecret = String(process.env.GOOGLE_CLIENT_SECRET || '').trim();
 const githubClientId = String(process.env.GITHUB_CLIENT_ID || '').trim();
 const githubClientSecret = String(process.env.GITHUB_CLIENT_SECRET || '').trim();
 const oauthRedirectUri = String(process.env.OAUTH_REDIRECT_URI || 'https://api.ninjadispute.com/api/auth/callback').trim();
+const ssoFrontendRedirect = String(process.env.SSO_FRONTEND_REDIRECT || 'https://ninjacore.ninjadispute.com').trim();
 const defaultGhlLocationId = String(process.env.GHL_DEFAULT_LOCATION_ID || 'BTUVP8XCPh6i633PAvD4').trim();
 
 let initialS3MirrorQueued = false;
@@ -124,6 +126,28 @@ const buildCorsHeaders = (origin = '', requestHeaders = '') => {
   headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
   headers['Access-Control-Allow-Headers'] = requestHeaders || 'Content-Type, Authorization, X-Requested-With';
   return headers;
+};
+
+const DEFAULT_AUTH_REQUEST_TIMEOUT_MS = 8000;
+const getAuthRequestTimeout = () => {
+  const configured = Number.parseInt(String(process.env.AUTH_REQUEST_TIMEOUT_MS || '').trim(), 10);
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_AUTH_REQUEST_TIMEOUT_MS;
+};
+
+const fetchWithTimeout = async (url, init = {}, timeoutMs = DEFAULT_AUTH_REQUEST_TIMEOUT_MS) => {
+  const ms = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : getAuthRequestTimeout();
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(new Error(`request timeout ${ms}ms`)), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`Request timed out after ${ms}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 };
 // ─── SurrealDB Master (Hetzner) ───────────────────────────────────────────────
 const SURREAL_URL  = String(process.env.SURREAL_URL  || 'http://5.78.214.176:8000/sql');
@@ -235,9 +259,6 @@ const storageS3BucketEnv = String(process.env['Storage__S3__BucketName'] || '').
 
 const defaultStatuses = [
   'Client',
-  'E-Campaign',
-  'Inactive - Completed Credit Repair',
-  'Inactive - Needs More Credit Repair',
   'Lead',
   'Not Qualified',
   'Prospect',
@@ -246,6 +267,11 @@ const defaultStatuses = [
   'Inactive',
   'IDIQ Issue',
 ];
+const blockedStatuses = new Set([
+  'e-campaign',
+  'inactive - completed credit repair',
+  'inactive - needs more credit repair',
+]);
 const defaultPhases = [
   'Phase 1',
   'Phase 2',
@@ -466,6 +492,8 @@ const seedData = {
     emailDomain: '@securecreditclient.com',
     disputeDueDate: '35-Days',
     companyColor: '#0000ff',
+    themeHue1: 255,
+    themeHue2: 222,
     logoDataUrl: '',
   },
   clients: [
@@ -648,6 +676,18 @@ const verifyApiJWT = (token) => {
     const now = Math.floor(Date.now() / 1000);
     if (payload.exp && payload.exp < now) return null;
     return payload;
+  } catch {
+    return null;
+  }
+};
+
+const parseJwtPayload = (token = '') => {
+  const payload = String(token || '').split('.')[1] || '';
+  if (!payload) {
+    return null;
+  }
+  try {
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
   } catch {
     return null;
   }
@@ -840,6 +880,46 @@ const callGroqRewrite = async ({ prompt = '' } = {}) => {
   const text = String(payload?.choices?.[0]?.message?.content || '').trim();
   if (!response.ok || !text) {
     throw new Error(String(payload?.error?.message || payload?.error || `Groq request failed (${response.status})`));
+  }
+
+  await cacheAiResult(promptHash, { text });
+  return text;
+};
+
+const callXaiRewrite = async ({ prompt = '' } = {}) => {
+  if (!xaiApiKey) {
+    throw new Error('XAI_API_KEY is missing on server.');
+  }
+
+  const promptHash = createHash('sha256')
+    .update(`xai:${String(prompt || '')}`)
+    .digest('hex');
+
+  const cached = await getCachedAiResult(promptHash);
+  if (cached) {
+    return cached.text;
+  }
+
+  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${xaiApiKey}`,
+    },
+    body: JSON.stringify({
+      model: String(process.env.XAI_MODEL || 'grok-4.1-fast').trim(),
+      messages: [
+        { role: 'system', content: 'You are a professional credit dispute writer. Keep output actionable, factual, and concise.' },
+        { role: 'user', content: String(prompt || '') },
+      ],
+      temperature: 0.6,
+      max_tokens: 1400,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  const text = String(payload?.choices?.[0]?.message?.content || '').trim();
+  if (!response.ok || !text) {
+    throw new Error(String(payload?.error?.message || payload?.error || `xAI request failed (${response.status})`));
   }
 
   await cacheAiResult(promptHash, { text });
@@ -1661,7 +1741,7 @@ const normalizeClientRecord = (client = {}) => ({
   monitoringUsername: client.monitoringUsername || '',
   monitoringPassword: client.monitoringPassword || '',
   secretKey: client.secretKey || '',
-  monitoringToken: client.monitoringToken || '',
+  monitoringToken: client.monitoringToken || client.tokenId || '',
   portalPassword: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', client.ssn || ''),
   portalEnabled: client.portalEnabled !== undefined ? Boolean(client.portalEnabled) : true,
   language: client.language || 'English',
@@ -1693,6 +1773,7 @@ const uniqueStatuses = (statuses = []) => {
   return statuses
     .map((status) => String(status || '').trim())
     .filter(Boolean)
+    .filter((status) => !blockedStatuses.has(status.toLowerCase()))
     .filter((status) => {
       const normalized = status.toLowerCase();
       if (seen.has(normalized)) {
@@ -2304,8 +2385,30 @@ const mergeClientProfileRows = (rows = []) => {
   return merged;
 };
 
+const hasTrustedDuplicateSignal = (rows = []) => {
+  if (!Array.isArray(rows) || rows.length <= 1) {
+    return false;
+  }
+
+  const identities = rows.map((row) => getClientProfileIdentity(row));
+  const emails = new Set(identities.map((item) => item.email).filter(Boolean));
+  const phones = new Set(identities.map((item) => item.phone).filter(Boolean));
+  const monitoringUsers = new Set(
+    rows
+      .map((row) => normalizeLookupValue(getClientProfileValue(row, 'monitoring_username', 'monitoringUsername')))
+      .filter(Boolean),
+  );
+
+  if (emails.size !== 1) {
+    return false;
+  }
+
+  return monitoringUsers.size === 1 || phones.size === 1;
+};
+
 const canCollapseClientProfileCluster = (rows = []) => {
   if (!Array.isArray(rows) || rows.length <= 1) return rows.length === 1;
+  if (hasTrustedDuplicateSignal(rows)) return true;
   const identities = rows.map((row) => getClientProfileIdentity(row));
   const ssns = new Set(identities.map((item) => item.ssnDigits).filter(Boolean));
   const emails = new Set(identities.map((item) => item.email).filter(Boolean));
@@ -2372,6 +2475,86 @@ const collapseSurrealClientRows = (rows = []) => {
     canonicalByEmailName,
     canonicalByPhoneName,
     canonicalByNameOnly,
+  };
+};
+
+const dedupeClientRecords = (rows = []) => {
+  const clusters = new Map();
+  const orderedRows = Array.isArray(rows) ? rows.filter(Boolean) : [];
+
+  for (const row of orderedRows) {
+    const identity = getClientProfileIdentity(row);
+    const fallbackId = String(getClientProfileValue(row, 'id', 'client_id', 'clientId', 'recordId')).trim();
+    const clusterKey = identity.emailNameKey
+      ? `email:${identity.emailNameKey}`
+      : identity.phoneNameKey
+        ? `phone:${identity.phoneNameKey}`
+        : identity.ssnDigits
+          ? `ssn:${identity.ownerKey}|${identity.ssnDigits}`
+          : (identity.nameKey && identity.dob)
+            ? `namedob:${identity.nameKey}|${identity.dob}`
+            : identity.nameKey
+              ? `name:${identity.nameKey}`
+              : (fallbackId ? `id:${fallbackId}` : '');
+    if (!clusterKey) continue;
+    const list = clusters.get(clusterKey) || [];
+    list.push(row);
+    clusters.set(clusterKey, list);
+  }
+
+  const mergedRows = [];
+  const duplicateIds = [];
+
+  for (const [clusterKey, clusterRows] of clusters.entries()) {
+    if (!clusterRows.length) continue;
+    const identities = clusterRows.map((row) => getClientProfileIdentity(row));
+    const ssns = new Set(identities.map((item) => item.ssnDigits).filter(Boolean));
+    const emails = new Set(identities.map((item) => item.email).filter(Boolean));
+    const phones = new Set(identities.map((item) => item.phone).filter(Boolean));
+    const dobs = new Set(identities.map((item) => item.dob).filter(Boolean));
+    const trustedDuplicate = hasTrustedDuplicateSignal(clusterRows);
+    const canCollapse = clusterKey.startsWith('ssn:')
+      ? trustedDuplicate || (ssns.size <= 1 && emails.size <= 1 && phones.size <= 1 && dobs.size <= 1)
+      : clusterKey.startsWith('email:')
+        ? trustedDuplicate || (ssns.size <= 1 && dobs.size <= 1)
+        : clusterKey.startsWith('phone:')
+          ? trustedDuplicate || (ssns.size <= 1 && emails.size <= 1 && dobs.size <= 1)
+          : clusterKey.startsWith('namedob:')
+            ? trustedDuplicate || (ssns.size <= 1 && emails.size <= 1 && phones.size <= 1)
+            : !clusterKey.startsWith('id:') && canCollapseClientProfileCluster(clusterRows);
+
+    if (canCollapse) {
+      const canonical = mergeClientProfileRows(clusterRows);
+      const canonicalId = String(getClientProfileValue(canonical, 'id', 'client_id', 'clientId')).trim();
+      for (const row of clusterRows) {
+        const rowId = String(getClientProfileValue(row, 'id', 'client_id', 'clientId')).trim();
+        if (rowId && rowId !== canonicalId) duplicateIds.push(rowId);
+      }
+      mergedRows.push(normalizeClientRecord({
+        ...canonical,
+        id: canonicalId || generateId(),
+      }));
+      continue;
+    }
+
+    for (const row of clusterRows) {
+      mergedRows.push(normalizeClientRecord(row));
+    }
+  }
+
+  const seenIds = new Set();
+  const uniqueRows = [];
+  for (const row of mergedRows) {
+    const rowId = String(row.id || '').trim();
+    if (!rowId) continue;
+    if (seenIds.has(rowId)) continue;
+    seenIds.add(rowId);
+    uniqueRows.push(row);
+  }
+
+  return {
+    clients: uniqueRows,
+    duplicateIds,
   };
 };
 
@@ -5856,6 +6039,7 @@ const toSafeClient = (client) => {
     monitoringPassword: client.monitoringPassword || '',
     secretKey: client.secretKey || '',
     monitoringToken: client.monitoringToken || '',
+    tokenId: client.monitoringToken || '',
     portalPassword: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', client.ssn || ''),
     portalEnabled: client.portalEnabled !== undefined ? Boolean(client.portalEnabled) : true,
     language: client.language || 'English',
@@ -5890,6 +6074,15 @@ const toSafeClient = (client) => {
 };
 
 const toClientListItem = (client) => {
+  const normalizeListStatus = (value) => {
+    const normalized = String(value || 'Client').trim().toLowerCase();
+    if (!normalized || normalized === 'clients') {
+      return 'client';
+    }
+    return normalized;
+  };
+  const isLoadStatus = (value) => normalizeListStatus(value) === 'load';
+  const isClientStatus = (value) => normalizeListStatus(value) === 'client';
   const reportDate = normalizeDateOnlyValue(client.reportDate);
   const manualNextImportSetDate = normalizeDateOnlyValue(client.manualNextImportSetDate);
   const refreshNextImportStartDate = normalizeDateOnlyValue(client.refreshNextImportStartDate);
@@ -5905,46 +6098,45 @@ const toClientListItem = (client) => {
     firstName: client.firstName || '',
     lastName: client.lastName || '',
     email: client.email || '',
-    dob: client.dob || '',
-    ssn: client.ssn || '',
-    address: client.address || '',
     phone: client.phone || '',
-    spouseClientId: client.spouseClientId || '',
-    spouseClientLabel: client.spouseClientLabel || '',
-    assignedTo: client.assignedTo || '',
-    ninjaAssigned: client.ninjaAssigned || '',
-    affiliateAssigned: client.affiliateAssigned || 'None',
-    ghlContactId: client.ghlContactId || '',
-    ghlLocationId: client.ghlLocationId || '',
-    ghlSource: client.ghlSource || '',
-    status: client.status || 'Client',
+    status: normalizeListStatus(client.status) === 'client' ? 'Client' : (client.status || 'Client'),
     phase: client.phase || 'None',
     monitoringAgency: inferMonitoringAgency(client),
-    yearlyIncome: client.yearlyIncome || '',
-    housingPayment: client.housingPayment || '',
-    debtMonthlyPayments: client.debtMonthlyPayments || '',
-    monitoringUsername: client.monitoringUsername || '',
-    monitoringPassword: client.monitoringPassword || '',
-    secretKey: client.secretKey || '',
-    monitoringToken: client.monitoringToken || '',
-    portalPassword: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', client.ssn || ''),
-    portalEnabled: client.portalEnabled !== undefined ? Boolean(client.portalEnabled) : true,
-    language: client.language || 'English',
-    goal: client.goal || '',
-    notes: client.notes || '',
     reportDate,
-    nextImportInt: client.nextImportInt || '',
-    nextImportLabel: client.nextImportLabel || '',
-    nextImportMode: client.nextImportMode || 'manual',
-    manualNextImportStartDays: Number.isFinite(Number(client.manualNextImportStartDays))
-      ? Number.parseInt(client.manualNextImportStartDays, 10)
-      : null,
-    manualNextImportSetDate,
-    refreshNextImportStartDate,
     nextImport,
+    daysLeft: Number.isFinite(Number(nextImport?.daysUntilNextImport))
+      ? Number(nextImport.daysUntilNextImport)
+      : null,
     createdAt: normalizeIsoDateTimeValue(client.createdAt),
-    creditScores: null,
   };
+};
+
+const prioritizeClientListOrder = (clients) => {
+  const isClientLike = (status) => {
+    const normalized = String(status || 'Client').trim().toLowerCase();
+    return normalized === 'client' || normalized === 'clients' || !normalized;
+  };
+  const isLoad = (status) => {
+    const normalized = String(status || '').trim().toLowerCase();
+    return normalized === 'load';
+  };
+  const clientRows = [];
+  const otherRows = [];
+  const loadRows = [];
+
+  for (const client of clients) {
+    if (isLoad(client.status)) {
+      loadRows.push(client);
+      continue;
+    }
+    if (isClientLike(client.status)) {
+      clientRows.push(client);
+      continue;
+    }
+    otherRows.push(client);
+  }
+
+  return [...clientRows, ...otherRows];
 };
 
 const buildFullDisputeClient = (client) => {
@@ -5995,8 +6187,9 @@ const normalizeStore = (store) => {
     ...(store?.businessSettings && typeof store.businessSettings === 'object' ? store.businessSettings : {}),
   };
   if (Array.isArray(store?.clients)) {
+    const deduped = dedupeClientRecords(store.clients.map((client) => normalizeClientRecord(client)));
     return {
-      clients: store.clients.map((client) => normalizeClientRecord(client)),
+      clients: deduped.clients,
       statuses: uniqueStatuses([...(Array.isArray(store.statuses) ? store.statuses : []), ...defaultStatuses]),
       phases: uniquePhases([...(Array.isArray(store.phases) ? store.phases : []), ...defaultPhases]),
       businessSettings: normalizedBusinessSettings,
@@ -6427,9 +6620,11 @@ const mergeStoreWithProfileDb = async (store, ownerKey = getCurrentOwnerKey()) =
     existingIds.add(normalizedId);
   }
 
+  const deduped = dedupeClientRecords(mergedClients);
+
   return {
     ...store,
-    clients: mergedClients,
+    clients: deduped.clients,
   };
 };
 
@@ -6447,27 +6642,30 @@ const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKe
   const collapsed = collapseSurrealClientRows(existingRows);
   const updatedAt = new Date().toISOString();
   const syncedTargetIdsInPass = new Set();
+  const duplicateRecordIdsToDelete = new Set(collapsed.duplicateRecordIds || []);
   for (const client of filteredClients) {
     const normalizedSsn = normalizeSsnInput(client.ssn || '');
     const normalizedDob = normalizeDobInput(client.dob || '');
-    let targetClientId = String(client.id || '').trim();
-    if (targetClientId.startsWith('client-')) {
-      const ssnDigits = String(normalizedSsn || '').replace(/\D/g, '');
-      const ssnKey = ssnDigits.length >= 9 ? ssnDigits.slice(0, 9) : '';
-      const firstName = normalizeLookupValue(client.firstName || '');
-      const lastName = normalizeLookupValue(client.lastName || '');
-      const nameKey = firstName && lastName ? `${normalizedOwner}|${firstName}|${lastName}` : '';
-      const email = normalizeLookupValue(client.email || '');
-      const phone = normalizeLookupPhone(client.phone || '');
-      const emailNameKey = nameKey && email ? `${nameKey}|${email}` : '';
-      const phoneNameKey = nameKey && phone ? `${nameKey}|${phone}` : '';
-      const shouldAllowNameOnlyMatch = nameKey && !ssnKey && !email && !phone;
-      const canonicalId = (ssnKey && collapsed.canonicalBySsn.get(ssnKey))
-        || (emailNameKey && collapsed.canonicalByEmailName.get(emailNameKey))
-        || (phoneNameKey && collapsed.canonicalByPhoneName.get(phoneNameKey))
-        || (shouldAllowNameOnlyMatch ? collapsed.canonicalByNameOnly.get(nameKey) : '')
-        || '';
-      if (canonicalId) targetClientId = canonicalId;
+    const originalClientId = String(client.id || '').trim();
+    let targetClientId = originalClientId;
+    const ssnDigits = String(normalizedSsn || '').replace(/\D/g, '');
+    const ssnKey = ssnDigits.length >= 9 ? ssnDigits.slice(0, 9) : '';
+    const firstName = normalizeLookupValue(client.firstName || '');
+    const lastName = normalizeLookupValue(client.lastName || '');
+    const nameKey = firstName && lastName ? `${normalizedOwner}|${firstName}|${lastName}` : '';
+    const email = normalizeLookupValue(client.email || '');
+    const phone = normalizeLookupPhone(client.phone || '');
+    const emailNameKey = nameKey && email ? `${nameKey}|${email}` : '';
+    const phoneNameKey = nameKey && phone ? `${nameKey}|${phone}` : '';
+    const shouldAllowNameOnlyMatch = nameKey && !ssnKey && !email && !phone;
+    const canonicalId = (ssnKey && collapsed.canonicalBySsn.get(ssnKey))
+      || (emailNameKey && collapsed.canonicalByEmailName.get(emailNameKey))
+      || (phoneNameKey && collapsed.canonicalByPhoneName.get(phoneNameKey))
+      || (shouldAllowNameOnlyMatch ? collapsed.canonicalByNameOnly.get(nameKey) : '')
+      || '';
+    if (canonicalId) targetClientId = canonicalId;
+    if (originalClientId && targetClientId && originalClientId !== targetClientId) {
+      duplicateRecordIdsToDelete.add(`${originalClientId}_ninjatools`);
     }
     if (syncedTargetIdsInPass.has(targetClientId)) continue;
     const recordId = `${targetClientId}_ninjatools`;
@@ -6559,6 +6757,10 @@ const syncClientProfilesToDb = async (clients = [], ownerKey = getCurrentOwnerKe
       }]);
     }
     syncedTargetIdsInPass.add(targetClientId);
+  }
+  for (const recordId of duplicateRecordIdsToDelete) {
+    if (!recordId) continue;
+    await surql(`DELETE clients:⟨${sEsc(recordId)}⟩`).catch(() => {});
   }
 };
 
@@ -10037,7 +10239,7 @@ const server = createServer((req, res) => {
       let userName = '';
 
       if (provider === 'google') {
-        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        const tokenRes = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
@@ -10047,7 +10249,7 @@ const server = createServer((req, res) => {
             redirect_uri: oauthRedirectUri,
             grant_type: 'authorization_code',
           }).toString(),
-        });
+        }, getAuthRequestTimeout());
 
         if (!tokenRes.ok) {
           throw new Error(`Google token exchange failed: ${tokenRes.status}`);
@@ -10056,9 +10258,9 @@ const server = createServer((req, res) => {
         const tokenData = await tokenRes.json();
         accessToken = tokenData.access_token;
 
-        const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        const userRes = await fetchWithTimeout('https://www.googleapis.com/oauth2/v2/userinfo', {
           headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        }, getAuthRequestTimeout());
 
         if (!userRes.ok) {
           throw new Error(`Google user info fetch failed: ${userRes.status}`);
@@ -10068,7 +10270,7 @@ const server = createServer((req, res) => {
         userEmail = userData.email;
         userName = userData.name;
       } else if (provider === 'github') {
-        const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+        const tokenRes = await fetchWithTimeout('https://github.com/login/oauth/access_token', {
           method: 'POST',
           headers: {
             'Accept': 'application/json',
@@ -10080,7 +10282,7 @@ const server = createServer((req, res) => {
             client_secret: githubClientSecret,
             redirect_uri: oauthRedirectUri,
           }),
-        });
+        }, getAuthRequestTimeout());
 
         if (!tokenRes.ok) {
           throw new Error(`GitHub token exchange failed: ${tokenRes.status}`);
@@ -10089,9 +10291,9 @@ const server = createServer((req, res) => {
         const tokenData = await tokenRes.json();
         accessToken = tokenData.access_token;
 
-        const userRes = await fetch('https://api.github.com/user', {
+        const userRes = await fetchWithTimeout('https://api.github.com/user', {
           headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        }, getAuthRequestTimeout());
 
         if (!userRes.ok) {
           throw new Error(`GitHub user info fetch failed: ${userRes.status}`);
@@ -10102,9 +10304,9 @@ const server = createServer((req, res) => {
         userEmail = userData.email;
 
         if (!userEmail) {
-          const emailRes = await fetch('https://api.github.com/user/emails', {
+          const emailRes = await fetchWithTimeout('https://api.github.com/user/emails', {
             headers: { Authorization: `Bearer ${accessToken}` },
-          });
+          }, getAuthRequestTimeout());
           if (emailRes.ok) {
             const emails = await emailRes.json();
             userEmail = emails.find((e) => e.primary)?.email || emails[0]?.email || userName;
@@ -10120,14 +10322,21 @@ const server = createServer((req, res) => {
       const ssoUsername = normalizeUsername(userEmail);
       dynamicUsernames.add(ssoUsername);
 
-      const redirectUrl = new URL('https://ninjadispute.com');
+      let redirectUrl = new URL('https://ninjacore.ninjadispute.com');
+      try {
+        redirectUrl = new URL(ssoFrontendRedirect || 'https://ninjacore.ninjadispute.com');
+      } catch {
+        redirectUrl = new URL('https://ninjacore.ninjadispute.com');
+      }
+      redirectUrl.searchParams.set('sso_token', accessToken);
       redirectUrl.searchParams.set('token', accessToken);
       redirectUrl.searchParams.set('user', ssoUsername);
 
       res.writeHead(302, {
         'Location': redirectUrl.toString(),
         'Set-Cookie': [
-          `txn=${encodeURIComponent(ssoUsername)}; Path=/; Max-Age=3600; SameSite=Lax; Secure`,
+          `txn=${encodeURIComponent(ssoUsername)}; Domain=.ninjadispute.com; Path=/; Max-Age=3600; SameSite=Lax; Secure`,
+          `ninja_token=${encodeURIComponent(accessToken)}; Domain=.ninjadispute.com; Path=/; Max-Age=43200; SameSite=Lax; Secure`,
         ],
       });
       res.end();
@@ -10153,26 +10362,42 @@ const server = createServer((req, res) => {
         send(res, 401, { error: 'No SSO token present.' });
         return;
       }
+      const providedUser = normalizeUsername(String(body.user || '').trim());
       let ssoUsername = '';
 
       // Try EdDSA verification via auth.ninjadispute.com first (OAuth users).
       try {
-        const verifyRes = await fetch('https://auth.ninjadispute.com/verify', {
+        const verifyRes = await fetchWithTimeout('https://auth.ninjadispute.com/verify', {
           headers: { Authorization: `Bearer ${ninjaToken}` },
-        });
+        }, getAuthRequestTimeout());
         if (verifyRes.ok) {
           const verifyData = await verifyRes.json().catch(() => ({}));
           if (verifyData?.authenticated) {
             ssoUsername = normalizeUsername(verifyData.username || verifyData.email || '');
           }
         }
-      } catch {}
+      } catch (verifyError) {
+        console.warn('[SSO] verify request failed:', verifyError?.message || 'unknown');
+      }
 
       // Fallback: HS256 token issued by api.ninjadispute.com (direct-login users).
       if (!ssoUsername) {
         const apiPayload = verifyApiJWT(ninjaToken);
         if (apiPayload) {
           ssoUsername = normalizeUsername(apiPayload.username || apiPayload.email || '');
+        }
+      }
+
+      // Last-resort fallback: explicit user parameter from trusted callback.
+      if (!ssoUsername && providedUser) {
+        ssoUsername = providedUser;
+      }
+
+      // Fallback from unsigned JWT payload for interoperability with direct token formats.
+      if (!ssoUsername) {
+        const localJwtPayload = parseJwtPayload(ninjaToken);
+        if (localJwtPayload && typeof localJwtPayload === 'object') {
+          ssoUsername = normalizeUsername(localJwtPayload.email || localJwtPayload.username || localJwtPayload.sub || '');
         }
       }
 
@@ -10197,13 +10422,23 @@ const server = createServer((req, res) => {
   }
 
   if (pathname === '/api/logout' && req.method === 'POST') {
-    res.writeHead(200, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-      'Set-Cookie': [
-        'txn=; Path=/; Max-Age=0; SameSite=Lax; Secure',
-      ],
-    });
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    [
+      'txn=; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'txn=; Domain=.ninjadispute.com; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'txn=; Domain=ninjadispute.com; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'ninja_token=; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'ninja_token=; Domain=.ninjadispute.com; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'ninja_token=; Domain=ninjadispute.com; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'ninja_session=; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'ninja_session=; Domain=.ninjadispute.com; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'ninja_session=; Domain=ninjadispute.com; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'jrt=; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'jrt=; Domain=.ninjadispute.com; Path=/; Max-Age=0; SameSite=Lax; Secure',
+      'jrt=; Domain=ninjadispute.com; Path=/; Max-Age=0; SameSite=Lax; Secure',
+    ].forEach((cookie) => res.appendHeader('Set-Cookie', cookie));
     res.end(JSON.stringify({ success: true }, null, 2));
     return;
   }
@@ -10505,7 +10740,8 @@ const server = createServer((req, res) => {
   if (pathname === '/api/full/clients' && req.method === 'GET') {
     const store = await readStore();
     const searchParam = String(url.searchParams.get('searchParam') || url.searchParams.get('q') || '').trim().toLowerCase();
-    const clients = store.clients
+    const includeLoad = String(url.searchParams.get('includeLoad') || '').trim().toLowerCase() === '1' || String(url.searchParams.get('includeLoad') || '').trim().toLowerCase() === 'true';
+    const clients = (includeLoad ? store.clients : prioritizeClientListOrder(store.clients).filter((client) => String(client.status || '').trim().toLowerCase() !== 'load'))
       .filter((client) => {
         if (!searchParam) return true;
         return [
@@ -10548,10 +10784,13 @@ const server = createServer((req, res) => {
 
   if (pathname === '/api/clients' && req.method === 'GET') {
     const store = await readStore();
+    const includeLoad = String(url.searchParams.get('includeLoad') || '').trim().toLowerCase() === '1' || String(url.searchParams.get('includeLoad') || '').trim().toLowerCase() === 'true';
+    const orderedClients = prioritizeClientListOrder(store.clients);
+    const visibleClients = includeLoad ? orderedClients : orderedClients.filter((client) => String(client.status || '').trim().toLowerCase() !== 'load');
     send(res, 200, {
       statuses: store.statuses,
       phases: store.phases || defaultPhases,
-      clients: store.clients.map(toClientListItem),
+      clients: visibleClients.map(toClientListItem),
     });
     return;
   }
@@ -10949,10 +11188,12 @@ const server = createServer((req, res) => {
       let rewritten = '';
       if (provider === 'groq') {
         rewritten = await callGroqRewrite({ prompt });
+      } else if (provider === 'grok' || provider === 'xai') {
+        rewritten = await callXaiRewrite({ prompt });
       } else if (provider === 'claude' || provider === 'anthropic') {
         rewritten = await callAnthropicRewrite({ prompt });
       } else {
-        send(res, 400, { error: `Unsupported provider "${provider}". Use groq or claude.` });
+        send(res, 400, { error: `Unsupported provider "${provider}". Use groq, grok, or claude.` });
         return;
       }
 
@@ -11650,7 +11891,14 @@ const server = createServer((req, res) => {
       client.monitoringPassword = readOptionalStringField(body, 'monitoringPassword', client.monitoringPassword || '');
       const requestedSecret = readOptionalStringField(body, 'secretKey', client.secretKey || '');
       client.secretKey = requestedSecret || getLastFourDigits(ssn);
-      client.monitoringToken = readOptionalStringField(body, 'monitoringToken', client.monitoringToken || '');
+      const profileTokenSource = hasOwnField(body, 'monitoringToken')
+        ? 'monitoringToken'
+        : hasOwnField(body, 'tokenId')
+          ? 'tokenId'
+          : '';
+      if (profileTokenSource) {
+        client.monitoringToken = String(body[profileTokenSource] || '').trim();
+      }
       client.portalPassword = readOptionalStringField(body, 'portalPassword', client.portalPassword || '')
         || buildDefaultPortalPassword(nextLastName, ssn);
       client.portalEnabled = readOptionalStringField(body, 'portalEnabled', client.portalEnabled ? 'on' : 'off').toLowerCase() !== 'off';
