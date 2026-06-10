@@ -29,14 +29,385 @@
     <!-- Page-specific JS - deferred loading -->
     
   
-    <link rel="stylesheet" href="/styles.css" />
-    <link rel="stylesheet" href="/billing.css" />
-    <link rel="stylesheet" href="/payments.css" />
-    <link rel="stylesheet" href="/learning.css" />
-    <link rel="stylesheet" href="/nd-hash-shell.css" />
-    <link rel="stylesheet" href="/full-modern.css" />
-    <link rel="stylesheet" href="/full-disputes.css" />
-</head>
+    <link rel="stylesheet" href="/styles.css?v=20260608-01" />
+    <link rel="stylesheet" href="/billing.css?v=20260608-01" />
+    <link rel="stylesheet" href="/payments.css?v=20260608-01" />
+    <link rel="stylesheet" href="/learning.css?v=20260608-01" />
+    <link rel="stylesheet" href="/nd-hash-shell.css?v=20260608-01" />
+    <link rel="stylesheet" href="/full-modern.css?v=20260608-01" />
+    <link rel="stylesheet" href="/full-disputes.css?v=20260608-01" />
+
+<!-- LOAD MINISEARCH BEFORE MAIN SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/minisearch"></script>
+
+<!-- INJECT OPTIMIZED CLIENTS RENDERER -->
+<script>
+// Keep original as fallback
+const renderGlassClientsFallbackOriginal = window.renderGlassClientsFallback || function() {};
+
+// Define optimized version FIRST
+const renderGlassClientsOptimized = (clients, options = {}) => {
+  const clientsList = document.getElementById('clientsList');
+  if (!clientsList || clientsList.querySelector('.nt-virtual-scroll-optimized')) {
+    return;
+  }
+
+  const statuses = Array.isArray(options.statuses) ? options.statuses : ['Client', 'Lead', 'Prospect', 'Inactive'];
+  const phases = Array.isArray(options.phases) ? options.phases : ['None', 'Round 1', 'Round 2', 'Round 3', 'Complete'];
+  
+  let sortState = { key: 'nextImport', direction: 'asc' };
+  let visibleClients = clients.slice();
+  let miniSearchIndex = null;
+  let searchWorker = null;
+  const rowHeight = 52;
+  const overscan = 5;
+
+  const initMiniSearch = () => {
+    if (typeof window.MiniSearch === 'undefined') return null;
+    try {
+      const ms = new window.MiniSearch({
+        fields: ['name', 'status', 'phase', 'email', 'phone', 'username'],
+        storeFields: ['idx'],
+        searchOptions: { fuzzy: 0.15, combineWith: 'AND' }
+      });
+      
+      ms.addAll(clients.map((c, idx) => ({
+        idx,
+        name: String((c.firstName || '') + ' ' + (c.lastName || '')).trim(),
+        status: String(c.status || ''),
+        phase: String(c.phase || ''),
+        email: String(c.email || ''),
+        phone: String(c.phone || ''),
+        username: String(c.monitoringUsername || '')
+      })));
+      return ms;
+    } catch (e) {
+      console.warn('MiniSearch init failed:', e);
+      return null;
+    }
+  };
+
+  miniSearchIndex = initMiniSearch();
+
+  const initSearchWorker = () => {
+    if (!window.Worker || !miniSearchIndex) return null;
+    try {
+      const workerCode = `
+        let idx = null;
+        self.onmessage = (e) => {
+          const {type, data} = e.data;
+          if (type === 'init') {
+            idx = data;
+          } else if (type === 'search') {
+            const q = data.query || '';
+            if (!q || !idx) {
+              self.postMessage({type: 'results', indices: []});
+              return;
+            }
+            const results = idx.search(q);
+            const indices = results.map(r => r.idx);
+            self.postMessage({type: 'results', indices});
+          }
+        };
+      `;
+      const blob = new Blob([workerCode], { type: 'application/javascript' });
+      const worker = new Worker(URL.createObjectURL(blob));
+      worker.postMessage({ type: 'init', data: miniSearchIndex });
+      return worker;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  searchWorker = initSearchWorker();
+
+  const sortValue = (rawClient, key) => {
+    const c = rawClient;
+    if (key === 'name') return (String(c.firstName || '') + ' ' + String(c.lastName || '')).trim().toLowerCase();
+    if (key === 'status') return String(c.status || '').toLowerCase();
+    if (key === 'phase') return String(c.phase || 'None').toLowerCase();
+    if (key === 'nextImport') {
+      const days = window.getClientDaysLeft ? window.getClientDaysLeft(c) : 999;
+      return Number.isFinite(days) ? days : 999;
+    }
+    if (key === 'reportDate') {
+      const d = window.parseDateValue ? window.parseDateValue(c.reportDate) : null;
+      return d ? d.getTime() : 0;
+    }
+    return '';
+  };
+
+  const sortClients = (arr) => arr.slice().sort((a, b) => {
+    const aVal = sortValue(a, sortState.key);
+    const bVal = sortValue(b, sortState.key);
+    const dir = sortState.direction === 'asc' ? 1 : -1;
+    
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return (aVal - bVal) * dir || String(sortValue(a, 'name')).localeCompare(String(sortValue(b, 'name')));
+    }
+    
+    const cmp = String(aVal).localeCompare(String(bVal), undefined, { sensitivity: 'base' });
+    return (cmp || String(sortValue(a, 'name')).localeCompare(String(sortValue(b, 'name')))) * dir;
+  });
+
+  const getVirtualRange = (scrollTop, containerH, total) => {
+    const rowsVisible = Math.ceil(containerH / rowHeight);
+    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+    const end = Math.min(total, start + rowsVisible + overscan * 2);
+    return { start, end, offset: start * rowHeight };
+  };
+
+  clientsList.style.setProperty('--nt-clients-custom-bg', "url('/assets/clients-glass-bg.png')");
+  clientsList.innerHTML = `
+    <div class="nt-liquid-table-shell nt-virtual-scroll-optimized">
+      <div class="nt-liquid-table-toolbar">
+        <span class="nt-liquid-toolbar-title">Clients</span>
+        <span class="nt-liquid-toolbar-count" id="clientsTableCount">${clients.length} client${clients.length === 1 ? '' : 's'}</span>
+        <div class="nt-liquid-table-search">
+          <span class="nt-liquid-table-search-icon">🔍</span>
+          <input id="clientsTableSearchInput" class="nt-liquid-table-search-input" type="search" placeholder="Search clients..." aria-label="Search clients">
+        </div>
+        <div class="nt-liquid-toolbar-buttons">
+          <select id="clientsStatusFilter" class="nt-liquid-toolbar-btn" style="appearance: none; padding-right: 24px; background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2208%22><path fill=%22%23666%22 d=%22M0 0l6 8 6-8z%22/></svg>'); background-repeat: no-repeat; background-position: right 8px center; background-size: 12px;">
+              <option value="">📊 All Status</option>
+            </select>
+          <button id="clientsTableImportTrigger" class="nt-liquid-toolbar-btn nt-liquid-import-btn" type="button">Import</button>
+        </div>
+      </div>
+      <div class="nt-liquid-table-scroll" id="clientsVirtualScroll" style="height: 600px; overflow-y: auto; position: relative;">
+        <div id="clientsVirtualContainer" style="position: relative;">
+          <table class="nt-liquid-table nt-dashboard-clients-table">
+            <thead>
+              <tr>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="name">Name</button></th>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="status">Status</button></th>
+                <th>Phone</th>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="phase">Phase</button></th>
+                <th>Monitoring</th>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="nextImport">Days Left</button></th>
+                <th><button class="nt-liquid-sort-button" type="button" data-sort-key="reportDate">Report Date</button></th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="clientsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const scrollEl = clientsList.querySelector('#clientsVirtualScroll');
+  const containerEl = clientsList.querySelector('#clientsVirtualContainer');
+  const tbody = clientsList.querySelector('#clientsTableBody');
+  let sortedClients = sortClients(visibleClients);
+
+  const renderVirtual = (scrollTop = 0) => {
+    const { start, end, offset } = getVirtualRange(scrollTop, scrollEl.clientHeight, sortedClients.length);
+    
+    let html = '';
+    for (let i = start; i < end && i < sortedClients.length; i++) {
+      const c = sortedClients[i];
+      const rowHtml = window.renderRows ? window.renderRows([c], statuses, phases) : '';
+      if (rowHtml) html += rowHtml;
+    }
+    
+    containerEl.style.height = sortedClients.length * rowHeight + 'px';
+    tbody.innerHTML = html || '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #999;">No clients match your search.</td></tr>';
+    tbody.style.transform = `translateY(${offset}px)`;
+    
+    bindActions();
+  };
+
+  renderVirtual(0);
+
+  scrollEl?.addEventListener('scroll', (e) => renderVirtual(e.target.scrollTop), { passive: true });
+
+  const searchInput = clientsList.querySelector('#clientsTableSearchInput');
+  searchInput?.addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    
+    if (!query) {
+      visibleClients = clients.slice();
+      sortedClients = sortClients(visibleClients);
+      scrollEl.scrollTop = 0;
+      renderVirtual(0);
+      return;
+    }
+
+    if (searchWorker) {
+      searchWorker.onmessage = (evt) => {
+        if (evt.data.type === 'results') {
+          const idxSet = new Set(evt.data.indices);
+          visibleClients = clients.filter((_, idx) => idxSet.has(idx));
+          sortedClients = sortClients(visibleClients);
+          scrollEl.scrollTop = 0;
+          renderVirtual(0);
+        }
+      };
+      searchWorker.postMessage({ type: 'search', data: { query } });
+    } else if (miniSearchIndex) {
+      const results = miniSearchIndex.search(query);
+      const idxSet = new Set(results.map(r => r.idx));
+      visibleClients = clients.filter((_, idx) => idxSet.has(idx));
+      sortedClients = sortClients(visibleClients);
+      scrollEl.scrollTop = 0;
+      renderVirtual(0);
+    }
+  });
+
+  clientsList.querySelectorAll('[data-sort-key]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.sortKey;
+      if (sortState.key === key) {
+        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortState.key = key;
+        sortState.direction = 'asc';
+      }
+      sortedClients = sortClients(visibleClients);
+      scrollEl.scrollTop = 0;
+      renderVirtual(0);
+    });
+  });
+
+  clientsList.querySelector('#clientsTableImportTrigger')?.addEventListener('click', () => {
+    document.getElementById('clientsCsv')?.click();
+  });
+
+  const bindActions = () => {
+    clientsList.querySelectorAll('[data-action="open"]').forEach((btn) => {
+      btn.onclick = (e) => {
+        const clientId = e.currentTarget.closest('tr')?.dataset.clientId;
+        if (clientId && typeof window.loadDashboardClientDetail === 'function') {
+          window.loadDashboardClientDetail(clientId);
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+      btn.onclick = (e) => {
+        const clientId = e.currentTarget.closest('tr')?.dataset.clientId;
+        if (!clientId) return;
+        if (typeof window.openEditDialog === 'function') {
+          window.openEditDialog(clientId);
+        } else {
+          document.getElementById('clientHubAddPane')?.removeAttribute('hidden');
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+      btn.onclick = async (e) => {
+        const clientId = e.currentTarget.closest('tr')?.dataset.clientId;
+        if (!clientId || !window.confirm('Delete this client?')) return;
+        try {
+          if (typeof window.requestJson === 'function') {
+            await window.requestJson(`/api/clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
+            const idx = clients.findIndex((c) => String(c.id) === String(clientId));
+            if (idx !== -1) clients.splice(idx, 1);
+            visibleClients = clients.slice();
+            sortedClients = sortClients(visibleClients);
+            scrollEl.scrollTop = 0;
+            renderVirtual(0);
+          }
+        } catch (err) {
+          console.error('Delete failed:', err);
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="copy-phone"]').forEach((btn) => {
+      btn.onclick = async (e) => {
+        const phone = e.currentTarget.dataset.phone;
+        if (phone) {
+          try {
+            await navigator.clipboard.writeText(phone);
+            e.currentTarget.classList.add('is-copied');
+            setTimeout(() => e.currentTarget.classList.remove('is-copied'), 1200);
+          } catch (err) {
+            console.error('Copy failed:', err);
+          }
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="copy-email"]').forEach((btn) => {
+      btn.onclick = async (e) => {
+        const email = e.currentTarget.dataset.email;
+        if (email) {
+          try {
+            await navigator.clipboard.writeText(email);
+            e.currentTarget.classList.add('is-copied');
+            setTimeout(() => e.currentTarget.classList.remove('is-copied'), 1200);
+          } catch (err) {
+            console.error('Copy failed:', err);
+          }
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="status"]').forEach((sel) => {
+      sel.onchange = async (e) => {
+        const clientId = e.currentTarget.dataset.clientId;
+        const status = e.currentTarget.value;
+        if (clientId && typeof window.requestJson === 'function') {
+          try {
+            await window.requestJson(`/api/clients/${encodeURIComponent(clientId)}/status`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status })
+            });
+            const c = clients.find((x) => String(x.id) === String(clientId));
+            if (c) c.status = status;
+          } catch (err) {
+            console.error('Status update failed:', err);
+          }
+        }
+      };
+    });
+
+    clientsList.querySelectorAll('[data-action="phase"]').forEach((sel) => {
+      sel.onchange = async (e) => {
+        const clientId = e.currentTarget.dataset.clientId;
+        const phase = e.currentTarget.value;
+        if (clientId && typeof window.requestJson === 'function') {
+          try {
+            await window.requestJson(`/api/clients/${encodeURIComponent(clientId)}/phase`, {
+              method: 'PATCH',
+              body: JSON.stringify({ phase })
+            });
+            const c = clients.find((x) => String(x.id) === String(clientId));
+            if (c) c.phase = phase;
+          } catch (err) {
+            console.error('Phase update failed:', err);
+          }
+        }
+      };
+    });
+  };
+};
+
+// Optimized renderer disabled: the original glass table below owns Clients UI controls/actions.
+window.renderGlassClientsOptimized = renderGlassClientsOptimized;
+console.log('✅ Clients glass table renderer active');
+</script>
+
+<style>
+      .status-filter-option {
+        padding: 10px 12px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 13px;
+        transition: background 0.2s;
+      }
+      .status-filter-option:hover {
+        background: #f0f0f0;
+      }
+      .status-filter-option.active {
+        background: #e0e7ff;
+        color: #667eea;
+        font-weight: 600;
+      }
+    </style></head>
   <body><!-- OLD LOGIN FORM PERMANENTLY REMOVED -->
     
     <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -56,7 +427,7 @@
           <div class="hero-ninja-wrap">
             <iframe
               class="hero-widget-frame"
-              src="/tools-ninja-widget.html?v=20260605-03"
+              src="/tools-ninja-widget.html?v=20260608-01"
               title="Get New Report Ninja Widget"
             ></iframe>
           </div>
@@ -1013,6 +1384,36 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
 };
 
       (() => {
+        const ULTRA_LOGIN_URL = 'https://auth.ultradispute.com/login?provider=google&redirect=https://ninjacore.ninjadispute.com/dashboard.html';
+
+        const getDashboardSsoToken = () => {
+          const params = new URLSearchParams(window.location.search);
+          return params.get('sso_token') || null;
+        };
+
+        const tryDashboardSsoLogin = async (token) => {
+          if (!token) return false;
+          try {
+            const response = await fetch('/api/auth/sso-login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ token }),
+            });
+            if (!response.ok) {
+              return false;
+            }
+            const data = await response.json().catch(() => ({}));
+            return Boolean(data?.authenticated);
+          } catch {
+            return false;
+          }
+        };
+
+        const redirectToUltraLogin = () => {
+          window.location.replace(ULTRA_LOGIN_URL);
+        };
+
         const ensureDashboardAuth = async () => {
           try {
             const response = await fetch('/api/auth/status', { credentials: 'include' });
@@ -1022,7 +1423,16 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
             }
           } catch {
           }
-          window.location.replace('/');
+
+          const urlToken = getDashboardSsoToken();
+          if (urlToken) {
+            const clean = window.location.pathname + window.location.hash;
+            history.replaceState(null, '', clean);
+            if (await tryDashboardSsoLogin(urlToken)) {
+              return true;
+            }
+          }
+          redirectToUltraLogin();
           return false;
         };
 
@@ -1164,7 +1574,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
             ...options,
           });
           if (response.status === 401) {
-            window.location.replace('/');
+            // window.location.replace('/');
             throw new Error('Please login first.');
           }
           const data = await response.json().catch(() => ({}));
@@ -1398,7 +1808,79 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
 
           const statuses = Array.isArray(options.statuses) && options.statuses.length ? options.statuses : ['Client', 'Lead', 'Prospect', 'Inactive'];
           const phases = Array.isArray(options.phases) && options.phases.length ? options.phases : ['None', 'Round 1', 'Round 2', 'Round 3', 'Complete'];
-          const rows = renderRows(clients, statuses, phases);
+          const sortState = { key: 'nextImport', direction: 'asc' };
+          let visibleClients = clients.slice();
+
+          const sortColumns = {
+            name: 'Name',
+            status: 'Status',
+            phase: 'Phase',
+            nextImport: 'Days Left',
+            reportDate: 'Report Date',
+          };
+
+          const sortValue = (rawClient, key) => {
+            const client = normalizeClient(rawClient);
+            if (key === 'name') {
+              return clientName(client).toLowerCase();
+            }
+            if (key === 'status') {
+              return String(client.status || '').toLowerCase();
+            }
+            if (key === 'phase') {
+              return String(client.phase || 'None').toLowerCase();
+            }
+            if (key === 'nextImport') {
+              const days = getClientDaysLeft(rawClient);
+              return Number.isFinite(days) ? days : Number.MAX_SAFE_INTEGER;
+            }
+            if (key === 'reportDate') {
+              const parsed = parseDateValue(client.reportDate);
+              return parsed ? parsed.getTime() : 0;
+            }
+            return '';
+          };
+
+          const sortClients = (nextClients) => nextClients.slice().sort((left, right) => {
+            const leftValue = sortValue(left, sortState.key);
+            const rightValue = sortValue(right, sortState.key);
+            const direction = sortState.direction === 'asc' ? 1 : -1;
+
+            if (typeof leftValue === 'number' && typeof rightValue === 'number') {
+              if (leftValue === rightValue) {
+                return clientName(left).localeCompare(clientName(right));
+              }
+              return (leftValue - rightValue) * direction;
+            }
+
+            const compared = String(leftValue).localeCompare(String(rightValue), undefined, { sensitivity: 'base' });
+            if (compared === 0) {
+              return clientName(left).localeCompare(clientName(right));
+            }
+            return compared * direction;
+          });
+
+          const sortHeader = (key, label) => `
+            <button class="nt-liquid-sort-button" type="button" data-sort-key="${escapeHtml(key)}" aria-label="Sort by ${escapeHtml(label)}">
+              <span>${escapeHtml(label)}</span>
+              <span class="nt-liquid-sort-indicator" data-sort-indicator="${escapeHtml(key)}"></span>
+            </button>
+          `;
+
+          const updateSortHeaders = () => {
+            clientsList.querySelectorAll('[data-sort-key]').forEach((button) => {
+              const key = button.dataset.sortKey || '';
+              const isActive = key === sortState.key;
+              button.classList.toggle('is-active', isActive);
+              button.setAttribute('aria-sort', isActive ? (sortState.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+              const indicator = button.querySelector('[data-sort-indicator]');
+              if (indicator) {
+                indicator.textContent = isActive ? (sortState.direction === 'asc' ? '↑' : '↓') : '';
+              }
+            });
+          };
+
+          const rows = renderRows(sortClients(visibleClients), statuses, phases);
           clientsList.style.setProperty('--nt-clients-custom-bg', "url('/assets/clients-glass-bg.png')");
           const countLabel = `${clients.length} client${clients.length === 1 ? '' : 's'}`;
           clientsList.innerHTML = `
@@ -1411,6 +1893,25 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
                   <input id="clientsTableSearchInput" class="nt-liquid-table-search-input" type="search" placeholder="Search clients..." aria-label="Search clients">
                 </div>
                 <div class="nt-liquid-toolbar-buttons">
+                  <select id="clientsSortSelect" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" aria-label="Sort clients">
+                    <option value="nextImport">Sort: Days Left</option>
+                    <option value="status">Sort: Status</option>
+                    <option value="phase">Sort: Phase</option>
+                    <option value="reportDate">Sort: Report Date</option>
+                    <option value="name">Sort: Name</option>
+                  </select>
+                  <select id="clientsSortDirection" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" aria-label="Sort direction">
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                  </select>
+                  <select id="clientsStatusFilter" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" aria-label="Filter by status">
+                    <option value="">All Status</option>
+                    ${statuses.map((status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`).join('')}
+                  </select>
+                  <select id="clientsPhaseFilter" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select" aria-label="Filter by phase">
+                    <option value="">All Phase</option>
+                    ${phases.map((phase) => `<option value="${escapeHtml(phase)}">${escapeHtml(phase)}</option>`).join('')}
+                  </select>
                   <button id="clientsTableImportTrigger" class="nt-liquid-toolbar-btn nt-liquid-import-btn" type="button">Import</button>
                 </div>
               </div>
@@ -1418,13 +1919,13 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
                 <table class="nt-liquid-table nt-dashboard-clients-table">
                   <thead>
                     <tr>
-                      <th>Client</th>
-                      <th>Status</th>
+                      <th>${sortHeader('name', sortColumns.name)}</th>
+                      <th>${sortHeader('status', sortColumns.status)}</th>
                       <th>Phone</th>
-                      <th>Phase</th>
+                      <th>${sortHeader('phase', sortColumns.phase)}</th>
                       <th>Monitoring</th>
-                      <th>Days Left</th>
-                      <th>Report Date</th>
+                      <th>${sortHeader('nextImport', sortColumns.nextImport)}</th>
+                      <th>${sortHeader('reportDate', sortColumns.reportDate)}</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -1436,22 +1937,83 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
             </div>
           `;
 
-          const refreshRows = (nextClients) => {
-            clientsList.querySelector('.nt-liquid-table tbody').innerHTML = renderRows(nextClients, statuses, phases)
-              || '<tr class="nt-liquid-empty-row"><td class="nt-liquid-empty-cell" colspan="8">No clients match your search.</td></tr>';
+          const applyClientFilters = () => clients.filter((client) => {
+            const normalized = normalizeClient(client);
+            const query = filterText.trim().toLowerCase();
+            const matchesText = !query || [
+              clientName(client),
+              normalized.status,
+              normalized.phase,
+              normalized.email,
+              normalized.phone,
+              normalized.monitoringUsername,
+              normalized.monitoringAgency,
+            ].some((value) => String(value || '').toLowerCase().includes(query));
+            const matchesStatus = !statusFilter || String(normalized.status || 'Client') === statusFilter;
+            const matchesPhase = !phaseFilter || String(normalized.phase || 'None') === phaseFilter;
+            return matchesText && matchesStatus && matchesPhase;
+          });
+
+          const refreshRows = (nextClients = applyClientFilters()) => {
+            visibleClients = nextClients.slice();
+            const sortedClients = sortClients(visibleClients);
+            clientsList.querySelector('.nt-liquid-table tbody').innerHTML = renderRows(sortedClients, statuses, phases)
+              || '<tr class="nt-liquid-empty-row"><td class="nt-liquid-empty-cell" colspan="8">No clients match your filters.</td></tr>';
+            const countNode = clientsList.querySelector('#clientsTableCount');
+            if (countNode) {
+              countNode.textContent = `${visibleClients.length} client${visibleClients.length === 1 ? '' : 's'}`;
+            }
+            const sortSelect = clientsList.querySelector('#clientsSortSelect');
+            const directionSelect = clientsList.querySelector('#clientsSortDirection');
+            if (sortSelect) sortSelect.value = sortState.key;
+            if (directionSelect) directionSelect.value = sortState.direction;
+            updateSortHeaders();
           };
+
+          updateSortHeaders();
 
           const searchInput = clientsList.querySelector('#clientsTableSearchInput');
           searchInput?.addEventListener('input', () => {
-            const query = searchInput.value.trim().toLowerCase();
-            const filtered = clients.filter((client) => [
-              clientName(client),
-              pick(client, 'status'),
-              pick(client, 'phase'),
-              pick(client, 'email'),
-              pick(client, 'phone'),
-            ].some((value) => value.toLowerCase().includes(query)));
-            refreshRows(filtered);
+            filterText = String(searchInput.value || '');
+            refreshRows();
+            bindClientTableActions();
+          });
+
+          clientsList.querySelectorAll('[data-sort-key]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const nextKey = button.dataset.sortKey || 'nextImport';
+              if (sortState.key === nextKey) {
+                sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+              } else {
+                sortState.key = nextKey;
+                sortState.direction = 'asc';
+              }
+              refreshRows();
+              bindClientTableActions();
+            });
+          });
+
+          clientsList.querySelector('#clientsSortSelect')?.addEventListener('change', (event) => {
+            sortState.key = event.currentTarget.value || 'nextImport';
+            refreshRows();
+            bindClientTableActions();
+          });
+
+          clientsList.querySelector('#clientsSortDirection')?.addEventListener('change', (event) => {
+            sortState.direction = event.currentTarget.value === 'desc' ? 'desc' : 'asc';
+            refreshRows();
+            bindClientTableActions();
+          });
+
+          clientsList.querySelector('#clientsStatusFilter')?.addEventListener('change', (event) => {
+            statusFilter = String(event.currentTarget.value || '');
+            refreshRows();
+            bindClientTableActions();
+          });
+
+          clientsList.querySelector('#clientsPhaseFilter')?.addEventListener('change', (event) => {
+            phaseFilter = String(event.currentTarget.value || '');
+            refreshRows();
             bindClientTableActions();
           });
 
@@ -1607,7 +2169,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
                   });
                   const client = clients.find((entry) => String(pick(entry, 'id')) === String(clientId));
                   if (client) client.daysLeft = days;
-                  refreshRows(clients);
+                  refreshRows();
                   bindClientTableActions();
                   setDashboardMessage(`Next Import updated to ${formatNextImport(days)}.`);
                 } catch (error) {
@@ -1621,19 +2183,20 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
         };
 
         window.setTimeout(async () => {
-          if (!(await ensureDashboardAuth())) {
+          const clientsList = document.getElementById('clientsList');
+
+          if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
             return;
           }
 
-          const clientsList = document.getElementById('clientsList');
-          if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
+          if (!(await ensureDashboardAuth())) {
             return;
           }
 
           fetch('/api/clients', { credentials: 'include' })
             .then((response) => {
               if (response.status === 401) {
-                window.location.replace('/');
+                redirectToUltraLogin();
                 return null;
               }
               return response.ok ? response.json() : null;
@@ -1658,7 +2221,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     </script>
     <script>
       (() => {
-        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260605-07';
+        const DASHBOARD_SCRIPT_VERSION = 'dashboard build 20260610-01';
         const dashboardHubModeStorageKey = 'tools-ninja-dashboard-hub-mode';
         const heroWidgetFrame = () => document.querySelector('.hero-widget-frame');
         const panes = {
@@ -1755,5 +2318,44 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
         setHubMode(readHubMode());
       })();
     </script>
-  </body>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const statusSelect = document.getElementById('clientsStatusFilter');
+      if (!statusSelect) return;
+      
+      // Populate status options from visible clients
+      window.populateStatusOptions = function(clients) {
+        const statuses = {};
+        clients.forEach(c => {
+          const s = c.status || 'Unknown';
+          statuses[s] = (statuses[s] || 0) + 1;
+        });
+        
+        statusSelect.innerHTML = '<option value="">📊 All Status</option>';
+        Object.entries(statuses)
+          .sort((a,b) => b[1] - a[1])
+          .forEach(([status, count]) => {
+            const opt = document.createElement('option');
+            opt.value = status;
+            opt.textContent = `${status} (${count})`;
+            statusSelect.appendChild(opt);
+          });
+      };
+      
+      // Filter rows by status
+      statusSelect.addEventListener('change', (e) => {
+        const selected = e.target.value;
+        document.querySelectorAll('tbody tr').forEach(row => {
+          if (!selected) {
+            row.style.display = '';
+          } else {
+            const statusCell = row.querySelector('td:nth-child(2)');
+            const status = statusCell ? statusCell.textContent.trim() : '';
+            row.style.display = status === selected ? '' : 'none';
+          }
+        });
+      });
+    });
+    </script>
+</body>
 </html>

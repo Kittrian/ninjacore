@@ -1,5 +1,7 @@
 {
-  "frontendVersion": "v3.15",
-  "buildVersion": "20260609-1332",
-  "appScriptVersion": "v3.17 cache clear 20260609-1332"
+  "frontendVersion": "v3.16",
+  "buildVersion": "20260609-2245",
+  "appScriptVersion": "v3.18 UltraDispute SSO only",
+  "authMode": "UltraDispute SSO only",
+  "authRedirect": "https://auth.ultradispute.com/login?provider=google&redirect=https://ninjacore.ninjadispute.com/dashboard.html"
 }

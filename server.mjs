@@ -1574,7 +1574,6 @@ const normalizeClientRecord = (client = {}) => ({
   monitoringPassword: client.monitoringPassword || '',
   secretKey: client.secretKey || '',
   monitoringToken: client.monitoringToken || '',
-  tokenId: client.monitoringToken || '',
   portalPassword: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', client.ssn || ''),
   portalEnabled: client.portalEnabled !== undefined ? Boolean(client.portalEnabled) : true,
   language: client.language || 'English',
@@ -1742,48 +1741,6 @@ const readOptionalStringField = (source, key, fallback = '') => (
     ? String(source[key] ?? '').trim()
     : String(fallback ?? '').trim()
 );
-const readMonitoringTokenFromBody = (body, fallback = '') => (
-  hasOwnField(body, 'monitoringToken')
-    ? String(body.monitoringToken ?? '').trim()
-    : String(body?.tokenId ?? fallback).trim()
-);
-const buildClientIdentityKeys = (client = {}) => {
-  const first = normalizeLookupValue(client.firstName || '');
-  const last = normalizeLookupValue(client.lastName || '');
-  const email = normalizeLookupValue(client.email || '');
-  const phone = normalizeLookupPhone(client.phone || '');
-  const ssn = normalizeSsnInput(client.ssn || '');
-  const dob = normalizeDobInput(client.dob || '');
-  const keys = [];
-
-  const clientId = String(client.id || '').trim();
-  if (clientId) {
-    keys.push(`id:${clientId}`);
-  }
-
-  if (first && last && email) {
-    keys.push(`name+email:${first}|${last}|${email}`);
-  }
-  if (first && last && ssn) {
-    keys.push(`name+ssn:${first}|${last}|${ssn}`);
-  }
-  if (first && last && dob) {
-    keys.push(`name+dob:${first}|${last}|${dob}`);
-  }
-  if (first && last) {
-    keys.push(`name:${first}|${last}`);
-  }
-  if (email) {
-    keys.push(`email:${email}`);
-  }
-  if (phone) {
-    keys.push(`phone:${phone}`);
-  }
-  if (ssn) {
-    keys.push(`ssn:${ssn}`);
-  }
-  return keys;
-};
 
 const buildDefaultPortalPassword = (lastName = '', ssn = '') => {
   const safeLastName = String(lastName || '').trim().replace(/\s+/g, '');
@@ -5248,7 +5205,6 @@ const toSafeClient = (client) => {
     monitoringPassword: client.monitoringPassword || '',
     secretKey: client.secretKey || '',
     monitoringToken: client.monitoringToken || '',
-    tokenId: client.monitoringToken || '',
     portalPassword: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', client.ssn || ''),
     portalEnabled: client.portalEnabled !== undefined ? Boolean(client.portalEnabled) : true,
     language: client.language || 'English',
@@ -5320,7 +5276,6 @@ const toClientListItem = (client) => {
     monitoringPassword: client.monitoringPassword || '',
     secretKey: client.secretKey || '',
     monitoringToken: client.monitoringToken || '',
-    tokenId: client.tokenId || client.monitoringToken || '',
     portalPassword: client.portalPassword || buildDefaultPortalPassword(client.lastName || '', client.ssn || ''),
     portalEnabled: client.portalEnabled !== undefined ? Boolean(client.portalEnabled) : true,
     language: client.language || 'English',
@@ -5761,71 +5716,15 @@ const loadClientProfilesMap = async (ownerKey = getCurrentOwnerKey()) => {
 
 const mergeStoreWithProfileDb = async (store, ownerKey = getCurrentOwnerKey()) => {
   const profileMap = await loadClientProfilesMap(ownerKey);
-  const rowKeyToClientId = new Map();
-  for (const [clientId, row] of profileMap.entries()) {
-    const normalizedId = String(clientId || '').trim();
-    if (!normalizedId) {
-      continue;
-    }
-    const rowKeys = buildClientIdentityKeys({
-      id: normalizedId,
-      firstName: row.firstName || '',
-      lastName: row.lastName || '',
-      email: row.email || '',
-      dob: row.dob || '',
-      ssn: row.ssn || '',
-      phone: row.phone || '',
-    });
-    for (const key of rowKeys) {
-      if (!rowKeyToClientId.has(key)) {
-        rowKeyToClientId.set(key, normalizedId);
-      }
-    }
-  }
-
-  const usedProfileIds = new Set();
-  const mergedClients = store.clients.map((client) => {
-    const directMatch = rowKeyToClientId.get(`id:${String(client.id || '').trim()}`);
-    const normalizedDirectMatch = directMatch && !usedProfileIds.has(directMatch)
-      ? directMatch
-      : null;
-    const identityMatch = normalizedDirectMatch || buildClientIdentityKeys(client).find((key) => {
-      const candidate = rowKeyToClientId.get(key);
-      return candidate && !usedProfileIds.has(candidate);
-    });
-    if (!identityMatch || usedProfileIds.has(identityMatch)) {
-      return mergeClientProfileRow(client, null);
-    }
-    usedProfileIds.add(identityMatch);
-    return mergeClientProfileRow(client, profileMap.get(identityMatch));
-  });
-  const existingIds = new Set(
-    mergedClients.map((client) => String(client.id || '').trim()).filter(Boolean),
-  );
+  const mergedClients = store.clients.map((client) => mergeClientProfileRow(client, profileMap.get(client.id)));
+  const existingIds = new Set(mergedClients.map((client) => String(client.id || '').trim()).filter(Boolean));
 
   // Critical bridge behavior:
   // if a client exists in MySQL but not yet in store.json, append it so /api/clients
   // immediately returns the synced row instead of hiding it from the UI.
   for (const [clientId, row] of profileMap.entries()) {
     const normalizedId = String(clientId || '').trim();
-    if (!normalizedId || usedProfileIds.has(normalizedId) || existingIds.has(normalizedId)) {
-      continue;
-    }
-
-    const rowKeys = buildClientIdentityKeys({
-      id: normalizedId,
-      firstName: row.firstName || '',
-      lastName: row.lastName || '',
-      email: row.email || '',
-      dob: row.dob || '',
-      ssn: row.ssn || '',
-      phone: row.phone || '',
-    });
-    const alreadyRepresentedByStoreClient = rowKeys.some((key) => {
-      const candidateId = rowKeyToClientId.get(key);
-      return Boolean(candidateId) && existingIds.has(candidateId);
-    });
-    if (alreadyRepresentedByStoreClient) {
+    if (!normalizedId || existingIds.has(normalizedId)) {
       continue;
     }
 
@@ -5850,7 +5749,6 @@ const mergeStoreWithProfileDb = async (store, ownerKey = getCurrentOwnerKey()) =
       monitoringPassword: row.monitoringPassword || '',
       secretKey: row.secretKey || '',
       monitoringToken: row.monitoringToken || '',
-      tokenId: row.monitoringToken || '',
       portalPassword: row.portalPassword || '',
       portalEnabled: row.portalEnabled,
       language: row.language || 'English',
@@ -9133,16 +9031,12 @@ const server = createServer((req, res) => {
     }
 
   if (pathname === '/api/login' && req.method === 'POST') {
-    try {
-      const body = await readBody(req);
-      const username = String(body.username ?? '').trim();
-      const password = String(body.password ?? '');
-      const legacyValid = isValidAppCredential(username, password);
-      const dynamicValid = await verifyUserCredential(username, password);
-      if (!legacyValid && !dynamicValid) {
-        send(res, 401, { error: 'Invalid username or password.' });
-        return;
-      }
+    send(res, 410, {
+      error: 'Local NinjaCore username/password login is disabled. Use UltraDispute SSO only.',
+      loginUrl: 'https://auth.ultradispute.com/login?provider=google&redirect=https://ninjacore.ninjadispute.com/dashboard.html',
+    });
+    return;
+  }
 
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
@@ -9159,16 +9053,12 @@ const server = createServer((req, res) => {
   }
 
   if (pathname === '/api/signup' && req.method === 'POST') {
-    try {
-      const body = await readBody(req);
-      const username = String(body.username ?? '').trim();
-      const password = String(body.password ?? '');
-      const confirmPassword = String(body.confirmPassword ?? '');
-
-      if (!username || !password) {
-        send(res, 400, { error: 'Username and password are required.' });
-        return;
-      }
+    send(res, 410, {
+      error: 'Local NinjaCore signup is disabled. Use UltraDispute SSO only.',
+      loginUrl: 'https://auth.ultradispute.com/login?provider=google&redirect=https://ninjacore.ninjadispute.com/dashboard.html',
+    });
+    return;
+  }
       if (password.length < 8) {
         send(res, 400, { error: 'Password must be at least 8 characters.' });
         return;
@@ -9240,40 +9130,28 @@ const server = createServer((req, res) => {
   }
 
   if (pathname === '/api/auth/google-login' && req.method === 'GET') {
-    const state = createHash('sha256').update(randomUUID()).digest('hex');
-    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    authUrl.searchParams.set('client_id', googleClientId);
-    authUrl.searchParams.set('redirect_uri', oauthRedirectUri);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('scope', 'openid email profile');
-    authUrl.searchParams.set('state', state);
-    res.writeHead(302, { 'Location': authUrl.toString() });
-    res.end();
+    send(res, 410, {
+      error: 'NinjaCore local OAuth is disabled. Use UltraDispute SSO only.',
+      loginUrl: 'https://auth.ultradispute.com/login?provider=google&redirect=https://ninjacore.ninjadispute.com/dashboard.html',
+    });
     return;
   }
 
   if (pathname === '/api/auth/github-login' && req.method === 'GET') {
-    const state = createHash('sha256').update(randomUUID()).digest('hex');
-    const authUrl = new URL('https://github.com/login/oauth/authorize');
-    authUrl.searchParams.set('client_id', githubClientId);
-    authUrl.searchParams.set('redirect_uri', oauthRedirectUri);
-    authUrl.searchParams.set('scope', 'user:email');
-    authUrl.searchParams.set('state', state);
-    res.writeHead(302, { 'Location': authUrl.toString() });
-    res.end();
+    send(res, 410, {
+      error: 'NinjaCore local OAuth is disabled. Use UltraDispute SSO only.',
+      loginUrl: 'https://auth.ultradispute.com/login?provider=google&redirect=https://ninjacore.ninjadispute.com/dashboard.html',
+    });
     return;
   }
 
   if (pathname === '/api/auth/callback' && req.method === 'GET') {
-    try {
-      const code = url.searchParams.get('code');
-      const state = url.searchParams.get('state');
-      const provider = url.searchParams.get('provider') || 'google';
-
-      if (!code) {
-        send(res, 400, { error: 'Missing authorization code.' });
-        return;
-      }
+    send(res, 410, {
+      error: 'NinjaCore local OAuth callback is disabled. Use UltraDispute SSO only.',
+      loginUrl: 'https://auth.ultradispute.com/login?provider=google&redirect=https://ninjacore.ninjadispute.com/dashboard.html',
+    });
+    return;
+  }
 
       let accessToken = '';
       let userEmail = '';
@@ -9398,18 +9276,24 @@ const server = createServer((req, res) => {
       }
       let ssoUsername = '';
 
-      // Try EdDSA verification via auth.ninjadispute.com first (OAuth users).
-      try {
-        const verifyRes = await fetch('https://auth.ninjadispute.com/verify', {
-          headers: { Authorization: `Bearer ${ninjaToken}` },
-        });
-        if (verifyRes.ok) {
+      // UltraDispute is the only supported SSO authority for NinjaCore.
+      for (const verifyHost of ['https://auth.ultradispute.com/verify']) {
+        if (ssoUsername) {
+          break;
+        }
+        try {
+          const verifyRes = await fetch(verifyHost, {
+            headers: { Authorization: `Bearer ${ninjaToken}` },
+          });
+          if (!verifyRes.ok) {
+            continue;
+          }
           const verifyData = await verifyRes.json().catch(() => ({}));
           if (verifyData?.authenticated) {
             ssoUsername = normalizeUsername(verifyData.username || verifyData.email || '');
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       // Fallback: HS256 token issued by api.ninjadispute.com (direct-login users).
       if (!ssoUsername) {
@@ -10882,11 +10766,7 @@ const server = createServer((req, res) => {
       client.monitoringPassword = readOptionalStringField(body, 'monitoringPassword', client.monitoringPassword || '');
       const requestedSecret = readOptionalStringField(body, 'secretKey', client.secretKey || '');
       client.secretKey = requestedSecret || getLastFourDigits(ssn);
-      if (hasOwnField(body, 'monitoringToken')) {
-        client.monitoringToken = readOptionalStringField(body, 'monitoringToken', client.monitoringToken || '');
-      } else if (hasOwnField(body, 'tokenId')) {
-        client.monitoringToken = readOptionalStringField(body, 'tokenId', client.monitoringToken || '');
-      }
+      client.monitoringToken = readOptionalStringField(body, 'monitoringToken', client.monitoringToken || '');
       client.portalPassword = readOptionalStringField(body, 'portalPassword', client.portalPassword || '')
         || buildDefaultPortalPassword(nextLastName, ssn);
       client.portalEnabled = readOptionalStringField(body, 'portalEnabled', client.portalEnabled ? 'on' : 'off').toLowerCase() !== 'off';
@@ -11399,7 +11279,7 @@ const server = createServer((req, res) => {
         monitoringUsername: String(body.monitoringUsername || '').trim(),
         monitoringPassword: String(body.monitoringPassword || '').trim(),
         secretKey: String(body.secretKey || '').trim() || getLastFourDigits(ssn),
-        monitoringToken: readMonitoringTokenFromBody(body),
+        monitoringToken: String(body.monitoringToken || '').trim(),
         portalPassword: String(body.portalPassword || '').trim() || buildDefaultPortalPassword(body.lastName, ssn),
         portalEnabled: String(body.portalEnabled || 'on').trim().toLowerCase() !== 'off',
         language: String(body.language || 'English').trim() || 'English',
