@@ -22,6 +22,94 @@ const setWidgetConsole = (message, level = "info", append = false) => {
   const atBottom =
     consoleElement.scrollHeight - consoleElement.scrollTop - consoleElement.clientHeight < 24;
 
+  const escapeHtml = (value) => String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+  const classifyConsoleLine = (line) => {
+    const text = String(line || "").trim();
+    const lower = text.toLowerCase();
+
+    if (!text) {
+      return null;
+    }
+
+    if (lower.includes("no remaining 3-bureau reports")) {
+      return {
+        text: `No fresh 3-bureau report was available. Using the newest SmartCredit metadata/order JSON instead.`,
+        icon: "⚠️",
+        tone: "warning",
+      };
+    }
+
+    if (lower.startsWith("saved current report to:")) {
+      return {
+        text,
+        icon: "💾",
+        tone: "success",
+      };
+    }
+
+    if (lower.startsWith("saved report history to:")) {
+      return {
+        text,
+        icon: "🗂️",
+        tone: "success",
+      };
+    }
+
+    if (lower.includes("loaded. ready to refresh")) {
+      return {
+        text,
+        icon: "✅",
+        tone: "success",
+      };
+    }
+
+    if (lower.includes("refreshing report")) {
+      return {
+        text,
+        icon: "🚀",
+        tone: "info",
+      };
+    }
+
+    if (lower.includes("missing monitoring credentials")) {
+      return {
+        text,
+        icon: "🔐",
+        tone: "warning",
+      };
+    }
+
+    if (lower.includes("failed") || lower.includes("error")) {
+      return {
+        text,
+        icon: "❌",
+        tone: "error",
+      };
+    }
+
+    if (lower.includes("json loaded to ninjatools")
+      || lower.includes("tools ninja sync complete")
+      || lower.includes("script completed successfully")) {
+      return {
+        text,
+        icon: "📦",
+        tone: "success",
+      };
+    }
+
+    return {
+      text,
+      icon: "•",
+      tone: level === "error" ? "error" : "info",
+    };
+  };
+
   const cleanLines = String(message || "")
     .replace(/\r/g, "\n")
     .split("\n")
@@ -32,13 +120,20 @@ const setWidgetConsole = (message, level = "info", append = false) => {
 
   const existingLines = append
     ? Array.from(consoleElement.querySelectorAll(".widget-console-line"))
-      .map((node) => String(node.textContent || "").trim())
-      .filter(Boolean)
+      .map((node) => ({
+        text: String(node.dataset.rawText || node.textContent || "").trim(),
+        icon: String(node.dataset.icon || "•"),
+        tone: String(node.dataset.tone || "info"),
+      }))
+      .filter((entry) => entry.text)
     : [];
-  const combinedLines = [...existingLines, ...cleanLines];
+  const formattedLines = cleanLines
+    .map((line) => classifyConsoleLine(line))
+    .filter(Boolean);
+  const combinedLines = [...existingLines, ...formattedLines];
   const limitedLines = combinedLines.slice(-300);
   consoleElement.innerHTML = limitedLines
-    .map((line) => `<div class="widget-console-line">${line}</div>`)
+    .map((entry) => `<div class="widget-console-line is-${escapeHtml(entry.tone)}" data-raw-text="${escapeHtml(entry.text)}" data-icon="${escapeHtml(entry.icon)}" data-tone="${escapeHtml(entry.tone)}"><span class="widget-console-line-icon">${escapeHtml(entry.icon)}</span><span class="widget-console-line-text">${escapeHtml(entry.text)}</span></div>`)
     .join("");
   consoleElement.className = `widget-console${limitedLines.length ? " is-visible" : ""} is-${level}`;
 
