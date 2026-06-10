@@ -135,7 +135,10 @@ const setBootLoadingOverlay = (isActive, message = '') => {
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
 const ND_API = 'https://api.ninjadispute.com';
 const ndFetch = (path, opts = {}) => fetch(`${ND_API}${path}`, { credentials: 'include', ...opts });
-const APP_SCRIPT_VERSION = 'v20260610-theme-widget-02 loaded';
+const APP_PUBLIC_VERSION = 'v3.28';
+const REPORT_RUNNER_SCRIPT_VERSION = 'v.6';
+const APP_SCRIPT_VERSION = 'v20260610-monitoring-sync-01 loaded';
+const WIDGET_VERSION_DISPLAY = `${APP_PUBLIC_VERSION} • IDIQ/SC ${REPORT_RUNNER_SCRIPT_VERSION}`;
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
 const widgetBusinessNameStorageKey = 'tools-ninja-widget-business-name';
@@ -1297,15 +1300,29 @@ const loadClientForEditDialog = async (clientId) => {
   return null;
 };
 
-const getEditClientPayload = (listClient, editedClient) => ({
-  ...listClient,
-  ...editedClient,
-  documents: Array.isArray(editedClient?.documents)
-    ? editedClient.documents
-    : Array.isArray(listClient?.documents)
-      ? listClient.documents
-      : [],
-});
+const getEditClientPayload = (listClient, editedClient) => {
+  const mergedClient = {
+    ...listClient,
+    ...editedClient,
+    documents: Array.isArray(editedClient?.documents)
+      ? editedClient.documents
+      : Array.isArray(listClient?.documents)
+        ? listClient.documents
+        : [],
+  };
+
+  mergedClient.monitoringAgency = getCanonicalMonitoringAgencyValue(
+    mergedClient.monitoringAgency
+      || listClient?.monitoringAgency
+      || editedClient?.monitoringAgency
+      || mergedClient.creditReportSource
+      || listClient?.creditReportSource
+      || editedClient?.creditReportSource
+      || '',
+  );
+
+  return mergedClient;
+};
 
 const buildDefaultClientDocuments = () => fixedClientDocumentTypes.map((type, index) => ({
   id: `doc-fixed-${index}`,
@@ -1685,7 +1702,10 @@ const populateAddClientFormFromClient = (client) => {
   setFormValue('assignedTo', client.assignedTo || '');
   setFormValue('status', client.status || 'Client');
   setFormValue('phase', client.phase || 'None');
-  setFormValue('monitoringAgency', client.monitoringAgency || '');
+  setFormValue(
+    'monitoringAgency',
+    getCanonicalMonitoringAgencyValue(client.monitoringAgency || client.creditReportSource || ''),
+  );
   setFormValue('monitoringUsername', client.monitoringUsername || '');
   setFormValue('monitoringPassword', client.monitoringPassword || '');
   setFormValue('secretKey', client.secretKey || '');
@@ -3404,6 +3424,25 @@ const getReportAgeSummary = (reportDate) => {
 };
 
 const normalizeMonitoringAgency = (value) => String(value || '').trim().toLowerCase();
+const getCanonicalMonitoringAgencyValue = (value) => {
+  const normalized = normalizeMonitoringAgency(value);
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.includes('identity') || normalized.includes('iiq')) {
+    return 'IdentityIQ';
+  }
+  if (normalized.includes('smart')) {
+    return 'SmartCredit';
+  }
+  if (normalized.includes('myscore')) {
+    return 'MyScoreIQ';
+  }
+  if (normalized.includes('myfree') || normalized.includes('mfsn')) {
+    return 'MyFreeScoreNow';
+  }
+  return String(value || '').trim();
+};
 const getClientMonitoringToken = (client = {}) => String(client.tokenId || client.monitoringToken || '').trim();
 
 const getMonitoringLinkStatus = (client, agency) => {
@@ -6519,7 +6558,7 @@ const setWidgetConsoleMessage = (message, isError = false, append = false) => {
 
   frame.contentWindow.postMessage({
     type: 'tools-ninja:script-version',
-    value: APP_SCRIPT_VERSION,
+    value: WIDGET_VERSION_DISPLAY,
   }, window.location.origin);
 
   frame.contentWindow.postMessage({
@@ -6815,7 +6854,7 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
       method: 'POST',
       body: JSON.stringify({
         forcePaid,
-        monitoringAgency: currentMonitoringAgency,
+        monitoringAgency: activeMonitoringAgency,
         monitoringUsername: currentMonitoringUsername,
         monitoringPassword: currentMonitoringPassword,
         monitoringToken: currentMonitoringToken,
@@ -6910,6 +6949,9 @@ const applyIntegrationValues = (formId, values = {}) => {
 const syncSmartCreditClientTokenInput = () => {
   const form = byId('smartCreditIntegrationForm');
   if (!form || !form.tokenId) return;
+  if (document.activeElement === form.tokenId) {
+    return;
+  }
   const selected = state.selectedClientId
     ? state.clients.find((c) => c.id === state.selectedClientId)
     : null;
@@ -7545,7 +7587,7 @@ const bindEvents = () => {
         phase: String(formData.get('phase') || '').trim() || 'None',
         ninjaAssigned: String(formData.get('ninjaAssigned') || '').trim(),
         affiliateAssigned: String(formData.get('affiliateAssigned') || 'None').trim() || 'None',
-        monitoringAgency: String(formData.get('monitoringAgency') || '').trim(),
+        monitoringAgency: getCanonicalMonitoringAgencyValue(String(formData.get('monitoringAgency') || '').trim()),
         monitoringUsername: String(formData.get('monitoringUsername') || '').trim(),
         monitoringPassword: String(formData.get('monitoringPassword') || '').trim(),
         secretKey: String(formData.get('secretKey') || '').trim(),
@@ -7699,6 +7741,73 @@ const bindEvents = () => {
     }
   });
 
+  {
+    const form = byId('smartCreditIntegrationForm');
+    const tokenInput = form?.tokenId;
+    let saveTimer = null;
+    let inflightSave = null;
+    const persistClientToken = async (immediateValue) => {
+      const clientId = state.selectedClientId;
+      const tokenValue = String(immediateValue ?? tokenInput?.value ?? '').trim();
+      if (!clientId) {
+        return;
+      }
+      const selectedClient = state.clients.find((entry) => entry.id === clientId);
+      if (selectedClient) {
+        selectedClient.tokenId = tokenValue;
+        selectedClient.monitoringToken = tokenValue;
+      }
+      const savePromise = request(`/api/clients/${clientId}/profile`, {
+        method: 'PATCH',
+        body: JSON.stringify({ tokenId: tokenValue }),
+      }).then((payload) => {
+        const updated = payload?.client;
+        const target = state.clients.find((entry) => entry.id === clientId);
+        if (target && updated) {
+          Object.assign(target, updated);
+          target.tokenId = getClientMonitoringToken(updated) || tokenValue;
+          target.monitoringToken = getClientMonitoringToken(updated) || tokenValue;
+        }
+        setIntegrationMessage('Client token saved.');
+      }).catch((error) => {
+        setIntegrationMessage(error.message, true);
+      }).finally(() => {
+        if (inflightSave === savePromise) {
+          inflightSave = null;
+        }
+      });
+      inflightSave = savePromise;
+      return savePromise;
+    };
+    const queueTokenSave = () => {
+      window.clearTimeout(saveTimer);
+      const currentValue = String(tokenInput?.value || '').trim();
+      const selectedClient = state.selectedClientId
+        ? state.clients.find((entry) => entry.id === state.selectedClientId)
+        : null;
+      if (selectedClient) {
+        selectedClient.tokenId = currentValue;
+        selectedClient.monitoringToken = currentValue;
+      }
+      saveTimer = window.setTimeout(() => {
+        void persistClientToken(currentValue);
+      }, 250);
+    };
+    const flushTokenSave = async () => {
+      window.clearTimeout(saveTimer);
+      await persistClientToken(String(tokenInput?.value || '').trim());
+    };
+    if (tokenInput) {
+      tokenInput.addEventListener('input', queueTokenSave);
+      tokenInput.addEventListener('paste', () => {
+        window.setTimeout(queueTokenSave, 0);
+      });
+      tokenInput.addEventListener('blur', () => {
+        void flushTokenSave();
+      });
+    }
+  }
+
   byId('ninjaDisplay')?.addEventListener('click', () => {
     const ninja = byId('ninjaDisplay');
     ninja.classList.remove('is-animating');
@@ -7722,7 +7831,7 @@ const bindEvents = () => {
   heroWidgetFrame?.addEventListener('load', () => {
     heroWidgetFrame.contentWindow?.postMessage({
       type: 'tools-ninja:script-version',
-      value: APP_SCRIPT_VERSION,
+      value: WIDGET_VERSION_DISPLAY,
     }, window.location.origin);
     syncBusinessAssetsToWidget(readHomeSettings());
   });
@@ -7734,7 +7843,7 @@ const bindEvents = () => {
     if (event.data?.type === 'tools-ninja:request-script-version') {
       heroWidgetFrame?.contentWindow?.postMessage({
         type: 'tools-ninja:script-version',
-        value: APP_SCRIPT_VERSION,
+        value: WIDGET_VERSION_DISPLAY,
       }, window.location.origin);
       return;
     }
