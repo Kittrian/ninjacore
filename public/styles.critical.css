@@ -633,26 +633,49 @@ h1 {
   transform: translateX(9%);
   pointer-events: none;
   z-index: 0;
-  background-image:
-    url("/assets/abstract-light.jpg"),
-    linear-gradient(to right in oklab, hsl(var(--hero-theme-hue2) 52% 76%), hsl(var(--hero-theme-hue1) 58% 74%));
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-blend-mode: hard-light;
-  opacity: 0.96;
-  filter: saturate(1.28) brightness(0.92) blur(0.2px);
+  border-radius: 2rem;
+  background:
+    radial-gradient(60% 110% at 13% 50%, hsl(var(--hero-theme-hue1) 100% 18% / 0.88), transparent 56%),
+    radial-gradient(42% 70% at 86% 42%, hsl(var(--hero-theme-hue2) 100% 24% / 0.7), transparent 58%),
+    linear-gradient(180deg, rgba(3, 8, 8, 0.12), rgba(2, 7, 8, 0.68) 34%, rgba(0, 0, 0, 0.94) 100%);
+  box-shadow:
+    inset 0 0 120px rgba(0, 0, 0, 0.82),
+    inset 0 -32px 90px rgba(0, 0, 0, 0.72);
+  opacity: 0.98;
   mask-image: linear-gradient(90deg, transparent 0, rgba(0, 0, 0, 0.95) 9%, rgba(0, 0, 0, 0.95) 88%, transparent 100%);
+  overflow: hidden;
+}
+
+.hero-theme-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, transparent 0 20%, hsl(var(--hero-theme-hue1) 95% 72% / 0.22) 42%, transparent 56%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px 7px);
+  background-size: 100% 100%, 100% 7px;
+  background-repeat: no-repeat, repeat;
+  background-position: center, left top;
+  opacity: 0.8;
+  mask:
+    radial-gradient(78% 150% at 8% 78%, rgba(0, 0, 0, 1) 0 52%, transparent 72%),
+    linear-gradient(90deg, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0));
+  mask-composite: intersect;
+  filter: blur(0.2px);
 }
 
 .hero-theme-banner::after {
   content: "";
   position: absolute;
-  inset: -12% -3%;
+  inset: -10% -4%;
   background:
-    linear-gradient(90deg, transparent 0, hsl(var(--hero-theme-hue2) 88% 55% / 0.12) 14%, hsl(var(--hero-theme-hue1) 92% 74% / 0.78) 53%, hsl(var(--hero-theme-hue2) 88% 55% / 0.15) 86%, transparent 100%);
-  filter: blur(24px);
-  opacity: 0.92;
+    linear-gradient(90deg, hsl(var(--hero-theme-hue1) 96% 68%) 0%, hsl(165 100% 92%) 52%, hsl(var(--hero-theme-hue2) 96% 72%) 100%);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 360'%3E%3Cpath d='M-40 206 C 250 112 548 152 804 242 S 1236 300 1660 112' fill='none' stroke='white' stroke-width='28' stroke-linecap='round'/%3E%3C/svg%3E") center/100% 100% no-repeat;
+  filter:
+    drop-shadow(0 0 10px hsl(var(--hero-theme-hue1) 94% 66% / 0.44))
+    drop-shadow(0 0 26px hsl(var(--hero-theme-hue2) 94% 62% / 0.38))
+    blur(0.2px);
+  opacity: 0.98;
   mix-blend-mode: screen;
 }
 
@@ -709,6 +732,19 @@ h1 {
   color: #737985;
   overflow: visible;
   isolation: isolate;
+}
+
+.hero-panel-theme-widget::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(72% 84% at 12% 14%, hsl(var(--hue1) 90% 54% / 0.15), transparent 60%),
+    radial-gradient(64% 76% at 86% 82%, hsl(var(--hue2) 90% 56% / 0.14), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0));
+  pointer-events: none;
+  z-index: 0;
 }
 
 .hero-panel-theme-widget .shine,
@@ -773,9 +809,12 @@ h1 {
   border-top-right-radius: calc(var(--radius) * 2.5);
   border-bottom-left-radius: calc(var(--radius) * 2.5);
   border: calc(var(--radius) * 1.25) solid transparent;
-  mask: url("/assets/noise-base.png");
-  mask-mode: luminance;
-  mask-size: 29%;
+  mask-image:
+    radial-gradient(circle at 76% 24%, rgba(0, 0, 0, 1) 0 54%, transparent 76%),
+    repeating-linear-gradient(135deg, rgba(0, 0, 0, 1) 0 2px, rgba(0, 0, 0, 0.34) 2px 5px);
+  mask-size: 100% 100%, 30% 30%;
+  mask-position: center, center;
+  mask-repeat: no-repeat, repeat;
   filter: blur(12px) saturate(1.25) brightness(0.5);
   mix-blend-mode: plus-lighter;
   opacity: 0.95;
@@ -838,7 +877,7 @@ h1 {
 
 .hero-panel-theme-widget .inner {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   font-size: 0.875rem;
 }
 
