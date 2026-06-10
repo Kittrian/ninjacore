@@ -135,9 +135,9 @@ const setBootLoadingOverlay = (isActive, message = '') => {
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
 const ND_API = 'https://api.ninjadispute.com';
 const ndFetch = (path, opts = {}) => fetch(`${ND_API}${path}`, { credentials: 'include', ...opts });
-const APP_PUBLIC_VERSION = 'v3.29';
+const APP_PUBLIC_VERSION = 'v3.30';
 const REPORT_RUNNER_SCRIPT_VERSION = 'v.6';
-const APP_SCRIPT_VERSION = 'v20260610-whatif-zero-score-01 loaded';
+const APP_SCRIPT_VERSION = 'v20260610-monitoring-agency-sync-02 loaded';
 const WIDGET_VERSION_DISPLAY = `${APP_PUBLIC_VERSION} • IDIQ/SC ${REPORT_RUNNER_SCRIPT_VERSION}`;
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
@@ -3443,6 +3443,36 @@ const getCanonicalMonitoringAgencyValue = (value) => {
   }
   return String(value || '').trim();
 };
+const syncClientMonitoringAgency = ({ client = null, agency = '', syncForm = false } = {}) => {
+  const resolved = getCanonicalMonitoringAgencyValue(
+    agency
+      || client?.monitoringAgency
+      || client?.creditReportSource
+      || '',
+  );
+
+  if (!resolved) {
+    return '';
+  }
+
+  if (client && typeof client === 'object') {
+    client.monitoringAgency = resolved;
+  }
+
+  if (syncForm) {
+    const activeEditingClientId = String(state.editingClientId || state.addFormEditingClientId || '').trim();
+    const clientId = String(client?.id || '').trim();
+    if (activeEditingClientId && clientId && activeEditingClientId === clientId) {
+      const form = getClientForm();
+      if (form?.monitoringAgency && form.monitoringAgency.value !== resolved) {
+        form.monitoringAgency.value = resolved;
+        updateClientMonitoringCredentialLayout();
+      }
+    }
+  }
+
+  return resolved;
+};
 const getClientMonitoringToken = (client = {}) => String(client.tokenId || client.monitoringToken || '').trim();
 
 const getMonitoringLinkStatus = (client, agency) => {
@@ -5109,10 +5139,15 @@ const renderClientDetail = (client) => {
     identityiq: client.secretKey || '',
     token: getClientMonitoringToken(client),
   };
+  const resolvedClientMonitoringAgency = syncClientMonitoringAgency({
+    client,
+    agency: client.monitoringAgency || client.creditReportSource || '',
+    syncForm: true,
+  }) || 'IdentityIQ';
   let lastLinkedCredentialSignature = '';
   const getActiveAgencyValue = () => (
     agencyButtons.find((button) => button.classList.contains('is-active'))?.dataset.agency
-    || client.monitoringAgency
+    || resolvedClientMonitoringAgency
     || 'IdentityIQ'
   );
   const getLiveMonitoringDraft = () => {
@@ -5178,7 +5213,7 @@ const renderClientDetail = (client) => {
     }
     updateMonitoringLinkIndicator(selectedAgency);
   };
-  setAgencyButtons(client.monitoringAgency || 'IdentityIQ');
+  setAgencyButtons(resolvedClientMonitoringAgency);
 
   node.querySelectorAll('.score-value').forEach((element) => {
     const bureau = element.dataset.score;
@@ -5924,6 +5959,11 @@ const renderClientDetail = (client) => {
       const target = state.clients.find((entry) => entry.id === client.id);
       if (target) {
         Object.assign(target, payload.client);
+        syncClientMonitoringAgency({
+          client: target,
+          agency: target.monitoringAgency || target.creditReportSource || '',
+          syncForm: true,
+        });
       }
 
       const activeElement = document.activeElement;
@@ -5933,6 +5973,11 @@ const renderClientDetail = (client) => {
         && activeElement.matches('.monitoring-username-input, .monitoring-password-input, .security-code-input'),
       );
       if (state.selectedClientId === client.id && !credentialFieldFocused) {
+        syncClientMonitoringAgency({
+          client: payload.client,
+          agency: payload.client?.monitoringAgency || payload.client?.creditReportSource || '',
+          syncForm: true,
+        });
         renderClientDetail(payload.client);
       }
       syncSmartCreditClientTokenInput();
@@ -6060,7 +6105,12 @@ const renderClientDetail = (client) => {
       } else {
         securityValues.token = securityCodeInput.value;
       }
-      setAgencyButtons(button.dataset.agency);
+      const nextAgency = syncClientMonitoringAgency({
+        client,
+        agency: button.dataset.agency,
+        syncForm: true,
+      }) || button.dataset.agency;
+      setAgencyButtons(nextAgency);
       // Agency toggle persists instantly (no debounce). Operator may click
       // Refresh Report immediately after sliding the switch.
       void flushProfileSave();
@@ -6105,6 +6155,10 @@ const openEditDialog = async (clientId) => {
 
   const detailedClient = await loadClientForEditDialog(clientId);
   const mergedClient = detailedClient ? getEditClientPayload(client, detailedClient) : client;
+  syncClientMonitoringAgency({
+    client: mergedClient,
+    agency: mergedClient.monitoringAgency || mergedClient.creditReportSource || '',
+  });
 
   renderAddClientStatusOptions();
   renderAddClientPhaseOptions();
@@ -6810,10 +6864,16 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
     const selectedClient = state.clients.find((client) => client.id === state.selectedClientId);
     const detailShell = document.getElementById('clientDetail');
     const activeAgencyToggle = detailShell?.querySelector('.agency-toggle.is-active');
-    const activeMonitoringAgency = String(
-      activeAgencyToggle?.dataset.agency || selectedClient?.monitoringAgency || '',
-    ).trim();
+    const activeMonitoringAgency = syncClientMonitoringAgency({
+      client: selectedClient,
+      agency: activeAgencyToggle?.dataset.agency || selectedClient?.monitoringAgency || selectedClient?.creditReportSource || '',
+      syncForm: true,
+    });
     const monitoringAgency = normalizeMonitoringAgency(activeMonitoringAgency);
+    if (!monitoringAgency) {
+      setWidgetConsoleMessage('Select a credit monitoring service first.', true, true);
+      return;
+    }
     const currentMonitoringUsername = String(
       detailShell?.querySelector('.monitoring-username-input')?.value || selectedClient?.monitoringUsername || '',
     ).trim();
@@ -6896,6 +6956,11 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
     const target = state.clients.find((client) => client.id === state.selectedClientId);
     if (target && payload.client) {
       Object.assign(target, payload.client);
+      syncClientMonitoringAgency({
+        client: target,
+        agency: target.monitoringAgency || target.creditReportSource || '',
+        syncForm: true,
+      });
       target.lastReportRunStatus = 'success';
     }
     renderClients();
