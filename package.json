@@ -1,6 +1,6 @@
 {
   "name": "tools-ninja",
-  "version": "1.0.37",
+  "version": "1.0.43",
   "private": true,
   "type": "module",
   "dependencies": {

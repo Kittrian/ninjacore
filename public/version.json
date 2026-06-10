@@ -1,5 +1,5 @@
 {
   "frontendVersion": "v3.28",
-  "buildVersion": "20260610-12",
-  "appScriptVersion": "v3.28 widget version badge + IDIQ/SC script version"
+  "buildVersion": "20260610-13",
+  "appScriptVersion": "v3.28 monitoring sync + refresh agency fix"
 }

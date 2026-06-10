@@ -5383,6 +5383,26 @@ const inferMonitoringAgency = (client) => {
   return '';
 };
 
+const canonicalMonitoringAgency = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.includes('identity') || normalized.includes('iiq')) {
+    return 'IdentityIQ';
+  }
+  if (normalized.includes('smart')) {
+    return 'SmartCredit';
+  }
+  if (normalized.includes('myscore')) {
+    return 'MyScoreIQ';
+  }
+  if (normalized.includes('myfree') || normalized.includes('mfsn')) {
+    return 'MyFreeScoreNow';
+  }
+  return String(value || '').trim();
+};
+
 const formatNextImportValue = (value) => {
   const text = String(value ?? '').trim();
   if (!text) {
@@ -11886,7 +11906,7 @@ const server = createServer((req, res) => {
       client.affiliateAssigned = readOptionalStringField(body, 'affiliateAssigned', client.affiliateAssigned || 'None') || 'None';
       client.status = nextStatus;
       client.phase = nextPhase;
-      client.monitoringAgency = readOptionalStringField(body, 'monitoringAgency', client.monitoringAgency || '');
+      client.monitoringAgency = canonicalMonitoringAgency(readOptionalStringField(body, 'monitoringAgency', client.monitoringAgency || ''));
       client.monitoringUsername = readOptionalStringField(body, 'monitoringUsername', client.monitoringUsername || '');
       client.monitoringPassword = readOptionalStringField(body, 'monitoringPassword', client.monitoringPassword || '');
       const requestedSecret = readOptionalStringField(body, 'secretKey', client.secretKey || '');
@@ -11948,7 +11968,7 @@ const server = createServer((req, res) => {
 
       // Always trust explicit credential fields sent with refresh for this
       // selected client id, then persist before deciding refresh mode.
-      client.monitoringAgency = readOptionalStringField(body, 'monitoringAgency', client.monitoringAgency || '');
+      client.monitoringAgency = canonicalMonitoringAgency(readOptionalStringField(body, 'monitoringAgency', client.monitoringAgency || ''));
       client.monitoringUsername = readOptionalStringField(body, 'monitoringUsername', client.monitoringUsername || '');
       client.monitoringPassword = readOptionalStringField(body, 'monitoringPassword', client.monitoringPassword || '');
       // Accept both `monitoringToken` and frontend's `tokenId` so the live form
@@ -12468,7 +12488,7 @@ const server = createServer((req, res) => {
         affiliateAssigned: String(body.affiliateAssigned || 'None').trim() || 'None',
         status: body.status?.trim() || 'Client',
         phase: String(body.phase || '').trim() || 'None',
-        monitoringAgency: String(body.monitoringAgency || '').trim(),
+        monitoringAgency: canonicalMonitoringAgency(body.monitoringAgency || ''),
         yearlyIncome: String(body.yearlyIncome || '').trim(),
         housingPayment: String(body.housingPayment || '').trim(),
         debtMonthlyPayments: String(body.debtMonthlyPayments || '').trim(),
@@ -12673,7 +12693,7 @@ const server = createServer((req, res) => {
 
       await insertReportSnapshot(client, {
         source: reportSource,
-        monitoringAgency: body.monitoringAgency || 'IdentityIQ',
+        monitoringAgency: canonicalMonitoringAgency(body.monitoringAgency || 'IdentityIQ'),
         reportDate,
         reportFileName,
         reportHtml,
@@ -12691,7 +12711,7 @@ const server = createServer((req, res) => {
       client.creditReportHtml = reportHtml;
       client.creditReportJson = reportJsonText;
       client.creditReportSource = reportSource;
-      client.monitoringAgency = String(body.monitoringAgency || 'IdentityIQ').trim();
+      client.monitoringAgency = canonicalMonitoringAgency(body.monitoringAgency || 'IdentityIQ');
       client.monitoringUsername = String(body.monitoringUsername || client.monitoringUsername || '').trim();
       client.lastSyncedAt = syncedAt;
       client.nextImportInt = '';
@@ -12795,7 +12815,7 @@ const server = createServer((req, res) => {
       client.creditReportJson = reportJsonText;
       client.creditReportSource = reportSource;
       client.creditReportFileName = reportFileName;
-      client.monitoringAgency = String(body.monitoringAgency || client.monitoringAgency || 'SmartCredit').trim();
+      client.monitoringAgency = canonicalMonitoringAgency(body.monitoringAgency || client.monitoringAgency || 'SmartCredit');
       client.monitoringUsername = String(body.monitoringUsername || client.monitoringUsername || '').trim();
       client.lastSyncedAt = syncedAt;
       client.nextImportInt = '';
