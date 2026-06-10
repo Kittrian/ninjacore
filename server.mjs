@@ -3727,16 +3727,18 @@ const isEligibleForBureauUtilization = (account, bureau) => {
     return false;
   }
 
-  const typeForBureau = pickFirstNonEmpty(
-    account?.accountTypeByBureau?.[bureau],
-    account?.accountTypeDetailByBureau?.[bureau],
-    account?.accountType,
-    account?.accountTypeDetail,
-  );
-  if (isChargeAccountTypeText(typeForBureau)) {
+  const bureauType = String(account?.accountTypeByBureau?.[bureau] || '').trim();
+  const bureauTypeDetail = String(account?.accountTypeDetailByBureau?.[bureau] || '').trim();
+  const fallbackType = String(account?.accountType || '').trim();
+  const fallbackTypeDetail = String(account?.accountTypeDetail || '').trim();
+  const combinedType = [bureauTypeDetail, bureauType, fallbackTypeDetail, fallbackType]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  if (isChargeAccountTypeText(combinedType)) {
     return false;
   }
-  if (!isCreditCardType({ accountType: typeForBureau, accountTypeDetail: typeForBureau })) {
+  if (!isCreditCardType({ accountType: combinedType, accountTypeDetail: combinedType })) {
     return false;
   }
 
@@ -5982,6 +5984,23 @@ const calculateBureauTotalDebt = (accounts) => {
 const calculateMonthlyDebtTotals = (accounts) => ({
   totalMonthlyDebtPayments: accounts.reduce((sum, account) => sum + parseMoneyValue(account.monthlyPayment), 0),
 });
+
+function hydrateDerivedClientMetrics(client = {}) {
+  const openAccounts = Array.isArray(client?.openAccounts) ? client.openAccounts : [];
+  if (!openAccounts.length) {
+    return client;
+  }
+
+  return {
+    ...client,
+    bureauTotals: calculateBureauTotals(openAccounts),
+    bureauUtilization: calculateBureauUtilization(openAccounts),
+    bureauTotalDebt: calculateBureauTotalDebt(openAccounts),
+    bureauAgeOfCredit: calculateBureauAgeOfCredit(openAccounts),
+    bureauOnTimePayments: calculateBureauOnTimePayments(openAccounts),
+    monthlyDebtTotals: calculateMonthlyDebtTotals(openAccounts),
+  };
+}
 
 const toSafeClient = (client) => {
   const jsonReport = parseJsonValue(client.creditReportJson) || parseJsonValue(client.creditReportHtml);
@@ -11578,7 +11597,7 @@ const server = createServer((req, res) => {
       return;
     }
 
-    send(res, 200, { client: toSafeClient(client) });
+    send(res, 200, { client: toSafeClient(hydrateDerivedClientMetrics(client)) });
     return;
   }
 
