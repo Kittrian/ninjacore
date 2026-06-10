@@ -1,5 +1,5 @@
 {
-  "frontendVersion": "v3.21",
-  "buildVersion": "20260605-17",
-  "appScriptVersion": "v3.21 Surreal duplicate collapse"
+  "frontendVersion": "v3.24",
+  "buildVersion": "20260610-07",
+  "appScriptVersion": "v3.24 console widget bounded scrolling"
 }

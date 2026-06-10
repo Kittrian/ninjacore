@@ -441,7 +441,7 @@ div {
   height: 44px;
   padding: 0 18px;
   border-radius: 999px;
-  font: 600 15px/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  font: 600 15px/1 var(--ninja-font-body, "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
 }
 
 .tnw-btn-content {
@@ -880,7 +880,7 @@ html {
 body {
   background: transparent;
   background-color: transparent;
-  font-family: "Titillium Web", sans-serif;
+  font-family: var(--ninja-font-body), sans-serif;
   color: #fff;
   display: flex;
   align-items: center;
@@ -930,7 +930,7 @@ h1 {
 .outlineToggle label,
 .animTrigger label {
   position: relative;
-  font-family: arial;
+  font-family: var(--ninja-font-body), sans-serif;
   outline: none !important;
   cursor: pointer;
   background: #000;
@@ -978,7 +978,8 @@ body.outlineIt *::after {
 .widget-console {
   width: min(28rem, calc(100% - 2rem));
   min-height: auto !important;
-  max-height: none !important;
+  height: clamp(8.5rem, 18vh, 11.5rem);
+  max-height: clamp(8.5rem, 18vh, 11.5rem) !important;
   margin: 0 auto;
   padding: 0.7rem 0.9rem;
   border-radius: 14px;
@@ -986,7 +987,7 @@ body.outlineIt *::after {
   border: 1px solid var(--widget-console-border, rgba(67, 125, 67, 0.45));
   box-shadow: inset 0 0 0 1px var(--widget-console-glow, rgba(32, 75, 32, 0.22)), 0 10px 26px rgba(0, 0, 0, 0.28);
   color: var(--widget-console-color, #6dff8f);
-  font-family: "SFMono-Regular", "Consolas", "Menlo", "Monaco", monospace;
+  font-family: "Monaco", "Source Code Pro", monospace;
   font-size: 0.83rem;
   line-height: 1.35;
   text-align: left;
@@ -996,6 +997,8 @@ body.outlineIt *::after {
   pointer-events: none;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: rgba(93, 181, 110, 0.62) rgba(8, 16, 8, 0.88);
 }
@@ -1007,7 +1010,7 @@ body.outlineIt *::after {
 
 .widget-console-line {
   display: block;
-  white-space: normal;
+  white-space: pre-wrap;
   word-break: break-word;
 }
 
@@ -1086,6 +1089,27 @@ body {
   align-items: center;
   min-width: 0;
   padding-top: 1.45rem;
+}
+
+.widget-hero-image-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 520px);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.widget-hero-image {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  object-fit: contain;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .widget-column-center {
@@ -1251,7 +1275,8 @@ body {
 .widget-console {
   width: 100%;
   min-height: auto !important;
-  max-height: none !important;
+  height: clamp(8.5rem, 18vh, 11.5rem);
+  max-height: clamp(8.5rem, 18vh, 11.5rem) !important;
   margin: 0;
   padding: 0.72rem 0.95rem;
   opacity: 1;
@@ -1360,7 +1385,7 @@ body {
 .widget-refresh-button span {
   position: relative;
   display: block;
-  font-family: "Inter", sans-serif;
+  font-family: var(--ninja-font-body), sans-serif;
   letter-spacing: -0.05em;
   font-weight: 800;
   font-size: 1.06rem;
@@ -1519,6 +1544,7 @@ body {
 .widget-status-col-left {
   align-items: flex-start;
   padding-left: 0.72rem;
+  min-height: 0;
 }
 
 .widget-status-col-right {
@@ -1537,6 +1563,8 @@ body {
 .widget-status-col-left .widget-console {
   width: 100%;
   margin: 0;
+  flex: 1 1 auto;
+  align-self: stretch;
 }
 
 .widget-status-col-right .tnw-liquid-shell {
@@ -1743,7 +1771,7 @@ body {
   border: 1px solid rgba(67, 125, 255, 0.45);
   background: linear-gradient(180deg, rgba(6, 13, 24, 0.98), rgba(2, 7, 14, 0.98));
   box-shadow: inset 0 0 0 1px rgba(27, 71, 153, 0.28), 0 10px 26px rgba(0, 0, 0, 0.28);
-  font-family: "Titillium Web", sans-serif;
+  font-family: var(--ninja-font-body), sans-serif;
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.04em;

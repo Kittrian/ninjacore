@@ -78,7 +78,7 @@ const setBootLoadingOverlay = (isActive, message = '') => {
   }
 };
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
-const APP_SCRIPT_VERSION = 'v2.84 loaded';
+const APP_SCRIPT_VERSION = 'v3.24 loaded';
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
 const widgetBusinessNameStorageKey = 'tools-ninja-widget-business-name';
