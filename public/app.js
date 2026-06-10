@@ -135,7 +135,7 @@ const setBootLoadingOverlay = (isActive, message = '') => {
 const apiBase = window.location.protocol === 'file:' ? 'http://127.0.0.1:3017' : '';
 const ND_API = 'https://api.ninjadispute.com';
 const ndFetch = (path, opts = {}) => fetch(`${ND_API}${path}`, { credentials: 'include', ...opts });
-const APP_SCRIPT_VERSION = 'v3.02 loaded';
+const APP_SCRIPT_VERSION = 'v20260610-theme-widget-01 loaded';
 let previousHubIndex = -1;
 const widgetLogoStorageKey = 'tools-ninja-widget-logo';
 const widgetBusinessNameStorageKey = 'tools-ninja-widget-business-name';
@@ -177,6 +177,155 @@ let refreshLoaderThreeModulePromise = null;
 let refreshLoaderController = null;
 let isRefreshLoaderRunning = false;
 const defaultBrowserTabTitle = document.title || 'NinjaTools';
+const CLIENT_DROPDOWN_CLASS = 'nt-client-dropdown';
+const CLIENT_DROPDOWN_NATIVE_CLASS = 'nt-client-dropdown-native';
+let clientDropdownGlobalListenersBound = false;
+
+const closeClientDropdown = (dropdown) => {
+  if (!dropdown) {
+    return;
+  }
+  dropdown.classList.remove('is-open');
+  const trigger = dropdown.querySelector('.nt-client-dropdown-trigger');
+  trigger?.setAttribute('aria-expanded', 'false');
+};
+
+const closeAllClientDropdowns = () => {
+  document.querySelectorAll(`.${CLIENT_DROPDOWN_CLASS}.is-open`).forEach((dropdown) => {
+    closeClientDropdown(dropdown);
+  });
+};
+
+const getSelectedDropdownOption = (select) => (
+  select?.selectedOptions?.[0] || select?.options?.[0] || null
+);
+
+const syncClientDropdownSelection = (select, dropdown) => {
+  const selected = getSelectedDropdownOption(select);
+  const trigger = dropdown.querySelector('.nt-client-dropdown-trigger');
+  const selectedValue = String(selected?.value || '').trim();
+  if (trigger) {
+    trigger.textContent = selected ? String(selected.textContent || selected.value || '').trim() || 'Select...' : 'Select...';
+    trigger.classList.toggle('has-value', !!selected?.textContent || !!selected?.value);
+    trigger.setAttribute('aria-expanded', String(dropdown.classList.contains('is-open')));
+  }
+  dropdown.querySelectorAll('.nt-client-dropdown-item').forEach((item) => {
+    const isActive = String(item.dataset.value || '').trim() === selectedValue;
+    item.classList.toggle('is-active', isActive);
+    item.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+};
+
+const hydrateClientDropdown = (select) => {
+  if (!(select instanceof HTMLSelectElement) || select.dataset.clientDropdownInitialized === '1' || !select.options.length) {
+    return;
+  }
+
+  let dropdown = select.closest(`.${CLIENT_DROPDOWN_CLASS}`);
+  if (!dropdown) {
+    dropdown = document.createElement('div');
+    dropdown.className = CLIENT_DROPDOWN_CLASS;
+    select.insertAdjacentElement('beforebegin', dropdown);
+    dropdown.append(select);
+    select.classList.add(CLIENT_DROPDOWN_NATIVE_CLASS);
+  }
+
+  select.dataset.clientDropdownInitialized = '1';
+
+  const menu = dropdown.querySelector('.nt-client-dropdown-menu') || document.createElement('div');
+  if (!menu.classList.contains('nt-client-dropdown-menu')) {
+    menu.className = 'nt-client-dropdown-menu';
+    dropdown.append(menu);
+  }
+
+  const trigger = dropdown.querySelector('.nt-client-dropdown-trigger') || document.createElement('button');
+  if (!trigger.classList.contains('nt-client-dropdown-trigger')) {
+    trigger.type = 'button';
+    const inheritedClasses = Array.from(select.classList)
+      .filter((token) => token && token !== CLIENT_DROPDOWN_CLASS && token !== CLIENT_DROPDOWN_NATIVE_CLASS)
+      .join(' ');
+    trigger.className = `nt-client-dropdown-trigger ${inheritedClasses}`.trim();
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    dropdown.insertBefore(trigger, menu);
+  }
+  trigger.disabled = select.disabled;
+
+  menu.innerHTML = '';
+  const selectedValue = String(getSelectedDropdownOption(select)?.value || '').trim();
+  Array.from(select.options).forEach((option) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'nt-client-dropdown-item';
+    item.dataset.value = option.value;
+    item.setAttribute('role', 'option');
+    item.textContent = option.textContent || option.value || 'Unknown';
+    item.setAttribute('aria-selected', String(selectedValue === String(option.value || '').trim()));
+    if (selectedValue === String(option.value || '').trim()) {
+      item.classList.add('is-active');
+    }
+    item.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!select.disabled && select.value !== option.value) {
+        select.value = option.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      closeClientDropdown(dropdown);
+    });
+    menu.append(item);
+  });
+
+  if (!trigger.dataset.bound) {
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const shouldOpen = !dropdown.classList.contains('is-open');
+      closeAllClientDropdowns();
+      if (shouldOpen && !select.disabled) {
+        dropdown.classList.add('is-open');
+        trigger.setAttribute('aria-expanded', 'true');
+      }
+    });
+    trigger.dataset.bound = '1';
+  }
+
+  if (!clientDropdownGlobalListenersBound) {
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest(`.${CLIENT_DROPDOWN_CLASS}`)) {
+        closeAllClientDropdowns();
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      closeAllClientDropdowns();
+    });
+    clientDropdownGlobalListenersBound = true;
+  }
+
+  if (select.dataset.clientDropdownBound !== '1') {
+    select.addEventListener('change', () => {
+      if (dropdown?.classList) {
+        syncClientDropdownSelection(select, dropdown);
+      }
+    });
+    select.dataset.clientDropdownBound = '1';
+  }
+
+  syncClientDropdownSelection(select, dropdown);
+};
+
+const initClientSectionDropdowns = (scope = document) => {
+  const roots = [byId('clientHubAddPane'), byId('clientHubClientsPane')];
+  const nodes = scope instanceof Element ? [scope] : roots;
+  const selects = nodes.flatMap((node) => (node ? [...node.querySelectorAll('select')] : []));
+  selects.forEach((select) => {
+    hydrateClientDropdown(select);
+  });
+};
+
 let quickSaveClientIdentityController = null;
 let pendingQuickSaveExitToContacts = false;
 
@@ -913,6 +1062,7 @@ const renderAddClientStatusOptions = () => {
   if (!options.includes(selected)) {
     select.value = options[0] || 'Client';
   }
+  initClientSectionDropdowns(byId('clientHubAddPane'));
 };
 
 const renderAddClientPhaseOptions = () => {
@@ -928,6 +1078,7 @@ const renderAddClientPhaseOptions = () => {
   if (!options.includes(selected)) {
     select.value = options[0] || 'None';
   }
+  initClientSectionDropdowns(byId('clientHubAddPane'));
 };
 
 const renderAddClientAssignmentOptions = () => {
@@ -942,6 +1093,7 @@ const renderAddClientAssignmentOptions = () => {
     affiliateSelect.innerHTML = '<option value="None">None</option>';
     affiliateSelect.value = 'None';
   }
+  initClientSectionDropdowns(byId('clientHubAddPane'));
 };
 
 const renderSpouseClientOptions = () => {
@@ -1020,9 +1172,10 @@ const updateClientMonitoringCredentialLayout = () => {
   const agency = normalizeMonitoringAgency(form.monitoringAgency?.value || '');
   const useTokenOnly = agency === 'smartcredit' || agency === 'myfreescorenow';
   const useSecretOnly = agency === 'identityiq' || agency === 'myscoreiq';
-  const tokenHasValue = Boolean(String(form.tokenId?.value || '').trim());
+  const tokenFieldInput = form.elements?.namedItem('monitoringToken') || form.elements?.namedItem('tokenId');
+  const tokenHasValue = Boolean(String(tokenFieldInput?.value || '').trim());
   const secretKeyField = form.querySelector('.add-client-secret-key-field');
-  const tokenField = form.querySelector('.add-client-token-field');
+  const tokenField = form.querySelector('.add-client-token-field, [data-monitoring-token-field]');
 
   // Secret Key visibility:
   //   hidden when agency is token-only (smartcredit/myfreescorenow)
@@ -1467,38 +1620,41 @@ const populateAddClientFormFromClient = (client) => {
   if (!form || !client) {
     return;
   }
+  const setFormValue = (name, value) => {
+    const field = form.elements?.namedItem(name);
+    if (field && 'value' in field) {
+      field.value = value;
+    }
+  };
 
   const addressParts = parseCombinedAddress(client.address || '');
-  form.firstName.value = client.firstName || '';
-  form.lastName.value = client.lastName || '';
-  form.email.value = client.email || '';
-  form.dob.value = client.dob || '';
-  form.ssn.value = client.ssn || '';
-  form.phone.value = client.phone || '';
-  form.address.value = addressParts.street || client.address || '';
-  form.addressCity.value = addressParts.city || '';
-  form.addressState.value = addressParts.state || '';
-  form.addressZip.value = addressParts.zip || '';
-  if (form.assignedTo) {
-    form.assignedTo.value = client.assignedTo || '';
-  }
-  form.status.value = client.status || 'Client';
-  if (form.phase) {
-    form.phase.value = client.phase || 'None';
-  }
-  form.monitoringAgency.value = client.monitoringAgency || '';
-  form.monitoringUsername.value = client.monitoringUsername || '';
-  form.monitoringPassword.value = client.monitoringPassword || '';
-  if (form.secretKey) form.secretKey.value = client.secretKey || '';
-  form.tokenId.value = client.tokenId || '';
-  form.portalPassword.value = client.portalPassword || '';
-  form.language.value = client.language || 'English';
-  if (form.ninjaAssigned) {
+  setFormValue('firstName', client.firstName || '');
+  setFormValue('lastName', client.lastName || '');
+  setFormValue('email', client.email || '');
+  setFormValue('dob', client.dob || '');
+  setFormValue('ssn', client.ssn || '');
+  setFormValue('phone', client.phone || '');
+  setFormValue('address', addressParts.street || client.address || '');
+  setFormValue('addressCity', addressParts.city || '');
+  setFormValue('addressState', addressParts.state || '');
+  setFormValue('addressZip', addressParts.zip || '');
+  setFormValue('assignedTo', client.assignedTo || '');
+  setFormValue('status', client.status || 'Client');
+  setFormValue('phase', client.phase || 'None');
+  setFormValue('monitoringAgency', client.monitoringAgency || '');
+  setFormValue('monitoringUsername', client.monitoringUsername || '');
+  setFormValue('monitoringPassword', client.monitoringPassword || '');
+  setFormValue('secretKey', client.secretKey || '');
+  setFormValue('monitoringToken', client.tokenId || client.monitoringToken || '');
+  setFormValue('tokenId', client.tokenId || client.monitoringToken || '');
+  setFormValue('portalPassword', client.portalPassword || '');
+  setFormValue('language', client.language || 'English');
+  if (form.ninjaAssigned && 'value' in form.ninjaAssigned) {
     const current = String(state.currentUser || 'admin').trim() || 'admin';
     form.ninjaAssigned.innerHTML = `<option value="${escapeHtml(current)}">${escapeHtml(current)}</option>`;
     form.ninjaAssigned.value = client.ninjaAssigned || current;
   }
-  if (form.affiliateAssigned) {
+  if (form.affiliateAssigned && 'value' in form.affiliateAssigned) {
     form.affiliateAssigned.value = client.affiliateAssigned || 'None';
   }
   renderClientDocumentsSection(client.documents || []);
@@ -4293,7 +4449,7 @@ const renderClients = () => {
       }
     });
 
-    byId('addPhaseButton')?.addEventListener('click', async () => {
+  byId('addPhaseButton')?.addEventListener('click', async () => {
       const phaseName = window.prompt('Add a new phase');
       if (!phaseName) {
         return;
@@ -4310,6 +4466,7 @@ const renderClients = () => {
         setFormMessage(error.message, true);
       }
     });
+  initClientSectionDropdowns(list);
   renderDashboard();
 };
 
@@ -4645,6 +4802,7 @@ const syncStatusFilterOptions = () => {
   `)];
 
   select.innerHTML = options.join('');
+  initClientSectionDropdowns(byId('clientHubClientsPane'));
 };
 
 const renderClientDetail = (client) => {
@@ -5290,7 +5448,25 @@ const renderClientDetail = (client) => {
       ) ? (scenarioFicoScore - baselineFicoScore) : 0;
       let effectiveVantageDelta = deltaValue;
       let effectiveFicoDelta = ficoDeltaValue;
-      if (scenario === 'increase_credit_limits' && sliderValue > 0) {
+      if (scenario === 'pay_down_revolving' && sliderValue > 0) {
+        const revolvingAccounts = (profile.accounts || []).filter((account) => account.type === 'revolving');
+        const currentRevolvingBalance = revolvingAccounts.reduce((sum, account) => sum + (Number(account.balance) || 0), 0);
+        const currentRevolvingLimit = revolvingAccounts.reduce((sum, account) => sum + (Number(account.limit_or_original) || 0), 0);
+        if (currentRevolvingLimit > 0 && currentRevolvingBalance > 0) {
+          const baselineUtilization = (currentRevolvingBalance / currentRevolvingLimit) * 100;
+          const projectedRevolvingBalance = Math.max(0, currentRevolvingBalance * (1 - (sliderValue / 100)));
+          const projectedUtilization = (projectedRevolvingBalance / currentRevolvingLimit) * 100;
+          const utilizationDrop = Math.max(0, baselineUtilization - projectedUtilization);
+          const vantageFloorDelta = utilizationDrop > 0.25 ? Math.max(1, Math.round(utilizationDrop * 0.82)) : 0;
+          const ficoFloorDelta = utilizationDrop > 0.25 ? Math.max(1, Math.round(utilizationDrop * 0.57)) : 0;
+          if (Math.abs(effectiveVantageDelta) < 0.5) {
+            effectiveVantageDelta = vantageFloorDelta;
+          }
+          if (Math.abs(effectiveFicoDelta) < 0.5) {
+            effectiveFicoDelta = ficoFloorDelta;
+          }
+        }
+      } else if (scenario === 'increase_credit_limits' && sliderValue > 0) {
         const revolvingAccounts = (profile.accounts || []).filter((account) => account.type === 'revolving');
         const currentRevolvingBalance = revolvingAccounts.reduce((sum, account) => sum + (Number(account.balance) || 0), 0);
         const currentRevolvingLimit = revolvingAccounts.reduce((sum, account) => sum + (Number(account.limit_or_original) || 0), 0);
@@ -5842,6 +6018,8 @@ const openEditDialog = async (clientId) => {
   renderAddClientPhaseOptions();
   renderAddClientAssignmentOptions();
   renderSpouseClientOptions();
+  state.editingClientId = String(mergedClient.id || '').trim();
+  state.addFormEditingClientId = state.editingClientId;
   setClientFormMode('edit', mergedClient);
   populateAddClientFormFromClient(mergedClient);
   setHubMode('add', { preserveAddFormState: true });
@@ -5851,7 +6029,10 @@ const openEditDialog = async (clientId) => {
 const closeEditDialog = () => {
   byId('clientEditDialog')?.close();
   state.editingClientId = '';
+  state.addFormEditingClientId = '';
 };
+
+const getActiveEditingClientId = () => String(state.editingClientId || state.addFormEditingClientId || '').trim();
 
 const syncClientPortalToggleValue = () => {
   const toggle = byId('clientPortalEnabledToggle');
@@ -6535,11 +6716,26 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
   try {
     setRefreshLoaderRunning(false);
     const selectedClient = state.clients.find((client) => client.id === state.selectedClientId);
-    const activeMonitoringAgency = selectedClient?.monitoringAgency || '';
+    const detailShell = document.getElementById('clientDetail');
+    const activeAgencyToggle = detailShell?.querySelector('.agency-toggle.is-active');
+    const activeMonitoringAgency = String(
+      activeAgencyToggle?.dataset.agency || selectedClient?.monitoringAgency || '',
+    ).trim();
     const monitoringAgency = normalizeMonitoringAgency(activeMonitoringAgency);
-    const hasMonitoringUsername = Boolean(String(selectedClient?.monitoringUsername || '').trim());
-    const hasMonitoringPassword = Boolean(String(selectedClient?.monitoringPassword || '').trim());
-    const hasMonitoringToken = Boolean(String(selectedClient?.tokenId || '').trim());
+    const currentMonitoringUsername = String(
+      detailShell?.querySelector('.monitoring-username-input')?.value || selectedClient?.monitoringUsername || '',
+    ).trim();
+    const currentMonitoringPassword = String(
+      detailShell?.querySelector('.monitoring-password-input')?.value || selectedClient?.monitoringPassword || '',
+    ).trim();
+    const usesTokenField = !monitoringAgency.includes('identity') && !monitoringAgency.includes('iiq');
+    const securityInputValue = String(detailShell?.querySelector('.security-code-input')?.value || '').trim();
+    const currentMonitoringToken = usesTokenField
+      ? securityInputValue
+      : String(selectedClient?.tokenId || '').trim();
+    const hasMonitoringUsername = Boolean(currentMonitoringUsername);
+    const hasMonitoringPassword = Boolean(currentMonitoringPassword);
+    const hasMonitoringToken = Boolean(currentMonitoringToken);
     const isMyFreeScoreNow = monitoringAgency.includes('myfree');
     const isMyFreeScoreNowTokenFlow = isMyFreeScoreNow && hasMonitoringToken;
 
@@ -6554,6 +6750,12 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
       return;
     }
     if (selectedClient) {
+      selectedClient.monitoringAgency = activeMonitoringAgency || selectedClient.monitoringAgency;
+      selectedClient.monitoringUsername = currentMonitoringUsername;
+      selectedClient.monitoringPassword = currentMonitoringPassword;
+      if (usesTokenField) {
+        selectedClient.tokenId = currentMonitoringToken;
+      }
       selectedClient.lastReportRunStatus = 'pending';
       if (state.selectedClientId === selectedClient.id) {
         renderClientDetail(selectedClient);
@@ -6563,18 +6765,6 @@ const triggerSelectedClientRefresh = async (forcePaid = false) => {
     setWidgetConsoleMessage('Refreshing report... Lets Go !', false, true);
     setRefreshLoaderRunning(true);
     refreshRunRequested = true;
-
-    const detailShell = document.getElementById('clientDetail');
-    const currentMonitoringUsername = String(detailShell?.querySelector('.monitoring-username-input')?.value || '').trim();
-    const currentMonitoringPassword = String(detailShell?.querySelector('.monitoring-password-input')?.value || '').trim();
-    const activeAgencyToggle = detailShell?.querySelector('.agency-toggle.is-active');
-    const currentMonitoringAgency = String(
-      activeAgencyToggle?.dataset.agency || selectedClient?.monitoringAgency || '',
-    ).trim();
-    const normalizedActiveAgency = normalizeMonitoringAgency(currentMonitoringAgency);
-    const usesTokenField = !normalizedActiveAgency.includes('identity') && !normalizedActiveAgency.includes('iiq');
-    const securityInputValue = String(detailShell?.querySelector('.security-code-input')?.value || '').trim();
-    const currentMonitoringToken = usesTokenField ? securityInputValue : '';
 
     const payload = await request(`/api/clients/${state.selectedClientId}/refresh-report`, {
       method: 'POST',
@@ -6987,7 +7177,7 @@ const bindEvents = () => {
     updateClientMonitoringCredentialLayout();
   });
   // Live-toggle Secret Key visibility when TOKEN content changes.
-  document.querySelector('#clientForm input[name="tokenId"]')?.addEventListener('input', () => {
+  document.querySelector('#clientForm input[name="monitoringToken"], #clientForm input[name="tokenId"]')?.addEventListener('input', () => {
     updateClientMonitoringCredentialLayout();
   });
   document.querySelectorAll('#clientForm [data-password-toggle]').forEach((button) => {
@@ -7238,13 +7428,14 @@ const bindEvents = () => {
   quickSaveClientIdentityController = createQuickSaveClientIdentityController();
   byId('clientEditForm')?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!state.editingClientId) {
+    const editingId = getActiveEditingClientId();
+    if (!editingId) {
       return;
     }
 
     try {
       const form = event.currentTarget;
-      const payload = await request(`/api/clients/${state.editingClientId}/profile`, {
+      const payload = await request(`/api/clients/${editingId}/profile`, {
         method: 'PATCH',
         body: JSON.stringify({
           firstName: form.firstName.value,
@@ -7261,7 +7452,7 @@ const bindEvents = () => {
 
       state.statuses = payload.statuses || state.statuses;
       state.phases = uniquePhaseList(payload.phases || state.phases || ['None']);
-      const target = state.clients.find((client) => client.id === state.editingClientId);
+      const target = state.clients.find((client) => client.id === editingId);
       if (target) {
         Object.assign(target, payload.client);
       }
@@ -7285,6 +7476,7 @@ const bindEvents = () => {
     try {
       const form = event.currentTarget;
       const formData = new FormData(form);
+      const submittedMonitoringToken = String(formData.get('monitoringToken') || formData.get('tokenId') || '').trim();
       syncSelectedSpouseClient();
       syncDerivedClientCredentials();
       const address = buildCombinedAddress({
@@ -7312,7 +7504,8 @@ const bindEvents = () => {
         monitoringUsername: String(formData.get('monitoringUsername') || '').trim(),
         monitoringPassword: String(formData.get('monitoringPassword') || '').trim(),
         secretKey: String(formData.get('secretKey') || '').trim(),
-        tokenId: String(formData.get('tokenId') || '').trim(),
+        monitoringToken: submittedMonitoringToken,
+        tokenId: submittedMonitoringToken,
         portalPassword: String(formData.get('portalPassword') || '').trim(),
         portalEnabled: String(formData.get('portalEnabled') || 'on').trim(),
         language: String(formData.get('language') || 'English').trim(),
@@ -7694,11 +7887,7 @@ let _ndExpiryHandled = false;
 const ndHandleExpiry = async () => {
   if (_ndExpiryHandled) return;
   _ndExpiryHandled = true;
-  // Clear both sessions in parallel
-  await Promise.allSettled([
-    fetch('/api/logout', { method: 'POST' }),
-    fetch('https://auth.ninjadispute.com/logout', { method: 'POST', credentials: 'include' }),
-  ]);
+  await performTopRightLogout({ silent: true });
   // Show the login form with a clear expiry message
   const pageShell = document.querySelector('.page-shell');
   const loginForm = document.querySelector('.login-form');
@@ -7709,6 +7898,130 @@ const ndHandleExpiry = async () => {
     msg.textContent = 'Your session expired (12-hour limit). Please log in again.';
     msg.style.color = '#ee3b6c';
   }
+};
+
+const clearBrowserAuthState = () => {
+  const cookieNames = ['txn', 'ninja_token', 'ninja_session', 'jrt'];
+  const clearCookie = (name, domain = '') => {
+    if (!name) return;
+    const attrs = ['Path=/', 'Max-Age=0', 'SameSite=Lax', 'Secure'];
+    if (domain) {
+      attrs.push(`Domain=${domain}`);
+    }
+    const attrString = attrs.join('; ');
+    document.cookie = `${name}=; ${attrString}`;
+  };
+
+  cookieNames.forEach((name) => {
+    clearCookie(name);
+    clearCookie(name, '.ninjadispute.com');
+    clearCookie(name, 'ninjadispute.com');
+  });
+  try {
+    window.localStorage.removeItem('jwtToken');
+    window.localStorage.removeItem('learningSelectedClient');
+    window.sessionStorage.removeItem('learningSelectedClient');
+  } catch {
+  }
+};
+
+let _ninjaLogoutInProgress = false;
+const performTopRightLogout = async ({ silent = false } = {}) => {
+  if (_ninjaLogoutInProgress) {
+    return;
+  }
+  _ninjaLogoutInProgress = true;
+
+  try {
+    await Promise.allSettled([
+      fetch('/api/logout', { method: 'POST', credentials: 'include' }),
+      fetch('https://auth.ninjadispute.com/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      }),
+    ]);
+  } finally {
+    clearBrowserAuthState();
+    _ninjaLogoutInProgress = false;
+  }
+
+  if (!silent) {
+    window.location.href = '/';
+  }
+};
+
+const bindTopRightLogoutButton = () => {
+  const logoutButton = document.getElementById('logoutButton');
+  if (!logoutButton || logoutButton.dataset.ninjaLogoutBound === '1') {
+    return;
+  }
+  logoutButton.dataset.ninjaLogoutBound = '1';
+  logoutButton.addEventListener('click', async (event) => {
+    event.preventDefault();
+    await performTopRightLogout();
+  });
+};
+
+const initHeroThemeWidget = () => {
+  const menu = document.getElementById('menu');
+  if (!menu || menu.dataset.themeWidgetBound === '1') {
+    return;
+  }
+  menu.dataset.themeWidgetBound = '1';
+  menu.classList.add('open');
+
+  const items = Array.from(menu.querySelectorAll('li'));
+  const hue1 = menu.querySelector('#h1');
+  const hue2 = menu.querySelector('#h2');
+  const randomButton = menu.querySelector('#menuThemeRandomize');
+
+  if (!(hue1 instanceof HTMLInputElement) || !(hue2 instanceof HTMLInputElement) || !(randomButton instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const setWidgetHue = (prop, value) => {
+    menu.style.setProperty(prop, String(value));
+  };
+
+  const setHues = (random = false) => {
+    const rand1 = 120 + Math.floor(Math.random() * 240);
+    const rand2 = rand1 - 80 + (Math.floor(Math.random() * 60) - 30);
+    const v1 = random ? rand1 : window.localStorage.getItem('neon-glass-hue1') ?? rand1;
+    const v2 = random ? rand2 : window.localStorage.getItem('neon-glass-hue2') ?? rand2;
+    hue1.value = String(v1);
+    hue2.value = String(v2);
+    setWidgetHue('--hue1', v1);
+    setWidgetHue('--hue2', v2);
+  };
+
+  const bindHueInput = (input, cssVar, storageKey) => {
+    input.addEventListener('input', (event) => {
+      const value = event.target?.value ?? input.value;
+      requestAnimationFrame(() => {
+        setWidgetHue(cssVar, value);
+        window.localStorage.setItem(storageKey, String(value));
+        menu.classList.add('open');
+      });
+    });
+  };
+
+  items.forEach((item) => {
+    item.addEventListener('click', () => {
+      items.forEach((node) => node.classList.remove('selected'));
+      item.classList.add('selected');
+    });
+  });
+
+  bindHueInput(hue1, '--hue1', 'neon-glass-hue1');
+  bindHueInput(hue2, '--hue2', 'neon-glass-hue2');
+  randomButton.addEventListener('click', () => {
+    setHues(true);
+    menu.classList.add('open');
+  });
+
+  setHues(false);
 };
 
 const ndJson = (path, opts = {}) => ndFetch(path, opts).then((r) => r.json());
@@ -8350,10 +8663,28 @@ const safeBootstrapApp = () => {
   }
 };
 
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    bindTopRightLogoutButton();
+    initHeroThemeWidget();
+  });
+} else {
+  bindTopRightLogoutButton();
+  initHeroThemeWidget();
+}
+
 const shouldDelayBootstrapForAuth =
+  // GO LIVE NOTE: keep bootstrap blocked only when auth form is truly visible.
   document.documentElement.classList.contains('auth-active')
   || document.body.classList.contains('auth-active')
-  || document.querySelector('.login-form')?.style.display !== 'none';
+  || (() => {
+    const loginForm = document.querySelector('.login-form');
+    if (!loginForm) {
+      return false;
+    }
+    const computedDisplay = window.getComputedStyle(loginForm).display;
+    return computedDisplay !== 'none';
+  })();
 
 if (shouldDelayBootstrapForAuth) {
   window.addEventListener('toolsninja:app-show', safeBootstrapApp, { once: true });

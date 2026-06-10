@@ -7,6 +7,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260520-1" />
     <link rel="shortcut icon" href="/favicon.ico?v=20260520-1" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260520-1" />
+    <link rel="stylesheet" href="/anthropic-fonts.css?v=20260610-1" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -41,21 +42,33 @@
 <script src="https://cdn.jsdelivr.net/npm/minisearch"></script>
 
 <!-- INJECT OPTIMIZED CLIENTS RENDERER -->
-<script>
+<script>(() => {
 // Keep original as fallback
 const renderGlassClientsFallbackOriginal = window.renderGlassClientsFallback || function() {};
 
 // Define optimized version FIRST
 const renderGlassClientsOptimized = (clients, options = {}) => {
   const clientsList = document.getElementById('clientsList');
-  if (!clientsList || clientsList.querySelector('.nt-virtual-scroll-optimized')) {
+  if (!clientsList) {
     return;
+  }
+  if (clientsList.dataset.ninjaClientsRendererInitialized === '1') {
+    return;
+  }
+  clientsList.dataset.ninjaClientsRendererInitialized = '1';
+  if (clientsList.querySelector('.nt-liquid-table')) {
+    clientsList.innerHTML = '';
+  }
+  if (clientsList.querySelector('.nt-virtual-scroll-optimized')) {
+    clientsList.querySelector('.nt-virtual-scroll-optimized')?.remove();
   }
 
   const statuses = Array.isArray(options.statuses) ? options.statuses : ['Client', 'Lead', 'Prospect', 'Inactive'];
   const phases = Array.isArray(options.phases) ? options.phases : ['None', 'Round 1', 'Round 2', 'Round 3', 'Complete'];
   
   let sortState = { key: 'nextImport', direction: 'asc' };
+  let statusFilter = '';
+  let phaseFilter = '';
   let visibleClients = clients.slice();
   let miniSearchIndex = null;
   let searchWorker = null;
@@ -168,8 +181,13 @@ const renderGlassClientsOptimized = (clients, options = {}) => {
           <input id="clientsTableSearchInput" class="nt-liquid-table-search-input" type="search" placeholder="Search clients..." aria-label="Search clients">
         </div>
         <div class="nt-liquid-toolbar-buttons">
-          <select id="clientsStatusFilter" class="nt-liquid-toolbar-btn" style="appearance: none; padding-right: 24px; background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2208%22><path fill=%22%23666%22 d=%22M0 0l6 8 6-8z%22/></svg>'); background-repeat: no-repeat; background-position: right 8px center; background-size: 12px;">
+          <select id="clientsStatusFilter" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select">
               <option value="">📊 All Status</option>
+              ${statuses.map((status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`).join('')}
+            </select>
+          <select id="clientsPhaseFilter" class="nt-liquid-toolbar-btn nt-liquid-toolbar-select">
+              <option value="">🧭 All Phase</option>
+              ${phases.map((phase) => `<option value="${escapeHtml(phase)}">${escapeHtml(phase)}</option>`).join('')}
             </select>
           <button id="clientsTableImportTrigger" class="nt-liquid-toolbar-btn nt-liquid-import-btn" type="button">Import</button>
         </div>
@@ -196,6 +214,8 @@ const renderGlassClientsOptimized = (clients, options = {}) => {
     </div>
   `;
 
+  hydrateClientSectionDropdowns(clientsList);
+
   const scrollEl = clientsList.querySelector('#clientsVirtualScroll');
   const containerEl = clientsList.querySelector('#clientsVirtualContainer');
   const tbody = clientsList.querySelector('#clientsTableBody');
@@ -215,6 +235,7 @@ const renderGlassClientsOptimized = (clients, options = {}) => {
     tbody.innerHTML = html || '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #999;">No clients match your search.</td></tr>';
     tbody.style.transform = `translateY(${offset}px)`;
     
+    hydrateClientSectionDropdowns(clientsList);
     bindActions();
   };
 
@@ -223,36 +244,68 @@ const renderGlassClientsOptimized = (clients, options = {}) => {
   scrollEl?.addEventListener('scroll', (e) => renderVirtual(e.target.scrollTop), { passive: true });
 
   const searchInput = clientsList.querySelector('#clientsTableSearchInput');
-  searchInput?.addEventListener('input', (e) => {
-    const query = e.target.value.trim();
-    
-    if (!query) {
-      visibleClients = clients.slice();
+  const applyFilters = (query = '') => {
+    const trimmedQuery = String(query || '').trim();
+    const basePool = !trimmedQuery
+      ? clients.slice()
+      : (() => {
+        if (searchWorker) {
+          return null;
+        }
+        if (miniSearchIndex) {
+          const results = miniSearchIndex.search(trimmedQuery);
+          const idxSet = new Set(results.map((r) => r.idx));
+          return clients.filter((_, idx) => idxSet.has(idx));
+        }
+        return clients.filter((client) => {
+          const haystack = [
+            String((client.firstName || '') + ' ' + (client.lastName || '')).trim(),
+            String(client.status || ''),
+            String(client.phase || ''),
+            String(client.email || ''),
+            String(client.phone || ''),
+            String(client.monitoringUsername || ''),
+          ].join(' ').toLowerCase();
+          return haystack.includes(trimmedQuery.toLowerCase());
+        });
+      })();
+
+    const finish = (pool) => {
+      visibleClients = pool.filter((client) => {
+        const statusOk = !statusFilter || String(client.status || '') === statusFilter;
+        const phaseOk = !phaseFilter || String(client.phase || 'None') === phaseFilter;
+        return statusOk && phaseOk;
+      });
       sortedClients = sortClients(visibleClients);
       scrollEl.scrollTop = 0;
       renderVirtual(0);
+    };
+
+    if (basePool) {
+      finish(basePool);
       return;
     }
 
-    if (searchWorker) {
-      searchWorker.onmessage = (evt) => {
-        if (evt.data.type === 'results') {
-          const idxSet = new Set(evt.data.indices);
-          visibleClients = clients.filter((_, idx) => idxSet.has(idx));
-          sortedClients = sortClients(visibleClients);
-          scrollEl.scrollTop = 0;
-          renderVirtual(0);
-        }
-      };
-      searchWorker.postMessage({ type: 'search', data: { query } });
-    } else if (miniSearchIndex) {
-      const results = miniSearchIndex.search(query);
-      const idxSet = new Set(results.map(r => r.idx));
-      visibleClients = clients.filter((_, idx) => idxSet.has(idx));
-      sortedClients = sortClients(visibleClients);
-      scrollEl.scrollTop = 0;
-      renderVirtual(0);
-    }
+    searchWorker.onmessage = (evt) => {
+      if (evt.data.type !== 'results') return;
+      const idxSet = new Set(evt.data.indices);
+      finish(clients.filter((_, idx) => idxSet.has(idx)));
+    };
+    searchWorker.postMessage({ type: 'search', data: { query: trimmedQuery } });
+  };
+
+  searchInput?.addEventListener('input', (e) => {
+    applyFilters(e.target.value || '');
+  });
+
+  clientsList.querySelector('#clientsStatusFilter')?.addEventListener('change', (e) => {
+    statusFilter = String(e.currentTarget.value || '');
+    applyFilters(searchInput?.value || '');
+  });
+
+  clientsList.querySelector('#clientsPhaseFilter')?.addEventListener('change', (e) => {
+    phaseFilter = String(e.currentTarget.value || '');
+    applyFilters(searchInput?.value || '');
   });
 
   clientsList.querySelectorAll('[data-sort-key]').forEach((btn) => {
@@ -386,9 +439,247 @@ const renderGlassClientsOptimized = (clients, options = {}) => {
   };
 };
 
-// Optimized renderer disabled: the original glass table below owns Clients UI controls/actions.
-window.renderGlassClientsOptimized = renderGlassClientsOptimized;
+const CLIENT_DROPDOWN_SCOPE_SELECTOR = '.client-hub-pane, .nt-clients-glass-scope';
+const CLIENT_DROPDOWN_EVENT_TARGET = '.dropdown, .nt-client-dropdown';
+const CLIENT_DROPDOWN_MARKER = 'data-nt-client-dropdown';
+const CLIENT_DROPDOWN_SELECT_MARKER = 'data-nt-client-dropdown-select';
+const CLIENT_DROPDOWN_TRIGGER_CLASS = 'dropdown-btn';
+const CLIENT_DROPDOWN_MENU_CLASS = 'menu';
+const CLIENT_DROPDOWN_ITEM_CLASS = 'menu-link';
+const CLIENT_DROPDOWN_NATIVE_STYLE_CLASS = 'nt-client-dropdown-native';
+let clientDropdownBound = false;
+let clientDropdownObserver = null;
+
+const closeAllClientDropdownMenus = (scope = document) => {
+  scope.querySelectorAll(CLIENT_DROPDOWN_EVENT_TARGET).forEach((wrapper) => {
+    const trigger = wrapper.querySelector(`.${CLIENT_DROPDOWN_TRIGGER_CLASS}`);
+    const menu = wrapper.querySelector(`.${CLIENT_DROPDOWN_MENU_CLASS}`);
+    if (trigger) {
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+    if (menu) {
+      menu.hidden = true;
+    }
+    wrapper.classList.remove('is-open');
+  });
+};
+
+const dashboardSyncClientDropdownValue = (select, trigger) => {
+  if (!select || !trigger) return;
+  const selected = select.options[select.selectedIndex] || select.options[0] || null;
+  const label = String(selected?.textContent || selected?.value || '').trim() || '--';
+  trigger.textContent = label;
+  trigger.title = label;
+  const wrapper = trigger.closest('.dropdown, .nt-client-dropdown');
+  trigger.setAttribute('aria-expanded', String(wrapper?.classList.contains('is-open') || false));
+};
+
+const dashboardSyncClientDropdownMenu = (select, menu, trigger) => {
+  if (!menu || !select) return;
+  menu.textContent = '';
+  const selectedValue = String(select.value || '').trim();
+  const currentText = String((select.options[select.selectedIndex] || select.options[0] || {}).textContent || '').trim() || 'Select...';
+  Array.from(select.options || []).forEach((option) => {
+    const value = String(option.value ?? option.textContent ?? '').trim();
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = CLIENT_DROPDOWN_ITEM_CLASS;
+    item.setAttribute('role', 'menuitem');
+    item.dataset.value = value;
+    item.textContent = option.textContent || option.value || '--';
+    const isActive = String(value) === selectedValue;
+    item.classList.toggle('is-active', isActive);
+    item.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+    item.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (String(select.value) !== value) {
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      closeAllClientDropdownMenus(select.closest('.nt-clients-glass-scope') || select.closest('.client-hub-pane') || document);
+      dashboardSyncClientDropdownValue(select, trigger);
+      dashboardSyncClientDropdownMenu(select, menu, trigger);
+    });
+
+    menu.appendChild(item);
+  });
+
+  trigger.textContent = currentText;
+};
+
+const dashboardOpenClientDropdown = (wrapper, menu, trigger) => {
+  closeAllClientDropdownMenus(wrapper.closest('.nt-clients-glass-scope') || wrapper.closest('.client-hub-pane') || document);
+  wrapper.classList.add('is-open');
+  trigger.setAttribute('aria-expanded', 'true');
+  menu.hidden = false;
+  window.requestAnimationFrame(() => {
+    const firstItem = menu.querySelector(`.${CLIENT_DROPDOWN_ITEM_CLASS}`);
+    firstItem?.focus();
+  });
+};
+
+const dashboardCloseClientDropdown = (wrapper, menu, trigger) => {
+  if (!wrapper || !menu || !trigger) return;
+  wrapper.classList.remove('is-open');
+  trigger.setAttribute('aria-expanded', 'false');
+  menu.hidden = true;
+};
+
+const dashboardInitSingleClientDropdown = (select) => {
+  if (!select || select.tagName.toLowerCase() !== 'select') return;
+  if (select.matches(`[${CLIENT_DROPDOWN_MARKER}], .nt-client-dropdown-native, .${CLIENT_DROPDOWN_TRIGGER_CLASS}, .${CLIENT_DROPDOWN_MENU_CLASS}, .${CLIENT_DROPDOWN_ITEM_CLASS}`)) {
+    return;
+  }
+  if (select.closest('.dropdown, .nt-client-dropdown')) return;
+  if (select.disabled) return;
+  if (!select.options || select.options.length === 0) return;
+
+  const wrapper = document.createElement('span');
+  const trigger = document.createElement('button');
+  const menuId = `${select.id || `clients-dropdown-${Math.random().toString(36).slice(2, 10)}`}-${Date.now()}`;
+  const menu = document.createElement('div');
+
+  wrapper.className = 'dropdown';
+  wrapper.setAttribute(CLIENT_DROPDOWN_MARKER, '1');
+  trigger.type = 'button';
+  trigger.className = CLIENT_DROPDOWN_TRIGGER_CLASS;
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute('aria-controls', menuId);
+
+  menu.className = CLIENT_DROPDOWN_MENU_CLASS;
+  menu.setAttribute('role', 'listbox');
+  menu.id = menuId;
+  menu.hidden = true;
+
+  select.classList.add(CLIENT_DROPDOWN_NATIVE_STYLE_CLASS);
+  select.setAttribute(CLIENT_DROPDOWN_SELECT_MARKER, '1');
+
+  dashboardSyncClientDropdownMenu(select, menu, trigger);
+
+  trigger.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+      if (wrapper.classList.contains('is-open')) {
+      dashboardCloseClientDropdown(wrapper, menu, trigger);
+      return;
+    }
+    dashboardOpenClientDropdown(wrapper, menu, trigger);
+  });
+
+  trigger.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (!wrapper.classList.contains('is-open')) {
+        dashboardOpenClientDropdown(wrapper, menu, trigger);
+        return;
+      }
+      const firstItem = menu.querySelector(`.${CLIENT_DROPDOWN_ITEM_CLASS}`);
+      firstItem?.focus();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      dashboardCloseClientDropdown(wrapper, menu, trigger);
+    }
+  });
+
+  menu.addEventListener('keydown', (event) => {
+    const items = menu.querySelectorAll(`.${CLIENT_DROPDOWN_ITEM_CLASS}`);
+    if (items.length === 0) return;
+    const currentIndex = Array.from(items).indexOf(document.activeElement);
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      const next = items[(currentIndex + 1) % items.length];
+      next?.focus();
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      const prev = items[(currentIndex - 1 + items.length) % items.length];
+      prev?.focus();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      dashboardCloseClientDropdown(wrapper, menu, trigger);
+      trigger.focus();
+    }
+    if (event.key === 'Tab') {
+      dashboardCloseClientDropdown(wrapper, menu, trigger);
+    }
+  });
+
+  wrapper.appendChild(trigger);
+  wrapper.appendChild(menu);
+  select.parentElement?.insertBefore(wrapper, select);
+  wrapper.prepend(select);
+
+  select.addEventListener('change', () => {
+    dashboardSyncClientDropdownValue(select, trigger);
+    dashboardSyncClientDropdownMenu(select, menu, trigger);
+  });
+
+  dashboardSyncClientDropdownValue(select, trigger);
+  dashboardSyncClientDropdownMenu(select, menu, trigger);
+  select.dataset.clientsDropdownHydrated = '1';
+};
+
+const hydrateClientSectionDropdowns = (root = document) => {
+  const scope = root instanceof Element || root instanceof Document ? root : document;
+  const scopes = scope.querySelectorAll ? scope.querySelectorAll(CLIENT_DROPDOWN_SCOPE_SELECTOR.length > 0 ? '.nt-clients-glass-scope, .client-hub-pane' : 'body') : [];
+  const candidates = [];
+  if (scopes.length) {
+    scopes.forEach((node) => {
+      node.querySelectorAll('select').forEach((select) => candidates.push(select));
+    });
+  } else {
+    const fallbackSelects = scope.querySelectorAll ? scope.querySelectorAll('select') : [];
+    fallbackSelects.forEach((select) => candidates.push(select));
+  }
+
+    candidates.forEach((select) => {
+    if (select.matches('[id="clientsTableImportTrigger"]')) return;
+    if (select.matches(`[${CLIENT_DROPDOWN_SELECT_MARKER}]`)) return;
+    if (select.matches(`.${CLIENT_DROPDOWN_NATIVE_STYLE_CLASS}, .${CLIENT_DROPDOWN_TRIGGER_CLASS}, .${CLIENT_DROPDOWN_MENU_CLASS}, .${CLIENT_DROPDOWN_ITEM_CLASS}`)) return;
+    if (select.closest('.dropdown, .nt-client-dropdown')) return;
+      dashboardInitSingleClientDropdown(select);
+    });
+
+  if (!clientDropdownBound && (scope === document || scope instanceof HTMLDocument)) {
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('.dropdown, .nt-client-dropdown')) {
+        closeAllClientDropdownMenus(document);
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeAllClientDropdownMenus(document);
+      }
+    });
+    if (!clientDropdownObserver) {
+      clientDropdownObserver = new MutationObserver((mutations) => {
+        const shouldRefresh = mutations.some((mutation) =>
+          Array.from(mutation.addedNodes || []).some((node) => node instanceof Element),
+        );
+        if (shouldRefresh) {
+          hydrateClientSectionDropdowns(document);
+        }
+      });
+      clientDropdownObserver.observe(document.body, { childList: true, subtree: true });
+    }
+    clientDropdownBound = true;
+  }
+};
+
+window.renderGlassClientsOptimized = window.renderGlassClientsOptimized || renderGlassClientsOptimized;
+window.renderGlassClientsFallback = window.renderGlassClientsFallback || renderGlassClientsFallbackOriginal;
+window.hydrateClientSectionDropdowns = window.hydrateClientSectionDropdowns || hydrateClientSectionDropdowns;
+window.__ninjaDashboardPrimaryRendererLoaded = true;
 console.log('✅ Clients glass table renderer active');
+})();
 </script>
 
 <style>
@@ -427,7 +718,7 @@ console.log('✅ Clients glass table renderer active');
           <div class="hero-ninja-wrap">
             <iframe
               class="hero-widget-frame"
-              src="/tools-ninja-widget.html?v=20260608-01"
+              src="/tools-ninja-widget.html?v=20260610-08"
               title="Get New Report Ninja Widget"
             ></iframe>
           </div>
@@ -435,6 +726,76 @@ console.log('✅ Clients glass table renderer active');
         <div class="hero-panel">
           <div class="top-actions">
             <button class="top-logout-btn" type="button" id="logoutButton">Logout</button>
+            <aside id="menu" class="open dark hero-panel-theme-widget" aria-label="Theme command widget">
+              <span class="shine shine-top"></span>
+              <span class="shine shine-bottom"></span>
+              <span class="glow glow-top"></span>
+              <span class="glow glow-bottom"></span>
+              <span class="glow glow-bright glow-top"></span>
+              <span class="glow glow-bright glow-bottom"></span>
+              <div class="inner">
+                <label class="search">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                  </svg>
+                  <input type="text" placeholder="type a command or search" />
+                </label>
+
+                <section>
+                  <header>Console</header>
+                  <ul>
+                    <li class="selected" tabindex="0">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                      </svg>
+                      Main
+                    </li>
+                    <li tabindex="0">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V13.5Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V18Zm2.498-6.75h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V13.5Zm0 2.25h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V18Zm2.504-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5Zm0 2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V18Zm2.498-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5ZM8.25 6h7.5v2.25h-7.5V6ZM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.65 4.5 4.757V19.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25V4.757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0 0 12 2.25Z" />
+                      </svg>
+                      Dispute Letters
+                    </li>
+                    <li tabindex="0">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+                      </svg>
+                      Messages
+                    </li>
+                  </ul>
+                </section>
+
+                <hr />
+
+                <section>
+                  <header>Settings</header>
+                  <ul>
+                    <li tabindex="0">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                      </svg>
+                      Profile
+                    </li>
+                    <li tabindex="0">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
+                      </svg>
+                      Billing
+                    </li>
+                  </ul>
+                </section>
+
+                <section class="hero-theme-controls">
+                  <header>Theme</header>
+                  <div class="hero-theme-controls-header">
+                    <span>Pick your own colors</span>
+                    <button class="random" id="menuThemeRandomize" type="button">Randomize</button>
+                  </div>
+                  <input type="range" id="h1" min="0" max="360" value="255" aria-label="Primary hue" />
+                  <input type="range" id="h2" min="0" max="360" value="222" aria-label="Secondary hue" />
+                </section>
+              </div>
+            </aside>
           </div>
           <div class="integration-stack">
             <details class="integration-card" id="smartCreditIntegrationCard">
@@ -1373,6 +1734,22 @@ console.log('✅ Clients glass table renderer active');
     <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
   <script>
+    // Keep the page in active app mode; the dashboard bootstrap runs without auth-gate overrides.
+    // GO LIVE NOTE: this is required so app.js starts immediately when dashboard is loaded.
+    document.documentElement.classList.remove('auth-active');
+    document.body.classList.remove('auth-active');
+  </script>
+  <script src="/app.js"></script>
+  <script>
+    window.dispatchEvent(new Event('toolsninja:app-show'));
+  </script>
+  <script>
+      (() => {
+        if (window.__ninjaDashboardPrimaryRendererLoaded) {
+          // Primary dashboard renderer already mounted; skip legacy fallback bootstrap.
+          return;
+        }
+
 // Add this BEFORE app.js in the HTML to fix 401 errors
 // Intercept fetch to always include credentials
 
@@ -1383,10 +1760,47 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
   return originalOpen.apply(this, [method, url, ...rest]);
 };
 
-      (() => {
-        const ensureDashboardAuth = async () => {
+        const fetchWithTimeout = async (input, init = {}, timeoutMs = 7000) => {
+          const controller = new AbortController();
+          const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 7000;
+          const timeoutHandle = window.setTimeout(() => controller.abort(new Error(`request timeout ${timeout}ms`)), timeout);
           try {
-            const response = await fetch('/api/auth/status', { credentials: 'include' });
+            return await fetch(input, { ...init, signal: controller.signal });
+          } finally {
+            window.clearTimeout(timeoutHandle);
+          }
+        };
+
+        const ensureDashboardAuth = async () => {
+          const params = new URLSearchParams(window.location.search);
+          const ssoToken = params.get('sso_token') || params.get('token');
+          const callbackUser = params.get('user');
+          try {
+            if (ssoToken) {
+              const response = await fetchWithTimeout('/api/auth/sso-login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  token: ssoToken,
+                  user: callbackUser || '',
+                }),
+              }, 7000);
+              if (response.ok) {
+                const result = await response.json().catch(() => null);
+                if (result?.authenticated) {
+                  params.delete('sso_token');
+                  params.delete('token');
+                  const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
+                  window.history.replaceState({}, '', nextUrl);
+                  return true;
+                }
+              }
+            }
+          } catch {}
+
+          try {
+            const response = await fetchWithTimeout('/api/auth/status', { credentials: 'include' }, 5000);
             const data = response.ok ? await response.json() : null;
             if (data?.authenticated) {
               return true;
@@ -1683,6 +2097,13 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
         };
 
         const loadDashboardClientDetail = async (clientId) => {
+          if (typeof loadClientDetail === 'function') {
+            return loadClientDetail(clientId);
+          }
+          if (typeof window.loadClientDetail === 'function') {
+            return window.loadClientDetail(clientId);
+          }
+
           const detail = document.getElementById('clientDetail');
           if (!detail || !clientId) {
             return;
@@ -1763,13 +2184,26 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
 
         const renderGlassClientsFallback = (clients, options = {}) => {
           const clientsList = document.getElementById('clientsList');
-          if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
+          if (!clientsList) {
             return;
           }
+          if (clientsList.dataset.ninjaClientsRendererInitialized === '1') {
+            clientsList.innerHTML = '';
+          }
+          if (clientsList.querySelector('.nt-virtual-scroll-optimized')) {
+            clientsList.querySelector('.nt-virtual-scroll-optimized')?.remove();
+          }
+          if (clientsList.dataset.ninjaClientsFallbackRunning === '1') {
+            return;
+          }
+          clientsList.dataset.ninjaClientsFallbackRunning = '1';
 
           const statuses = Array.isArray(options.statuses) && options.statuses.length ? options.statuses : ['Client', 'Lead', 'Prospect', 'Inactive'];
           const phases = Array.isArray(options.phases) && options.phases.length ? options.phases : ['None', 'Round 1', 'Round 2', 'Round 3', 'Complete'];
           const sortState = { key: 'nextImport', direction: 'asc' };
+          let filterText = '';
+          let statusFilter = '';
+          let phaseFilter = '';
           let visibleClients = clients.slice();
 
           const sortColumns = {
@@ -1841,10 +2275,10 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
             });
           };
 
-          const rows = renderRows(sortClients(visibleClients), statuses, phases);
-          clientsList.style.setProperty('--nt-clients-custom-bg', "url('/assets/clients-glass-bg.png')");
-          const countLabel = `${clients.length} client${clients.length === 1 ? '' : 's'}`;
-          clientsList.innerHTML = `
+            const rows = renderRows(sortClients(visibleClients), statuses, phases);
+            clientsList.style.setProperty('--nt-clients-custom-bg', "url('/assets/clients-glass-bg.png')");
+            const countLabel = `${clients.length} client${clients.length === 1 ? '' : 's'}`;
+            clientsList.innerHTML = `
             <div class="nt-liquid-table-shell">
               <div class="nt-liquid-table-toolbar">
                 <span class="nt-liquid-toolbar-title">Clients</span>
@@ -1873,7 +2307,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
                     <option value="">All Phase</option>
                     ${phases.map((phase) => `<option value="${escapeHtml(phase)}">${escapeHtml(phase)}</option>`).join('')}
                   </select>
-                  <button id="clientsTableImportTrigger" class="nt-liquid-toolbar-btn nt-liquid-import-btn" type="button">Import</button>
+                <button id="clientsTableImportTrigger" class="nt-liquid-toolbar-btn nt-liquid-import-btn" type="button">Import</button>
                 </div>
               </div>
               <div class="nt-liquid-table-scroll">
@@ -1898,6 +2332,8 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
             </div>
           `;
 
+          hydrateClientSectionDropdowns(clientsList);
+
           const applyClientFilters = () => clients.filter((client) => {
             const normalized = normalizeClient(client);
             const query = filterText.trim().toLowerCase();
@@ -1920,6 +2356,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
             const sortedClients = sortClients(visibleClients);
             clientsList.querySelector('.nt-liquid-table tbody').innerHTML = renderRows(sortedClients, statuses, phases)
               || '<tr class="nt-liquid-empty-row"><td class="nt-liquid-empty-cell" colspan="8">No clients match your filters.</td></tr>';
+            hydrateClientSectionDropdowns(clientsList);
             const countNode = clientsList.querySelector('#clientsTableCount');
             if (countNode) {
               countNode.textContent = `${visibleClients.length} client${visibleClients.length === 1 ? '' : 's'}`;
@@ -2141,7 +2578,10 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
           };
 
           bindClientTableActions();
+          clientsList.dataset.ninjaClientsFallbackRunning = '0';
         };
+
+        window.renderGlassClientsFallback = renderGlassClientsFallback;
 
         window.setTimeout(async () => {
           if (!(await ensureDashboardAuth())) {
@@ -2149,8 +2589,14 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
           }
 
           const clientsList = document.getElementById('clientsList');
-          if (!clientsList || clientsList.querySelector('.nt-liquid-table')) {
+          if (!clientsList) {
             return;
+          }
+          if (clientsList.dataset.ninjaClientsRendererInitialized === '1' && clientsList.dataset.ninjaClientsFallbackRunning === '1') {
+            return;
+          }
+          if (clientsList.dataset.ninjaClientsRendererInitialized === '1' && clientsList.querySelector('.nt-liquid-table')) {
+            clientsList.innerHTML = '';
           }
 
           fetch('/api/clients', { credentials: 'include' })
@@ -2170,7 +2616,8 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
                 : Array.isArray(data.results)
                   ? data.results
                   : [];
-              renderGlassClientsFallback(clients, {
+              const renderer = window.renderGlassClientsFallback || renderGlassClientsFallback;
+              renderer(clients, {
                 statuses: data.statuses,
                 phases: data.phases,
               });
@@ -2235,6 +2682,10 @@ XMLHttpRequest.prototype.open = function(method, url, ...rest) {
             });
           }
 
+          window.requestAnimationFrame(() => {
+            hydrateClientSectionDropdowns(panes.clients);
+            hydrateClientSectionDropdowns(panes.add);
+          });
           syncWidgetState();
         };
 

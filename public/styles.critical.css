@@ -22,7 +22,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Space Grotesk", sans-serif;
+  font-family: var(--ninja-font-body, "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   color: var(--text);
   background:
     radial-gradient(circle at 10% 8%, rgba(246, 228, 235, 0.56) 0%, rgba(246, 228, 235, 0.12) 23%, transparent 48%),
@@ -66,7 +66,7 @@ p {
 }
 
 h1 {
-  font-family: "Instrument Serif", serif;
+  font-family: var(--ninja-font-body, "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: clamp(3rem, 8vw, 5rem);
   line-height: 0.92;
   font-weight: 400;
@@ -621,8 +621,10 @@ h1 {
 
 .top-actions {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 0.15rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.7rem;
+  margin-bottom: 0.35rem;
 }
 
 .top-logout-btn {
@@ -633,6 +635,323 @@ h1 {
   color: #1b2536;
   font-weight: 700;
   font-size: 0.78rem;
+}
+
+.hero-panel-theme-widget {
+  --hue1: 255;
+  --hue2: 222;
+  --border: 1px;
+  --radius: 22px;
+  --border-color: hsl(var(--hue2) 12% 20%);
+  --ease: cubic-bezier(0.5, 1, 0.89, 1);
+  position: relative;
+  align-self: flex-end;
+  width: min(100%, 21rem);
+  min-width: 0;
+  padding: 1rem;
+  border-radius: var(--radius);
+  border: var(--border) solid var(--border-color);
+  background:
+    linear-gradient(235deg, hsl(var(--hue1) 50% 10% / 0.8), hsl(var(--hue1) 50% 10% / 0) 33%),
+    linear-gradient(45deg, hsl(var(--hue2) 50% 10% / 0.8), hsl(var(--hue2) 50% 10% / 0) 33%),
+    linear-gradient(hsl(220deg 25% 4.8% / 0.82));
+  backdrop-filter: blur(12px);
+  box-shadow: hsl(var(--hue2) 50% 2%) 0 10px 16px -8px, hsl(var(--hue2) 50% 4%) 0 20px 36px -14px;
+  font-family: "Asap", var(--ninja-font-body), sans-serif;
+  color: #737985;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.hero-panel-theme-widget .shine,
+.hero-panel-theme-widget .glow {
+  position: absolute;
+  inset: auto 0 0 auto;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero-panel-theme-widget .shine,
+.hero-panel-theme-widget .shine::before,
+.hero-panel-theme-widget .shine::after {
+  content: "";
+  width: 75%;
+  aspect-ratio: 1;
+  position: absolute;
+  right: calc(var(--border) * -1);
+  top: calc(var(--border) * -1);
+  border-radius: 0;
+  border-top-right-radius: inherit;
+  border-bottom-left-radius: inherit;
+  border: 1px solid transparent;
+  background: conic-gradient(from -45deg, transparent 12%, hsl(var(--hue1) 80% 60%), transparent 50%) border-box;
+  mask:
+    linear-gradient(transparent),
+    linear-gradient(black);
+  mask-repeat: no-repeat;
+  mask-clip: padding-box, border-box;
+  mask-composite: subtract;
+  opacity: 0.95;
+}
+
+.hero-panel-theme-widget .shine::before {
+  inset: -2px;
+}
+
+.hero-panel-theme-widget .shine::after {
+  inset: -2px;
+  background: conic-gradient(from -45deg, transparent 17%, hsl(var(--hue1) 80% 85%), transparent 33%);
+}
+
+.hero-panel-theme-widget .shine-bottom,
+.hero-panel-theme-widget .shine-bottom::before,
+.hero-panel-theme-widget .shine-bottom::after {
+  top: auto;
+  bottom: calc(var(--border) * -1);
+  left: calc(var(--border) * -1);
+  right: auto;
+  background: conic-gradient(from 135deg, transparent 12%, hsl(var(--hue2) 80% 60%), transparent 50%) border-box;
+}
+
+.hero-panel-theme-widget .shine-bottom::after {
+  background: conic-gradient(from 135deg, transparent 17%, hsl(var(--hue2) 80% 85%), transparent 33%);
+}
+
+.hero-panel-theme-widget .glow {
+  width: 75%;
+  aspect-ratio: 1;
+  position: absolute;
+  inset: calc(var(--radius) * -2) calc(var(--radius) * -2) auto auto;
+  border-top-right-radius: calc(var(--radius) * 2.5);
+  border-bottom-left-radius: calc(var(--radius) * 2.5);
+  border: calc(var(--radius) * 1.25) solid transparent;
+  filter: blur(12px) saturate(1.25) brightness(0.5);
+  mix-blend-mode: plus-lighter;
+  opacity: 0.95;
+  z-index: 0;
+}
+
+.hero-panel-theme-widget .glow::before,
+.hero-panel-theme-widget .glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: inherit;
+  border-radius: inherit;
+  background: conic-gradient(from -45deg, transparent 0%, hsl(var(--hue1) 95% 60%), transparent 50%) border-box;
+  mask:
+    linear-gradient(transparent),
+    linear-gradient(black);
+  mask-repeat: no-repeat;
+  mask-clip: padding-box, border-box;
+  mask-composite: subtract;
+}
+
+.hero-panel-theme-widget .glow::after {
+  inset: calc(var(--radius) * -0.25);
+  border-width: calc(var(--radius) * 1.75);
+  border-radius: calc(var(--radius) * 2.75);
+  opacity: 0.75;
+}
+
+.hero-panel-theme-widget .glow-bottom {
+  inset: auto auto calc(var(--radius) * -2) calc(var(--radius) * -2);
+}
+
+.hero-panel-theme-widget .glow-bottom::before,
+.hero-panel-theme-widget .glow-bottom::after {
+  background: conic-gradient(from 135deg, transparent 0%, hsl(var(--hue2) 95% 60%), transparent 50%) border-box;
+}
+
+.hero-panel-theme-widget .glow-bright {
+  border-width: 5px;
+  border-radius: calc(var(--radius) + 2px);
+  inset: -7px -7px auto auto;
+  filter: blur(2px) brightness(0.66);
+}
+
+.hero-panel-theme-widget .glow-bright::after {
+  content: none;
+}
+
+.hero-panel-theme-widget .glow-bright.glow-bottom {
+  inset: auto auto -7px -7px;
+}
+
+.hero-panel-theme-widget .inner,
+.hero-panel-theme-widget section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hero-panel-theme-widget .inner {
+  position: relative;
+  z-index: 1;
+  font-size: 0.875rem;
+}
+
+.hero-panel-theme-widget hr {
+  width: 100%;
+  height: 0.5px;
+  background: var(--border-color);
+  border: none;
+  margin: 0.25rem 0 0.5rem;
+  opacity: 0.66;
+}
+
+.hero-panel-theme-widget input:not([type="range"]) {
+  width: 100%;
+  color: hsl(0 0% 100% / 0.74);
+  font-family: "Asap", var(--ninja-font-body), sans-serif;
+  font-weight: 300;
+  border: 1px solid hsl(var(--hue2) 13% 18.5% / 0.5);
+  background: linear-gradient(to bottom, hsl(var(--hue1) 20% 20% / 0.1) 50%, hsl(var(--hue1) 50% 50% / 0.16) 180%);
+  background-size: 100% 300%;
+  background-position: 0 0;
+  border-radius: calc(var(--radius) * 0.33333);
+  padding: 0.7rem 0.8rem 0.7rem 2.33rem;
+  transition: all 0.3s var(--ease);
+}
+
+.hero-panel-theme-widget input:not([type="range"]):focus {
+  outline: none;
+  border-color: hsl(var(--hue1) 20% 70% / 0.5);
+  background-position: 0 50%;
+  color: hsl(var(--hue1) 20% 80% / 1);
+}
+
+.hero-panel-theme-widget input::placeholder {
+  color: hsl(0 0% 100% / 0.55);
+}
+
+.hero-panel-theme-widget label {
+  display: grid;
+  grid-template: 1fr / 1fr;
+  width: 100%;
+}
+
+.hero-panel-theme-widget label > * {
+  grid-area: 1 / 1;
+  align-self: center;
+}
+
+.hero-panel-theme-widget label svg {
+  margin-left: 0.75rem;
+  opacity: 0.55;
+  width: 1rem;
+  height: 1rem;
+}
+
+.hero-panel-theme-widget header {
+  font-size: 0.75rem;
+  font-weight: 300;
+  padding: 0 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hero-panel-theme-widget ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.hero-panel-theme-widget li {
+  --item-hue: var(--hue2);
+  position: relative;
+  padding: 0.66rem;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: calc(var(--radius) * 0.33333);
+  border: 1px solid transparent;
+  color: #b8bfd0;
+  background: linear-gradient(90deg, hsl(var(--item-hue) 29% 13% / 0), hsl(var(--item-hue) 30% 15% / 0) 32%, hsl(var(--item-hue) 5% 7% / 0) 95%);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.hero-panel-theme-widget li::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: inherit;
+  background: linear-gradient(90deg, hsl(var(--item-hue) 15% 16% / 0), hsl(var(--item-hue) 40% 24% / 0) 32%, hsl(var(--item-hue) 2% 12% / 0) 95%);
+  mask:
+    linear-gradient(transparent),
+    linear-gradient(to right, black, transparent);
+  mask-repeat: no-repeat;
+  mask-clip: padding-box, border-box;
+  mask-composite: subtract;
+}
+
+.hero-panel-theme-widget section:nth-of-type(1) li {
+  --item-hue: var(--hue1);
+}
+
+.hero-panel-theme-widget li:hover,
+.hero-panel-theme-widget li.selected,
+.hero-panel-theme-widget li:focus-visible {
+  color: #fff;
+  background: linear-gradient(90deg, hsl(var(--item-hue) 29% 13% / 0.5), hsl(var(--item-hue) 30% 15% / 0.5) 32%, hsl(var(--item-hue) 5% 7% / 0) 95%);
+  outline: none;
+}
+
+.hero-panel-theme-widget li:hover::after,
+.hero-panel-theme-widget li.selected::after,
+.hero-panel-theme-widget li:focus-visible::after {
+  background: linear-gradient(90deg, hsl(var(--item-hue) 15% 16% / 0.5), hsl(var(--item-hue) 40% 24% / 0.5) 32%, hsl(var(--item-hue) 2% 12% / 0) 95%);
+}
+
+.hero-panel-theme-widget li svg {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.hero-theme-controls {
+  gap: 0.6rem;
+}
+
+.hero-theme-controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: #dfe6f6;
+  padding: 0 0.66rem;
+}
+
+.hero-theme-controls-header span {
+  font-size: 0.8rem;
+}
+
+.hero-theme-controls .random {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 0.32rem 0.7rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hero-theme-controls .random:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.hero-theme-controls input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: hsl(var(--hue1) 66% 50%);
+}
+
+.hero-theme-controls #h2 {
+  accent-color: hsl(var(--hue2) 66% 50%);
 }
 
 .hero-panel p,
@@ -752,7 +1071,7 @@ h1 {
   z-index: 2;
   position: absolute;
   color: white;
-  font-family: "Poppins", "Space Grotesk", sans-serif;
+  font-family: var(--ninja-font-body, "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-weight: 700;
   font-size: 0.96rem;
   letter-spacing: 0.01em;
